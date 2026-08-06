@@ -201,9 +201,9 @@ export function ProbePage() {
       <h2>Log (survives relaunch)</h2>
       <button
         onClick=${() => {
-        clearLog(localStorage);
-        refreshLog();
-      }}
+          clearLog(localStorage);
+          refreshLog();
+        }}
       >
         Clear log
       </button>
