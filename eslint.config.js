@@ -10,6 +10,10 @@ export default [
       globals: {
         ...globals.browser,
         ...globals.serviceworker,
+        // Injected by vite.config.js's `define`, from package.json's version
+        // — lets export filenames/manifests carry a real app version without
+        // a runtime fetch of package.json (which isn't served in prod).
+        __APP_VERSION__: 'readonly',
       },
     },
     rules: {

@@ -53,7 +53,10 @@ now via `vite-plugin-mkcert`) or the deployed GitHub Pages URL once its deploy i
       unit/browser tests proved this with a hand-built fixture on Chromium+WebKit, but a real
       camera photo is the actual proof)
 - [ ] Full flow — start session, get a fix, take a photo, add a note, save — works in **airplane
-      mode**
+      mode**. Must be run against a **production build** (installed home-screen app, or `npm run
+build && npm run preview:mobile -- --host`) — the plain dev server's service worker
+      precaches nothing by design (see CLAUDE.md) and will fail this check even though nothing is
+      broken.
 - [ ] Force-quit mid-session and relaunch: the open session and every saved observation are still
       there (storage layer, not just capture UI)
 - [ ] A 20+ observation session doesn't degrade; spot-check thermals/battery over ~30 min of a live
@@ -62,6 +65,20 @@ now via `vite-plugin-mkcert`) or the deployed GitHub Pages URL once its deploy i
 - [ ] Undo (after a save) actually removes the observation and its photo, not just hides it
 - [ ] The observations table accumulates correctly as you save, and scrolls horizontally rather
       than overflowing the screen on a narrow phone in portrait
+- [ ] The photo picker reads "Take Photo" (not the browser-default "Choose File") and still opens
+      the rear camera directly on tap
+
+### Session history and export (added after first round of device feedback)
+
+- [ ] Ending a session doesn't make it vanish — "Session history" lists it afterwards with the
+      right date and observation count, current open session excluded from the list
+- [ ] Tapping a past session in history shows its saved observations read-only
+- [ ] Export (from the currently-open session, and from a past session in history) hands off a real
+      `.zip` via the Share sheet — open it elsewhere (Files app, AirDrop to a Mac) and confirm it
+      contains `session.geojson` plus one `photos/<id>.jpg` per observation with a photo
+- [ ] **This is also the way to actually check photo orientation** (the original ask): open one of
+      the exported JPEGs and confirm a portrait-held shot is stored right-way-up, not rotated
+- [ ] If Share is dismissed/unavailable, the download fallback still produces the same zip
 
 ## Later phases (fill in as each lands)
 

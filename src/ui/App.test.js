@@ -6,6 +6,8 @@ import { App } from './App.js';
 function createFakeService() {
   return {
     getOpenSession: vi.fn().mockResolvedValue(null),
+    listSessions: vi.fn().mockResolvedValue([]),
+    listObservations: vi.fn().mockResolvedValue([]),
     startSession: vi.fn(),
     endSession: vi.fn(),
     saveObservation: vi.fn(),
@@ -22,18 +24,25 @@ function fakeSensors() {
   };
 }
 
+function renderApp(overrides = {}) {
+  return render(
+    html`<${App}
+      service=${overrides.service ?? createFakeService()}
+      sensors=${overrides.sensors ?? fakeSensors()}
+      downscale=${overrides.downscale ?? vi.fn()}
+      exportSession=${overrides.exportSession ?? vi.fn()}
+    />`,
+  );
+}
+
 describe('App', () => {
   test('defaults to the capture view', async () => {
-    render(
-      html`<${App} service=${createFakeService()} sensors=${fakeSensors()} downscale=${vi.fn()} />`,
-    );
+    renderApp();
     expect(await screen.findByRole('button', { name: /save observation/i })).toBeInTheDocument();
   });
 
   test('the device probe link switches to the probe view, and Back returns to capture', async () => {
-    render(
-      html`<${App} service=${createFakeService()} sensors=${fakeSensors()} downscale=${vi.fn()} />`,
-    );
+    renderApp();
     await screen.findByRole('button', { name: /save observation/i });
 
     fireEvent.click(screen.getByRole('button', { name: /device probe/i }));
@@ -43,11 +52,20 @@ describe('App', () => {
     expect(await screen.findByRole('button', { name: /save observation/i })).toBeInTheDocument();
   });
 
+  test('the session history link switches to the history view, and Back returns to capture', async () => {
+    renderApp();
+    await screen.findByRole('button', { name: /save observation/i });
+
+    fireEvent.click(screen.getByRole('button', { name: /session history/i }));
+    expect(await screen.findByText('Past sessions')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /back to capture/i }));
+    expect(await screen.findByRole('button', { name: /save observation/i })).toBeInTheDocument();
+  });
+
   test('never touches window.location.hash — no client-side router', async () => {
     const initialHash = window.location.hash;
-    render(
-      html`<${App} service=${createFakeService()} sensors=${fakeSensors()} downscale=${vi.fn()} />`,
-    );
+    renderApp();
     await screen.findByRole('button', { name: /save observation/i });
 
     fireEvent.click(screen.getByRole('button', { name: /device probe/i }));

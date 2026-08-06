@@ -54,6 +54,24 @@ describe('getOpenSession', () => {
   });
 });
 
+describe('listSessions', () => {
+  test('returns an empty array on a fresh database', async () => {
+    const service = await makeService('capture-service-list-sessions-empty');
+    expect(await service.listSessions()).toEqual([]);
+  });
+
+  test('returns every session regardless of open/closed status', async () => {
+    const service = await makeService('capture-service-list-sessions-all');
+    const first = await service.startSession('Site A');
+    await service.endSession();
+    const second = await service.startSession('Site B');
+
+    const sessions = await service.listSessions();
+
+    expect(sessions.map((s) => s.id).sort()).toEqual([first.id, second.id].sort());
+  });
+});
+
 describe('startSession', () => {
   test('persists an open session with the given name', async () => {
     const service = await makeService('capture-service-start');

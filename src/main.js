@@ -9,6 +9,9 @@ import { newId, nowIso } from './domain/id.js';
 import { watchPosition } from './sensors/position.js';
 import { watchHeading, requestHeadingPermission } from './sensors/heading.js';
 import { downscaleImageBlob } from './photo/encode.js';
+import { buildSessionExport } from './export/buildSessionExport.js';
+import { zipEntries } from './export/zip.js';
+import { shareOrDownload } from './export/share.js';
 import './style.css';
 
 // A blank screen with no console access (no Mac nearby for Web Inspector) is
@@ -44,8 +47,23 @@ async function main() {
 
   const downscale = (file) => downscaleImageBlob(file);
 
+  async function exportSession(sessionId) {
+    const { filename, entries } = await buildSessionExport(db, {
+      sessionId,
+      appVersion: __APP_VERSION__,
+    });
+    const zipBlob = await zipEntries(entries);
+    const file = new File([zipBlob], filename, { type: 'application/zip' });
+    return shareOrDownload(file, { title: filename });
+  }
+
   render(
-    html`<${App} service=${service} sensors=${sensors} downscale=${downscale} />`,
+    html`<${App}
+      service=${service}
+      sensors=${sensors}
+      downscale=${downscale}
+      exportSession=${exportSession}
+    />`,
     document.getElementById('app'),
   );
 }
