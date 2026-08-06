@@ -24,13 +24,16 @@ export function PhotoField({ photo, busy = false, error, onSelect, onClear }) {
 
   return html`
     <div class="photo-field">
-      <input
-        type="file"
-        accept="image/*"
-        capture="environment"
-        disabled=${busy}
-        onChange=${handleChange}
-      />
+      <label class="photo-field-button">
+        Take Photo
+        <input
+          type="file"
+          accept="image/*"
+          capture="environment"
+          disabled=${busy}
+          onChange=${handleChange}
+        />
+      </label>
       ${busy ? html`<p>Processing photo…</p>` : null}
       ${error ? html`<p class="photo-field-error">${error}</p>` : null}
       ${

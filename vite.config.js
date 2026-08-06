@@ -7,10 +7,20 @@ const base = '/survey-tool/';
 export default defineConfig(async ({ command, isPreview }) => {
   const plugins = [];
 
-  // Local HTTPS for the dev server only — never build, never preview.
+  // Local HTTPS: always for `vite dev`; for `vite preview` only when
+  // explicitly requested via `npm run preview:mobile` (sets MOBILE_HTTPS).
   // Geolocation and DeviceOrientationEvent.requestPermission are
-  // secure-context gated, so on-device sensor testing needs this rather
-  // than depending on the GitHub Pages deploy.
+  // secure-context gated, and offline/service-worker behaviour specifically
+  // can only be verified against a *production* build (`vite dev`'s SW is a
+  // shim that precaches nothing — see CLAUDE.md) — so on-device testing of
+  // either needs a local HTTPS preview, not just the dev server.
+  //
+  // MOBILE_HTTPS is an explicit opt-in, not inferred from `!isPreview` or
+  // absence of `CI`: Playwright's own e2e webServer also runs `vite preview`
+  // locally (`playwright.config.js`'s baseURL is plain `http://localhost`),
+  // so gating on "not CI" would silently break `npm run test:e2e` on this
+  // machine while still passing in GitHub Actions — the opposite of what CI
+  // is supposed to catch. An explicit flag has no such ambiguity.
   //
   // Dynamic import, not a static one: a static `import mkcert from
   // 'vite-plugin-mkcert'` at the top of this file runs on every command —
@@ -22,7 +32,7 @@ export default defineConfig(async ({ command, isPreview }) => {
   // reproduced locally on Windows/Node 22, and unrelated to whether mkcert
   // actually ran. CI never needs HTTPS, so it must never even load the
   // package.
-  if (command === 'serve' && !isPreview) {
+  if (command === 'serve' && (!isPreview || process.env.MOBILE_HTTPS === 'true')) {
     const { default: mkcert } = await import('vite-plugin-mkcert');
     plugins.push(mkcert());
   }
