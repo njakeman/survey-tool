@@ -12,9 +12,15 @@ download-as-primary-export → Web Share-as-primary) — read the plan history /
 assuming the brief's map or export sections still describe the built app.
 
 The local dev server needs HTTPS to test geolocation/compass permissions (secure-context gated) —
-`npm run dev -- --host` now serves HTTPS via `vite-plugin-mkcert`, reachable on the LAN. `vite
+`npm run dev -- --host` now serves HTTPS via `vite-plugin-mkcert`, reachable on the LAN. Plain `vite
 preview` (used by e2e/CI) deliberately excludes mkcert — see the comment in `vite.config.js` for why
-(mkcert's system CA install hangs waiting for elevation if it runs there).
+(mkcert's system CA install hangs waiting for elevation if it runs there; a static top-level import
+of the package alone crashed CI regardless of whether the plugin ran). `npm run dev`'s SW is a shim
+that precaches nothing (`vite-plugin-pwa`'s dev mode hardcodes an empty manifest) — offline/SW
+behaviour can only be tested against a production build. For that on a phone, use `npm run
+preview:mobile` (opt-in `MOBILE_HTTPS=true`, not inferred from environment — Playwright's own e2e
+webServer also runs plain `vite preview` locally, so gating on CI-absence would silently break
+`npm run test:e2e` on a dev machine while passing in Actions).
 
 ## Commands
 
