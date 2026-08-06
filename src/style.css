@@ -1,0 +1,44 @@
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, sans-serif;
+}
+
+body {
+  margin: 0;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
+    env(safe-area-inset-left);
+}
+
+.probe {
+  padding: 1rem;
+  max-width: 40rem;
+  margin: 0 auto;
+}
+
+.probe-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 15%, transparent);
+  flex-wrap: wrap;
+}
+
+.probe-label {
+  font-weight: 600;
+  min-width: 12rem;
+}
+
+button {
+  font-size: 1rem;
+  padding: 0.6rem 1rem;
+  min-height: 2.75rem; /* large touch target, usable one-handed with gloves */
+  min-width: 2.75rem;
+}
+
+.probe-log {
+  font-size: 0.75rem;
+  overflow-x: auto;
+  background: color-mix(in srgb, currentColor 6%, transparent);
+  padding: 0.5rem;
+}

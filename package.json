@@ -1,0 +1,46 @@
+{
+  "name": "survey-tool",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Offline-first field survey PWA — GPS, compass and photo observations synced to GitHub.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest run --project node --project happy-dom",
+    "test:watch": "vitest --project node --project happy-dom",
+    "test:browser": "vitest run --project browser",
+    "test:e2e": "playwright test",
+    "lint": "eslint .",
+    "format": "prettier --check ."
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.62.1",
+    "@testing-library/jest-dom": "^7.0.0",
+    "@testing-library/preact": "^3.2.4",
+    "@vitest/browser-playwright": "^4.1.10",
+    "eslint": "^10.8.0",
+    "fake-indexeddb": "^6.2.5",
+    "globals": "^17.9.0",
+    "happy-dom": "^20.11.1",
+    "msw": "^2.15.0",
+    "prettier": "^3.9.6",
+    "vite": "^8.2.0",
+    "vite-plugin-pwa": "^1.3.0",
+    "vitest": "^4.1.10"
+  },
+  "dependencies": {
+    "@protomaps/basemaps": "^5.7.2",
+    "htm": "^3.1.1",
+    "idb": "^8.0.3",
+    "maplibre-gl": "^6.2.0",
+    "pmtiles": "^4.4.1",
+    "preact": "^10.29.8",
+    "workbox-precaching": "^7.4.1"
+  }
+}
