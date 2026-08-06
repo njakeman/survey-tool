@@ -108,3 +108,32 @@ button {
   align-items: center;
   gap: 0.5rem;
 }
+
+.observations-empty {
+  color: color-mix(in srgb, currentColor 55%, transparent);
+  font-style: italic;
+}
+
+.observations-table-scroll {
+  overflow-x: auto; /* narrow phone screens — scroll the table, not the page */
+}
+
+.observations-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.observations-table th,
+.observations-table td {
+  padding: 0.4rem 0.6rem;
+  text-align: left;
+  white-space: nowrap;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+}
+
+.observations-table th {
+  font-weight: 600;
+  color: color-mix(in srgb, currentColor 70%, transparent);
+}

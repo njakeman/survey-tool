@@ -60,6 +60,8 @@ now via `vite-plugin-mkcert`) or the deployed GitHub Pages URL once its deploy i
       GPS watch
 - [ ] Readings are legible in direct sunlight; Save is hittable one-handed with gloves
 - [ ] Undo (after a save) actually removes the observation and its photo, not just hides it
+- [ ] The observations table accumulates correctly as you save, and scrolls horizontally rather
+      than overflowing the screen on a narrow phone in portrait
 
 ## Later phases (fill in as each lands)
 

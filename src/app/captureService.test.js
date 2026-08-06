@@ -270,6 +270,50 @@ describe('countObservations', () => {
   });
 });
 
+describe('listObservations', () => {
+  test('returns an empty array for a session with no observations', async () => {
+    const db = await openDatabase('capture-service-list-empty');
+    const service = createCaptureService({ db, newId: fakeIdGenerator(), nowIso: () => FIXED_NOW });
+    const session = await service.startSession('Ashton Keynes');
+
+    expect(await service.listObservations(session.id)).toEqual([]);
+  });
+
+  test('returns the saved observations for that session', async () => {
+    const db = await openDatabase('capture-service-list-populated');
+    const service = createCaptureService({ db, newId: fakeIdGenerator(), nowIso: () => FIXED_NOW });
+    const session = await service.startSession('Ashton Keynes');
+
+    const first = await service.saveObservation({
+      reading: READING,
+      heading: null,
+      note: 'a',
+      photo: null,
+    });
+    const second = await service.saveObservation({
+      reading: READING,
+      heading: null,
+      note: 'b',
+      photo: null,
+    });
+
+    const listed = await service.listObservations(session.id);
+    expect(listed.map((o) => o.id).sort()).toEqual([first.id, second.id].sort());
+  });
+
+  test('does not return observations from a different session', async () => {
+    const db = await openDatabase('capture-service-list-other-session');
+    const service = createCaptureService({ db, newId: fakeIdGenerator(), nowIso: () => FIXED_NOW });
+    const sessionA = await service.startSession('Site A');
+    await service.saveObservation({ reading: READING, heading: null, note: '', photo: null });
+    await service.endSession();
+    const sessionB = await service.startSession('Site B');
+
+    expect(await service.listObservations(sessionB.id)).toEqual([]);
+    expect(await service.listObservations(sessionA.id)).toHaveLength(1);
+  });
+});
+
 describe('deleteObservation', () => {
   test('removes the observation and its photo', async () => {
     const db = await openDatabase('capture-service-delete');

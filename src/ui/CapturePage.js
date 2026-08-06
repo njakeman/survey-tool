@@ -6,6 +6,7 @@ import { SessionBar } from './SessionBar.js';
 import { ReadingsPanel } from './ReadingsPanel.js';
 import { PhotoField } from './PhotoField.js';
 import { SaveButton } from './SaveButton.js';
+import { ObservationsTable } from './ObservationsTable.js';
 
 function todayDateString() {
   return new Date().toISOString().slice(0, 10);
@@ -16,7 +17,7 @@ function todayDateString() {
 // tested, so a failure here is a wiring failure, not a logic one.
 export function CapturePage({ service, sensors, downscale, onOpenProbe }) {
   const [session, setSession] = useState(null);
-  const [obsCount, setObsCount] = useState(0);
+  const [observations, setObservations] = useState([]);
   const [sessionBusy, setSessionBusy] = useState(false);
 
   const [note, setNote] = useState('');
@@ -38,10 +39,12 @@ export function CapturePage({ service, sensors, downscale, onOpenProbe }) {
     watch: sensors.watchHeading,
   });
 
+  // Single source of truth for both the "N saved" count and the
+  // observations table — one fetch, not a count kept in sync by hand.
   async function refreshSession() {
     const open = await service.getOpenSession();
     setSession(open);
-    setObsCount(open ? await service.countObservations(open.id) : 0);
+    setObservations(open ? await service.listObservations(open.id) : []);
   }
 
   useEffect(() => {
@@ -100,7 +103,7 @@ export function CapturePage({ service, sensors, downscale, onOpenProbe }) {
       setNote('');
       setPhoto(null);
       setLastSaved(observation);
-      setObsCount((count) => count + 1);
+      await refreshSession();
     } catch (error) {
       setSaveError(error.message || 'Could not save observation');
     } finally {
@@ -111,8 +114,8 @@ export function CapturePage({ service, sensors, downscale, onOpenProbe }) {
   async function handleUndo() {
     if (!lastSaved) return;
     await service.deleteObservation(lastSaved.id);
-    setObsCount((count) => Math.max(0, count - 1));
     setLastSaved(null);
+    await refreshSession();
   }
 
   const disabledReason = !session
@@ -127,7 +130,7 @@ export function CapturePage({ service, sensors, downscale, onOpenProbe }) {
       <${SessionBar}
         session=${session}
         defaultName=${todayDateString()}
-        observationCount=${obsCount}
+        observationCount=${observations.length}
         busy=${sessionBusy}
         onStart=${handleStart}
         onEnd=${handleEnd}
@@ -164,6 +167,7 @@ export function CapturePage({ service, sensors, downscale, onOpenProbe }) {
             </p>`
           : null
       }
+      <${ObservationsTable} observations=${observations} />
       <button type="button" class="link" onClick=${onOpenProbe}>Device probe</button>
     </main>
   `;

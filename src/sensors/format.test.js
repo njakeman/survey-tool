@@ -7,6 +7,7 @@ import {
   compassPoint,
   formatHeading,
   formatAge,
+  formatTime,
 } from './format.js';
 
 describe('formatLatLon', () => {
@@ -122,5 +123,23 @@ describe('formatAge', () => {
   test('minutes from 60 seconds up', () => {
     expect(formatAge(60000)).toBe('1 min ago');
     expect(formatAge(180000)).toBe('3 min ago');
+  });
+});
+
+describe('formatTime', () => {
+  test('formats an ISO timestamp as a compact HH:MM:SS time', () => {
+    // Exact string not asserted — locale/ICU can vary by runtime; the shape is what matters.
+    expect(formatTime('2026-08-06T10:00:00.000Z')).toMatch(/^\d{2}:\d{2}:\d{2}$/);
+  });
+
+  test('returns an em dash when the timestamp is missing', () => {
+    expect(formatTime(null)).toBe('—');
+    expect(formatTime(undefined)).toBe('—');
+  });
+
+  test('two different timestamps format to two different times', () => {
+    const a = formatTime('2026-08-06T10:00:00.000Z');
+    const b = formatTime('2026-08-06T14:30:15.000Z');
+    expect(a).not.toBe(b);
   });
 });

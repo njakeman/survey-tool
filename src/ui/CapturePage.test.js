@@ -20,13 +20,14 @@ const POSITION = {
 };
 const HEADING = { headingDeg: 247, headingAccuracyDeg: 5, source: 'webkit-compass' };
 
-function createFakeService({ openSession = null, obsCount = 0 } = {}) {
+function createFakeService({ openSession = null, observations = [] } = {}) {
   return {
     getOpenSession: vi.fn().mockResolvedValue(openSession),
     startSession: vi.fn().mockResolvedValue(OPEN_SESSION),
     endSession: vi.fn().mockResolvedValue({ ...OPEN_SESSION, status: 'closed' }),
     saveObservation: vi.fn().mockResolvedValue({ id: 'obs-1', sessionId: 'sess-1' }),
-    countObservations: vi.fn().mockResolvedValue(obsCount),
+    countObservations: vi.fn().mockResolvedValue(observations.length),
+    listObservations: vi.fn().mockResolvedValue(observations),
     deleteObservation: vi.fn().mockResolvedValue(undefined),
   };
 }
@@ -154,14 +155,36 @@ describe('CapturePage — saving an observation', () => {
   });
 
   test('after a successful save, the note and photo are cleared and the count updates', async () => {
-    const { service } = await renderReady({ obsCount: 0 });
-    service.countObservations.mockResolvedValue(1);
+    const { service } = await renderReady();
+    service.listObservations.mockResolvedValue([{ id: 'obs-1', sessionId: 'sess-1' }]);
     fireEvent.input(screen.getByLabelText(/note/i), { target: { value: 'gate post' } });
 
     fireEvent.click(screen.getByRole('button', { name: /save observation/i }));
 
     await waitFor(() => expect(screen.getByLabelText(/note/i)).toHaveValue(''));
     await waitFor(() => expect(screen.getByText(/1 saved/)).toBeInTheDocument());
+  });
+
+  test('the observations table shows a newly-saved observation without a reload', async () => {
+    const savedObservation = {
+      id: 'obs-1',
+      sessionId: 'sess-1',
+      fixAt: POSITION.fixAt,
+      lat: POSITION.lat,
+      lon: POSITION.lon,
+      gpsAccuracyM: POSITION.accuracyM,
+      headingDeg: null,
+      note: 'gate post',
+      photoId: null,
+    };
+    const { service } = await renderReady();
+    service.saveObservation.mockResolvedValue(savedObservation);
+    service.listObservations.mockResolvedValue([savedObservation]);
+    fireEvent.input(screen.getByLabelText(/note/i), { target: { value: 'gate post' } });
+
+    fireEvent.click(screen.getByRole('button', { name: /save observation/i }));
+
+    expect(await screen.findByRole('row', { name: /51\.500000, -0\.140000/ })).toBeInTheDocument();
   });
 
   test('after a failed save, the note and photo are retained and an error is shown', async () => {

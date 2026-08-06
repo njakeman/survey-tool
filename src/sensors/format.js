@@ -61,6 +61,11 @@ export function formatHeading(headingDeg) {
   return `${Math.round(headingDeg)}° ${compassPoint(headingDeg)}`;
 }
 
+export function formatTime(isoString) {
+  if (isoString == null) return '—';
+  return new Date(isoString).toLocaleTimeString('en-GB');
+}
+
 export function formatAge(ageMs) {
   if (!Number.isFinite(ageMs) || ageMs < 3000) return 'just now';
   if (ageMs < 60000) return `${Math.floor(ageMs / 1000)} s ago`;
