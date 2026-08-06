@@ -10,9 +10,14 @@ permissions:
   pages: write
   id-token: write
 
+# cancel-in-progress: true so a rapid second push cleanly cancels an
+# in-flight deploy rather than leaving it to time out — an older deployment
+# left running to completion after being superseded was seen wedging the
+# Pages environment (subsequent deploys for its exact commit SHA were
+# immediately cancelled by GitHub until a new commit/SHA came along).
 concurrency:
   group: pages
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   test:
