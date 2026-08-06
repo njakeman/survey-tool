@@ -1,9 +1,15 @@
 // Photos are stored as an ArrayBuffer, not a Blob — storing a Blob directly
-// (top-level or nested) throws in WebKit ("Error preparing Blob/File data to
-// be stored in object store"; confirmed empirically against real WebKit via
-// Playwright, Chromium is unaffected). ArrayBuffer round-trips cleanly on
-// both. The Blob/ArrayBuffer split is kept internal to this module — callers
-// still work with Blobs.
+// (top-level or nested) throws in WebKit with "Error preparing Blob/File
+// data to be stored in object store". Confirmed via research: real Safari
+// has supported Blob-in-IndexedDB since 2016, but WebKit deliberately
+// rejects it in ephemeral/private-browsing sessions (writing blob bytes to a
+// temp file conflicts with private mode's on-disk-nothing guarantee) — and
+// that's the session type both Playwright's default WebKit context and
+// actual Safari Private Browsing use. Since an installed PWA's users could
+// genuinely hit Private Browsing too, this isn't just a test artifact to
+// route around — ArrayBuffer sidesteps the restriction entirely and is the
+// standard recommended pattern. See CLAUDE.md: never store a Blob directly
+// in IndexedDB anywhere in this app.
 
 export async function putPhoto(db, { id, blob, contentType }) {
   const arrayBuffer = await blob.arrayBuffer();
