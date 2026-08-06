@@ -66,6 +66,11 @@ export function formatTime(isoString) {
   return new Date(isoString).toLocaleTimeString('en-GB');
 }
 
+export function formatDate(isoString) {
+  if (isoString == null) return '—';
+  return isoString.slice(0, 10);
+}
+
 export function formatAge(ageMs) {
   if (!Number.isFinite(ageMs) || ageMs < 3000) return 'just now';
   if (ageMs < 60000) return `${Math.floor(ageMs / 1000)} s ago`;

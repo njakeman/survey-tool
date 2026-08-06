@@ -32,6 +32,24 @@ function createFakeService({ openSession = null, observations = [] } = {}) {
   };
 }
 
+function renderPage({
+  service,
+  sensors,
+  downscale = vi.fn(),
+  exportSession = vi.fn(),
+  onOpenHistory = vi.fn(),
+} = {}) {
+  return render(
+    html`<${CapturePage}
+      service=${service}
+      sensors=${sensors}
+      downscale=${downscale}
+      exportSession=${exportSession}
+      onOpenHistory=${onOpenHistory}
+    />`,
+  );
+}
+
 function createFakeSensors() {
   let positionHandlers = null;
   let headingHandlers = null;
@@ -287,5 +305,53 @@ describe('CapturePage — lifecycle and gesture ordering', () => {
 
     await waitFor(() => expect(service.startSession).toHaveBeenCalled());
     expect(callOrder).toEqual(['requestHeadingPermission', 'startSession']);
+  });
+});
+
+describe('CapturePage — session history link and export', () => {
+  test('tapping "Session history" calls onOpenHistory', async () => {
+    const service = createFakeService({ openSession: null });
+    const { sensors } = createFakeSensors();
+    const onOpenHistory = vi.fn();
+    renderPage({ service, sensors, onOpenHistory });
+    await screen.findByLabelText(/session name/i);
+
+    fireEvent.click(screen.getByRole('button', { name: /session history/i }));
+
+    expect(onOpenHistory).toHaveBeenCalledTimes(1);
+  });
+
+  test('there is no Export button when no session is open', async () => {
+    const service = createFakeService({ openSession: null });
+    const { sensors } = createFakeSensors();
+    renderPage({ service, sensors });
+    await screen.findByLabelText(/session name/i);
+
+    expect(screen.queryByRole('button', { name: /^export$/i })).not.toBeInTheDocument();
+  });
+
+  test('tapping Export on the open session calls exportSession with its id and shows a success message', async () => {
+    const service = createFakeService({ openSession: OPEN_SESSION });
+    const { sensors } = createFakeSensors();
+    const exportSession = vi.fn().mockResolvedValue({ method: 'share' });
+    renderPage({ service, sensors, exportSession });
+    await screen.findByText('Ashton Keynes');
+
+    fireEvent.click(screen.getByRole('button', { name: /^export$/i }));
+
+    expect(exportSession).toHaveBeenCalledWith('sess-1');
+    await waitFor(() => expect(screen.getByText(/shared/i)).toBeInTheDocument());
+  });
+
+  test('a failed export shows an error rather than crashing the page', async () => {
+    const service = createFakeService({ openSession: OPEN_SESSION });
+    const { sensors } = createFakeSensors();
+    const exportSession = vi.fn().mockRejectedValue(new Error('zip failed'));
+    renderPage({ service, sensors, exportSession });
+    await screen.findByText('Ashton Keynes');
+
+    fireEvent.click(screen.getByRole('button', { name: /^export$/i }));
+
+    await screen.findByText(/zip failed/);
   });
 });

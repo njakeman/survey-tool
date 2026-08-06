@@ -8,6 +8,7 @@ import {
   formatHeading,
   formatAge,
   formatTime,
+  formatDate,
 } from './format.js';
 
 describe('formatLatLon', () => {
@@ -141,5 +142,16 @@ describe('formatTime', () => {
     const a = formatTime('2026-08-06T10:00:00.000Z');
     const b = formatTime('2026-08-06T14:30:15.000Z');
     expect(a).not.toBe(b);
+  });
+});
+
+describe('formatDate', () => {
+  test('formats an ISO timestamp as a plain calendar date', () => {
+    expect(formatDate('2026-08-06T10:00:00.000Z')).toBe('2026-08-06');
+  });
+
+  test('returns an em dash when the timestamp is missing', () => {
+    expect(formatDate(null)).toBe('—');
+    expect(formatDate(undefined)).toBe('—');
   });
 });

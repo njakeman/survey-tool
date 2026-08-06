@@ -55,12 +55,21 @@ for a `*.browser.test.js` file).
 - `src/photo/` — `dimensions.js` (pure aspect-ratio math, node-testable) and `encode.js` (real
   Canvas/Image decode+encode, browser-only — never import it outside `main.js`).
 - `src/app/captureService.js` — the orchestration seam between UI and storage: session lifecycle +
-  observation save, over an injected `db`/`newId`/`nowIso`. Stateless — every call re-reads
-  IndexedDB, which is what makes it correct after a force-quit and relaunch.
+  observation save + read-only `listSessions()` for the history view, over an injected
+  `db`/`newId`/`nowIso`. Stateless — every call re-reads IndexedDB, which is what makes it correct
+  after a force-quit and relaunch.
+- `src/export/` — `buildSessionExport.js` (node-testable: session + observations + photo Blobs →
+  `{filename, entries}`, reusing `domain/geojson.js` + `domain/canonical-json.js` as-is, so the zip's
+  `session.geojson` is byte-identical to what sync will eventually commit), `zip.js` (browser-only
+  thin wrapper over `client-zip`'s `downloadZip()`), `share.js` (browser-only `shareOrDownload()` —
+  Web Share primary, `<a download>` fallback only, `AbortError` treated as a cancel not a failure).
+  Composed together in `main.js`'s `exportSession()`, the only place all three meet.
 - `src/ui/` — Preact + htm components. **Never import `src/storage/**` or `captureService.js`
-  directly from here** — components receive a `service` prop instead, which is what keeps
-  happy-dom tests to two-line fakes. `App.js` is the entire "router": in-memory view state
-  (`'capture' | 'probe'`), no hash, no history API.
+  directly from here** — components receive a `service` prop instead (and `exportSession` where
+  export is offered), which is what keeps happy-dom tests to two-line fakes. `App.js` is the entire
+  "router": in-memory view state (`'capture' | 'history' | 'probe'`), no hash, no history API.
+  `SessionHistoryPage.js` is read-only (past sessions + their observations + Export); `CapturePage.js`
+  also offers Export for the _currently open_ session, so exporting doesn't require ending it first.
 - `src/probe/` — the Phase 1 device-capability probe, still reachable via a footer link in the
   capture UI. Findings recorded in `docs/ios-manual-checklist.md`.
 - Test tiers (`vitest.config.js`): `node` for domain/storage logic (real WebCrypto; jsdom is

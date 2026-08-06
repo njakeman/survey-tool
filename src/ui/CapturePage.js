@@ -15,10 +15,20 @@ function todayDateString() {
 // The integration component: wires the sensor hooks and captureService into
 // the presentational children below. Everything it touches is independently
 // tested, so a failure here is a wiring failure, not a logic one.
-export function CapturePage({ service, sensors, downscale, onOpenProbe }) {
+export function CapturePage({
+  service,
+  sensors,
+  downscale,
+  exportSession,
+  onOpenProbe,
+  onOpenHistory,
+}) {
   const [session, setSession] = useState(null);
   const [observations, setObservations] = useState([]);
   const [sessionBusy, setSessionBusy] = useState(false);
+
+  const [exportState, setExportState] = useState('idle'); // idle | exporting | done | error
+  const [exportMessage, setExportMessage] = useState('');
 
   const [note, setNote] = useState('');
   const [photo, setPhoto] = useState(null);
@@ -118,6 +128,23 @@ export function CapturePage({ service, sensors, downscale, onOpenProbe }) {
     await refreshSession();
   }
 
+  // Lets a surveyor export the current session before tapping End — the
+  // read-only history view (SessionHistoryPage) covers export afterwards.
+  async function handleExport() {
+    setExportState('exporting');
+    setExportMessage('');
+    try {
+      const result = await exportSession(session.id);
+      setExportState('done');
+      setExportMessage(
+        result.cancelled ? 'Share dismissed' : result.method === 'share' ? 'Shared' : 'Downloaded',
+      );
+    } catch (error) {
+      setExportState('error');
+      setExportMessage(error.message || 'Could not export that session');
+    }
+  }
+
   const disabledReason = !session
     ? 'start a session first'
     : !position
@@ -168,6 +195,17 @@ export function CapturePage({ service, sensors, downscale, onOpenProbe }) {
           : null
       }
       <${ObservationsTable} observations=${observations} />
+      ${
+        session
+          ? html`
+              <button type="button" disabled=${exportState === 'exporting'} onClick=${handleExport}>
+                ${exportState === 'exporting' ? 'Exporting…' : 'Export'}
+              </button>
+              ${exportMessage ? html`<p class="capture-page-export-message">${exportMessage}</p>` : null}
+            `
+          : null
+      }
+      <button type="button" class="link" onClick=${onOpenHistory}>Session history</button>
       <button type="button" class="link" onClick=${onOpenProbe}>Device probe</button>
     </main>
   `;

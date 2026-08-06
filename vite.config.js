@@ -1,8 +1,18 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
 // GitHub Pages project site — served from /survey-tool/, not the domain root.
 const base = '/survey-tool/';
+
+// Read (not import-assert) package.json's version, so it can be baked into
+// the bundle as __APP_VERSION__ — export filenames/manifests want a real
+// version string, and the app has no server-side package.json to fetch at
+// runtime once built.
+const pkg = JSON.parse(
+  readFileSync(fileURLToPath(new URL('./package.json', import.meta.url)), 'utf-8'),
+);
 
 export default defineConfig(async ({ command, isPreview }) => {
   const plugins = [];
@@ -67,5 +77,11 @@ export default defineConfig(async ({ command, isPreview }) => {
     }),
   );
 
-  return { base, plugins };
+  return {
+    base,
+    plugins,
+    define: {
+      __APP_VERSION__: JSON.stringify(pkg.version),
+    },
+  };
 });

@@ -1,6 +1,6 @@
 import { createSession, closeSession, findOpenSession } from '../domain/session.js';
 import { createObservation } from '../domain/observation.js';
-import { putSession, listSessions } from '../storage/sessionStore.js';
+import { putSession, listSessions as listSessionsFromStore } from '../storage/sessionStore.js';
 import {
   listObservationsForSession,
   getObservation,
@@ -15,8 +15,12 @@ import { saveObservationWithPhoto } from '../storage/captureWrite.js';
 // makes that cost irrelevant.
 export function createCaptureService({ db, newId, nowIso }) {
   async function getOpenSession() {
-    const sessions = await listSessions(db);
+    const sessions = await listSessionsFromStore(db);
     return findOpenSession(sessions);
+  }
+
+  function listSessions() {
+    return listSessionsFromStore(db);
   }
 
   async function startSession(name) {
@@ -89,6 +93,7 @@ export function createCaptureService({ db, newId, nowIso }) {
 
   return {
     getOpenSession,
+    listSessions,
     startSession,
     endSession,
     saveObservation,
