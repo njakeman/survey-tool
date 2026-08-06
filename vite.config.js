@@ -1,22 +1,33 @@
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
-import mkcert from 'vite-plugin-mkcert';
 
 // GitHub Pages project site — served from /survey-tool/, not the domain root.
 const base = '/survey-tool/';
 
-export default defineConfig(({ isPreview }) => ({
-  base,
-  plugins: [
-    // Local HTTPS for the dev server. Geolocation and
-    // DeviceOrientationEvent.requestPermission are secure-context gated — a
-    // plain-HTTP LAN URL can't exercise them, so on-device sensor testing
-    // needs this rather than depending on the GitHub Pages deploy. Excluded
-    // from `vite preview` (used by e2e/CI): Vite's `command` is 'serve' for
-    // both `dev` and `preview`, and mkcert's own `apply: 'serve'` default
-    // doesn't distinguish them — preview then tries to run `mkcert -install`
-    // (a system CA install), which hangs waiting for elevation on Windows.
-    ...(isPreview ? [] : [mkcert()]),
+export default defineConfig(async ({ command, isPreview }) => {
+  const plugins = [];
+
+  // Local HTTPS for the dev server only — never build, never preview.
+  // Geolocation and DeviceOrientationEvent.requestPermission are
+  // secure-context gated, so on-device sensor testing needs this rather
+  // than depending on the GitHub Pages deploy.
+  //
+  // Dynamic import, not a static one: a static `import mkcert from
+  // 'vite-plugin-mkcert'` at the top of this file runs on every command —
+  // build and preview included — regardless of whether the plugin ends up
+  // in the array below. That import alone crashed CI's Linux/Node 24
+  // runner just by being evaluated (`TypeError:
+  // webidl.util.markAsUncloneable is not a function`, inside a bundled
+  // undici CacheStorage somewhere in mkcert's dependency chain) — never
+  // reproduced locally on Windows/Node 22, and unrelated to whether mkcert
+  // actually ran. CI never needs HTTPS, so it must never even load the
+  // package.
+  if (command === 'serve' && !isPreview) {
+    const { default: mkcert } = await import('vite-plugin-mkcert');
+    plugins.push(mkcert());
+  }
+
+  plugins.push(
     VitePWA({
       strategies: 'injectManifest',
       srcDir: 'src/sw',
@@ -44,5 +55,7 @@ export default defineConfig(({ isPreview }) => ({
         type: 'module',
       },
     }),
-  ],
-}));
+  );
+
+  return { base, plugins };
+});
