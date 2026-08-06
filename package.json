@@ -41,6 +41,7 @@
     "maplibre-gl": "^6.2.0",
     "pmtiles": "^4.4.1",
     "preact": "^10.29.8",
+    "ulid": "^3.0.2",
     "workbox-precaching": "^7.4.1"
   }
 }
