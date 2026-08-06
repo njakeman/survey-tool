@@ -5,32 +5,36 @@ storage eviction, the permission prompts, or the Safari-version bugs that are th
 iOS PWAs break. **Green CI is not iOS confidence.** Run this checklist by hand, on the real target
 device, before signing off each phase.
 
-Device/OS this was last run on: _(fill in)_
+Device/OS this was last run on: iPhone, iOS 26.x (2026-08-06)
 
 ## Install
 
-- [ ] Open the deployed URL in Safari, "Add to Home Screen"
-- [ ] Launch from the home screen icon — confirm standalone mode (no Safari chrome)
-- [ ] Orientation locks portrait
+- [x] Open the deployed URL in Safari, "Add to Home Screen"
+- [x] Launch from the home screen icon — confirm standalone mode (no Safari chrome)
+- [ ] Orientation locks portrait — not yet exercised (probe page doesn't lock orientation itself)
 
 ## Phase 1 — capability probe
 
 Run the probe page's checks in order, note results, then **force-quit and relaunch from the home
 screen icon** (not a Safari reload) and re-run the checks that might differ across a cold launch.
 
-- [ ] Standalone detected as `true`
-- [ ] `storage.estimate()` returns a plausible quota (not the pre-2023 ~50 MB figure)
-- [ ] `storage.persist()` — result, and whether it changes after relaunch
-- [ ] Geolocation fix succeeds in standalone mode — **this is the open iOS 26 regression risk**;
-      if it reports denied here but works in Safari on the same device, stop and report back
-      before building Phase 3 on top of it
-- [ ] Compass permission prompt appears on first tap; note the result before and after relaunch
-- [ ] Web Share sheet opens with the test file attached; note what happens if the target is Files
-      vs AirDrop vs Mail
-- [ ] Download — click it and confirm whether the app becomes trapped in a preview sheet with no
-      way back (known failure mode; if it traps, this confirms Web Share must stay the primary
-      export path)
-- [ ] PBKDF2 600k-iteration benchmark — record the time; this sets the UX expectation for sync
+- [x] Standalone detected as `true`
+- [x] `storage.estimate()` returns a plausible quota — **41.2 GB**, not the stale ~50 MB figure
+- [x] `storage.persist()` — **granted**, and still `true` after a real force-quit + relaunch
+      (~5 min gap between sessions in the log)
+- [x] Geolocation fix succeeds in standalone mode — **10.5 m accuracy, succeeded.** The open iOS 26
+      regression (installed PWAs reporting denied) does **not** reproduce on this device.
+- [x] Compass permission — **granted** on first tap, and **granted again with no re-prompt** after
+      force-quit + relaunch. Permission survives a cold launch on this device/OS.
+- [x] Web Share sheet — **completed** successfully with the test file attached.
+- [x] Download — **not trapped.** Presented "More options → Save to Files", which got the user out
+      cleanly. Clunkier than Share (one extra tap) but not the iOS 18.4 dead-end bug. Confirms
+      download is fine as the secondary export path; Share stays primary as planned.
+- [x] PBKDF2 600k-iteration benchmark — **128 ms.** No perceptible delay; a progress indicator at
+      sync time is a nicety, not a requirement, on hardware this capable.
+
+**Verdict: every architecture-critical assumption from Phase 1 holds on this device.** No design
+changes needed. Proceeding to Phase 2.
 
 ## Later phases (fill in as each lands)
 
