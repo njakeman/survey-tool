@@ -36,10 +36,33 @@ screen icon** (not a Safari reload) and re-run the checks that might differ acro
 **Verdict: every architecture-critical assumption from Phase 1 holds on this device.** No design
 changes needed. Proceeding to Phase 2.
 
+## Phase 3 — capture
+
+Needs a secure context to test real sensor permissions (geolocation, `requestPermission()`) — a
+plain-HTTP LAN URL won't exercise them. Use the local HTTPS dev server (`npm run dev -- --host`,
+now via `vite-plugin-mkcert`) or the deployed GitHub Pages URL once its deploy issue is resolved.
+
+- [ ] The standalone-mode geolocation prompt appears once and readings flow (WebKit 215884 territory
+      — this app deliberately has no client-side router/hash changes to avoid re-triggering it)
+- [ ] Tapping "Start session" prompts for compass permission and the compass then reads plausibly
+      (rotate the phone, check the bearing against a known landmark)
+- [ ] Denying compass permission leaves the app fully usable, clearly marked "position only — no
+      compass" (not silently missing, not blocking Save)
+- [ ] `capture="environment"` opens the **rear** camera directly, not the photo library
+- [ ] A real iPhone photo lands **right way up** at 1600px long edge (the EXIF orientation case —
+      unit/browser tests proved this with a hand-built fixture on Chromium+WebKit, but a real
+      camera photo is the actual proof)
+- [ ] Full flow — start session, get a fix, take a photo, add a note, save — works in **airplane
+      mode**
+- [ ] Force-quit mid-session and relaunch: the open session and every saved observation are still
+      there (storage layer, not just capture UI)
+- [ ] A 20+ observation session doesn't degrade; spot-check thermals/battery over ~30 min of a live
+      GPS watch
+- [ ] Readings are legible in direct sunlight; Save is hittable one-handed with gloves
+- [ ] Undo (after a save) actually removes the observation and its photo, not just hides it
+
 ## Later phases (fill in as each lands)
 
-- [ ] Phase 2 — app survives being backgrounded and killed mid-session with no data loss
-- [ ] Phase 3 — GPS/compass reading and photo capture work with airplane mode on
 - [ ] Phase 4 — map renders offline immediately after a fresh install, no network at all
 - [ ] Phase 5 — sync completes on a real connection; killing the app mid-sync and reopening
       resumes without duplicating or losing observations

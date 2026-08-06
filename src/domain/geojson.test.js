@@ -22,6 +22,7 @@ describe('sessionToFeatureCollection', () => {
       id: 'obs-1',
       sessionId: 'sess-1',
       recordedAt: '2026-08-06T10:00:00.000Z',
+      fixAt: '2026-08-06T09:59:20.000Z',
       lat: 51.5,
       lon: -0.14,
       gpsAccuracyM: 8.2,
@@ -39,6 +40,7 @@ describe('sessionToFeatureCollection', () => {
         properties: {
           obs_id: 'obs-1',
           recorded_at: '2026-08-06T10:00:00.000Z',
+          fix_at: '2026-08-06T09:59:20.000Z',
           lat: 51.5,
           lon: -0.14,
           gps_accuracy_m: 8.2,
@@ -55,11 +57,27 @@ describe('sessionToFeatureCollection', () => {
     ]);
   });
 
+  test('carries fix_at separately from recorded_at when the surveyor saved later than the fix', () => {
+    const obs = createObservation({
+      id: 'obs-1',
+      sessionId: 'sess-1',
+      recordedAt: '2026-08-06T10:00:40.000Z',
+      fixAt: '2026-08-06T10:00:00.000Z',
+      lat: 51.5,
+      lon: -0.14,
+      gpsAccuracyM: 8.2,
+    });
+    const fc = sessionToFeatureCollection(session, [obs], { appVersion: '0.1.0' });
+    expect(fc.features[0].properties.fix_at).toBe('2026-08-06T10:00:00.000Z');
+    expect(fc.features[0].properties.recorded_at).toBe('2026-08-06T10:00:40.000Z');
+  });
+
   test('sets photo to null when the observation has no photo', () => {
     const obs = createObservation({
       id: 'obs-1',
       sessionId: 'sess-1',
       recordedAt: '2026-08-06T10:00:00.000Z',
+      fixAt: '2026-08-06T10:00:00.000Z',
       lat: 51.5,
       lon: -0.14,
       gpsAccuracyM: 8.2,
@@ -73,6 +91,7 @@ describe('sessionToFeatureCollection', () => {
       id: 'obs-early',
       sessionId: 'sess-1',
       recordedAt: '2026-08-06T10:00:00.000Z',
+      fixAt: '2026-08-06T10:00:00.000Z',
       lat: 51.5,
       lon: -0.14,
       gpsAccuracyM: 8,
@@ -81,6 +100,7 @@ describe('sessionToFeatureCollection', () => {
       id: 'obs-late',
       sessionId: 'sess-1',
       recordedAt: '2026-08-06T11:00:00.000Z',
+      fixAt: '2026-08-06T11:00:00.000Z',
       lat: 51.6,
       lon: -0.15,
       gpsAccuracyM: 8,

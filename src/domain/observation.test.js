@@ -5,6 +5,7 @@ const baseFields = {
   id: 'obs-1',
   sessionId: 'sess-1',
   recordedAt: '2026-08-06T10:00:00.000Z',
+  fixAt: '2026-08-06T09:59:20.000Z',
   lat: 51.5,
   lon: -0.14,
   gpsAccuracyM: 8.2,
@@ -17,6 +18,7 @@ describe('createObservation', () => {
       id: 'obs-1',
       sessionId: 'sess-1',
       recordedAt: '2026-08-06T10:00:00.000Z',
+      fixAt: '2026-08-06T09:59:20.000Z',
       lat: 51.5,
       lon: -0.14,
       gpsAccuracyM: 8.2,
@@ -51,6 +53,7 @@ describe('createObservation', () => {
     ['id', { ...baseFields, id: undefined }],
     ['sessionId', { ...baseFields, sessionId: undefined }],
     ['recordedAt', { ...baseFields, recordedAt: undefined }],
+    ['fixAt', { ...baseFields, fixAt: undefined }],
   ])('throws when %s is missing', (field, fields) => {
     expect(() => createObservation(fields)).toThrow(new RegExp(field, 'i'));
   });

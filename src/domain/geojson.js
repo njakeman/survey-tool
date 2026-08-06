@@ -11,6 +11,7 @@ function observationToFeature(obs, session, appVersion) {
     properties: {
       obs_id: obs.id,
       recorded_at: obs.recordedAt,
+      fix_at: obs.fixAt,
       lat: obs.lat,
       lon: obs.lon,
       gps_accuracy_m: obs.gpsAccuracyM,

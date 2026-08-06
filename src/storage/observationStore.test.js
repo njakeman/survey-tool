@@ -6,6 +6,7 @@ import {
   getObservation,
   listObservationsForSession,
   markObservationSynced,
+  deleteObservation,
 } from './observationStore.js';
 import { createObservation } from '../domain/observation.js';
 
@@ -14,6 +15,7 @@ function makeObservation(overrides = {}) {
     id: 'obs-1',
     sessionId: 'sess-1',
     recordedAt: '2026-08-06T10:00:00.000Z',
+    fixAt: '2026-08-06T10:00:00.000Z',
     lat: 51.5,
     lon: -0.14,
     gpsAccuracyM: 8,
@@ -91,6 +93,24 @@ describe('markObservationSynced', () => {
     await expect(markObservationSynced(db, 'nope', '2026-08-06T18:00:00.000Z')).rejects.toThrow(
       /nope/,
     );
+    db.close();
+  });
+});
+
+describe('deleteObservation', () => {
+  test('removes a stored observation', async () => {
+    const db = await openDatabase('obs-store-delete');
+    await putObservation(db, makeObservation());
+
+    await deleteObservation(db, 'obs-1');
+
+    expect(await getObservation(db, 'obs-1')).toBeUndefined();
+    db.close();
+  });
+
+  test('is idempotent — deleting an observation that does not exist does not throw', async () => {
+    const db = await openDatabase('obs-store-delete-missing');
+    await expect(deleteObservation(db, 'nope')).resolves.toBeUndefined();
     db.close();
   });
 });

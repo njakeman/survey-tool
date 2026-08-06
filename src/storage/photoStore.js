@@ -16,6 +16,10 @@ export async function putPhoto(db, { id, blob, contentType }) {
   return db.put('photos', { id, arrayBuffer, contentType });
 }
 
+export function deletePhoto(db, id) {
+  return db.delete('photos', id);
+}
+
 export async function getPhoto(db, id) {
   const record = await db.get('photos', id);
   if (!record) return undefined;

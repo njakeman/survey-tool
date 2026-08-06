@@ -14,6 +14,10 @@ export function listObservationsForSession(db, sessionId) {
   return db.getAllFromIndex('observations', 'by-session', sessionId);
 }
 
+export function deleteObservation(db, id) {
+  return db.delete('observations', id);
+}
+
 export async function markObservationSynced(db, id, syncedAt) {
   const tx = db.transaction('observations', 'readwrite');
   const observation = await tx.store.get(id);

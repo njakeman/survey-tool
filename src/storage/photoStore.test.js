@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto';
 import { describe, expect, test } from 'vitest';
 import { openDatabase } from './db.js';
-import { putPhoto, getPhoto } from './photoStore.js';
+import { putPhoto, getPhoto, deletePhoto } from './photoStore.js';
 
 describe('putPhoto / getPhoto', () => {
   test('stores a photo blob and reads it back as a Blob with the same content and type', async () => {
@@ -21,5 +21,22 @@ describe('putPhoto / getPhoto', () => {
   test('returns undefined for a photo that does not exist', async () => {
     const db = await openDatabase('photo-store-missing');
     expect(await getPhoto(db, 'nope')).toBeUndefined();
+  });
+});
+
+describe('deletePhoto', () => {
+  test('removes a stored photo', async () => {
+    const db = await openDatabase('photo-store-delete');
+    const blob = new Blob(['fake jpeg bytes'], { type: 'image/jpeg' });
+    await putPhoto(db, { id: 'obs-1', blob, contentType: 'image/jpeg' });
+
+    await deletePhoto(db, 'obs-1');
+
+    expect(await getPhoto(db, 'obs-1')).toBeUndefined();
+  });
+
+  test('is idempotent — deleting a photo that does not exist does not throw', async () => {
+    const db = await openDatabase('photo-store-delete-missing');
+    await expect(deletePhoto(db, 'nope')).resolves.toBeUndefined();
   });
 });

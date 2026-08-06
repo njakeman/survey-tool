@@ -4,11 +4,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-Phases 1–2 of the implementation plan are complete (device capability probe verified on iOS 26;
-storage/data model layer). See `field-survey-pwa-prompt.md` for the original brief. The approved
+Phases 1–3 of the implementation plan are complete: device capability probe verified on iOS 26,
+storage/data model layer, and capture (GPS/compass readings, photo, save) — the app is field-usable
+offline as of Phase 3. See `field-survey-pwa-prompt.md` for the original brief. The approved
 architecture corrected several of the brief's technical choices (raster tiles → PMTiles/MapLibre,
 download-as-primary-export → Web Share-as-primary) — read the plan history / recent commits before
 assuming the brief's map or export sections still describe the built app.
+
+The local dev server needs HTTPS to test geolocation/compass permissions (secure-context gated) —
+`npm run dev -- --host` now serves HTTPS via `vite-plugin-mkcert`, reachable on the LAN. `vite
+preview` (used by e2e/CI) deliberately excludes mkcert — see the comment in `vite.config.js` for why
+(mkcert's system CA install hangs waiting for elevation if it runs there).
 
 ## Commands
 
@@ -33,9 +39,24 @@ for a `*.browser.test.js` file).
   ordered within the same millisecond).
 - `src/storage/` — `idb` wrapper over IndexedDB. Each store module (`sessionStore.js`,
   `observationStore.js`, `photoStore.js`) takes an opened `db` as its first argument rather than a
-  module-level singleton, so tests can pass an isolated database.
-- `src/probe/` — the Phase 1 device-capability probe. Findings recorded in
-  `docs/ios-manual-checklist.md`.
+  module-level singleton, so tests can pass an isolated database. `captureWrite.js` writes an
+  observation + its photo in one transaction — see the ArrayBuffer-before-transaction comment there
+  before touching it.
+- `src/sensors/` — `position.js`/`heading.js`: browser sensor adapters, each taking its browser
+  dependency as a parameter (`navigator.geolocation`, `window`) rather than reading globals, so
+  they're unit-testable with fakes. `format.js` holds all display formatting (accuracy always in
+  metres, never a tick).
+- `src/photo/` — `dimensions.js` (pure aspect-ratio math, node-testable) and `encode.js` (real
+  Canvas/Image decode+encode, browser-only — never import it outside `main.js`).
+- `src/app/captureService.js` — the orchestration seam between UI and storage: session lifecycle +
+  observation save, over an injected `db`/`newId`/`nowIso`. Stateless — every call re-reads
+  IndexedDB, which is what makes it correct after a force-quit and relaunch.
+- `src/ui/` — Preact + htm components. **Never import `src/storage/**` or `captureService.js`
+  directly from here** — components receive a `service` prop instead, which is what keeps
+  happy-dom tests to two-line fakes. `App.js` is the entire "router": in-memory view state
+  (`'capture' | 'probe'`), no hash, no history API.
+- `src/probe/` — the Phase 1 device-capability probe, still reachable via a footer link in the
+  capture UI. Findings recorded in `docs/ios-manual-checklist.md`.
 - Test tiers (`vitest.config.js`): `node` for domain/storage logic (real WebCrypto; jsdom is
   deliberately avoided — `crypto.subtle` throws under it, vitest-dev/vitest#5365), `happy-dom` for
   UI components, `browser` (real Chromium + WebKit via Playwright) for contract tests that must
@@ -100,3 +121,11 @@ for a `*.browser.test.js` file).
 - Downscale photos on-device before storing them (plan: 1600px long edge, JPEG q0.8).
 - No client-side router — hash routing re-triggers geolocation permission prompts in standalone
   mode (WebKit bug 215884). Hold view state in memory instead.
+- Don't persist the live GPS watch stream to IndexedDB — ~1Hz writes for data nobody reads back is
+  write amplification with no benefit. The actual "nothing held in volatile memory" guarantee is:
+  session written on start/end, observation + photo written in one transaction on the Save tap
+  (`captureWrite.js`), before any UI feedback. If you're tempted to write every `watchPosition` tick,
+  don't — that's not what "offline-first, nothing lost" means here.
+- `recordedAt` (when the surveyor tapped Save) and `fixAt` (when the position was actually measured)
+  on an observation are deliberately distinct fields — a surveyor can stand at a point, type a note
+  for 40 seconds, then save. Don't collapse them.
