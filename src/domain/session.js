@@ -23,3 +23,13 @@ export function closeSession(session, endedAt) {
   }
   return { ...session, endedAt, status: 'closed' };
 }
+
+// The newest open session if more than one is somehow open (ULIDs sort
+// chronologically, so the greatest id is the newest) — a surveyor in the
+// field must not be blocked by a data-integrity assertion; the newest open
+// session is the reasonable guess.
+export function findOpenSession(sessions) {
+  const open = sessions.filter((session) => session.status === 'open');
+  if (open.length === 0) return null;
+  return open.reduce((latest, session) => (session.id > latest.id ? session : latest));
+}

@@ -1,12 +1,22 @@
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
+import mkcert from 'vite-plugin-mkcert';
 
 // GitHub Pages project site — served from /survey-tool/, not the domain root.
 const base = '/survey-tool/';
 
-export default defineConfig({
+export default defineConfig(({ isPreview }) => ({
   base,
   plugins: [
+    // Local HTTPS for the dev server. Geolocation and
+    // DeviceOrientationEvent.requestPermission are secure-context gated — a
+    // plain-HTTP LAN URL can't exercise them, so on-device sensor testing
+    // needs this rather than depending on the GitHub Pages deploy. Excluded
+    // from `vite preview` (used by e2e/CI): Vite's `command` is 'serve' for
+    // both `dev` and `preview`, and mkcert's own `apply: 'serve'` default
+    // doesn't distinguish them — preview then tries to run `mkcert -install`
+    // (a system CA install), which hangs waiting for elevation on Windows.
+    ...(isPreview ? [] : [mkcert()]),
     VitePWA({
       strategies: 'injectManifest',
       srcDir: 'src/sw',
@@ -35,4 +45,4 @@ export default defineConfig({
       },
     }),
   ],
-});
+}));

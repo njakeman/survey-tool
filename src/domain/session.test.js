@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { createSession, closeSession } from './session.js';
+import { createSession, closeSession, findOpenSession } from './session.js';
 
 describe('createSession', () => {
   test('creates an open session with the given id, name and start time', () => {
@@ -69,5 +69,46 @@ describe('closeSession', () => {
     });
     closeSession(open, '2026-08-06T12:00:00.000Z');
     expect(open.status).toBe('open');
+  });
+});
+
+describe('findOpenSession', () => {
+  test('returns null when there are no sessions', () => {
+    expect(findOpenSession([])).toBeNull();
+  });
+
+  test('returns the open session when there is exactly one', () => {
+    const open = createSession({
+      id: 'sess-1',
+      name: 'Site A',
+      startedAt: '2026-08-06T10:00:00.000Z',
+    });
+    const closed = closeSession(
+      createSession({ id: 'sess-0', name: 'Site Z', startedAt: '2026-08-05T10:00:00.000Z' }),
+      '2026-08-05T12:00:00.000Z',
+    );
+    expect(findOpenSession([closed, open])).toEqual(open);
+  });
+
+  test('returns null when every session is closed', () => {
+    const closed = closeSession(
+      createSession({ id: 'sess-1', name: 'Site A', startedAt: '2026-08-06T10:00:00.000Z' }),
+      '2026-08-06T12:00:00.000Z',
+    );
+    expect(findOpenSession([closed])).toBeNull();
+  });
+
+  test('returns the session with the greatest id when more than one is open (data-integrity edge case)', () => {
+    const older = createSession({
+      id: 'sess-1',
+      name: 'Site A',
+      startedAt: '2026-08-06T09:00:00.000Z',
+    });
+    const newer = createSession({
+      id: 'sess-2',
+      name: 'Site B',
+      startedAt: '2026-08-06T10:00:00.000Z',
+    });
+    expect(findOpenSession([newer, older])).toEqual(newer);
   });
 });

@@ -26,6 +26,7 @@ describe('storage layer against real IndexedDB', () => {
       id: 'obs-1',
       sessionId: 'sess-1',
       recordedAt: '2026-08-06T10:00:00.000Z',
+      fixAt: '2026-08-06T10:00:00.000Z',
       lat: 51.5,
       lon: -0.14,
       gpsAccuracyM: 8,

@@ -42,3 +42,69 @@ button {
   background: color-mix(in srgb, currentColor 6%, transparent);
   padding: 0.5rem;
 }
+
+/* Capture page: minimal interface, large touch targets, readable in
+   sunlight, usable one-handed with gloves — per the brief. */
+
+.capture-page {
+  padding: 1rem;
+  max-width: 32rem;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.session-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.session-bar input,
+.capture-page textarea {
+  font-size: 1.1rem;
+  padding: 0.5rem;
+  min-height: 2.75rem;
+}
+
+.capture-page textarea {
+  width: 100%;
+  min-height: 4rem;
+  resize: vertical;
+}
+
+.readings-panel {
+  font-size: 1.25rem; /* legible at arm's length, in sunlight */
+  font-variant-numeric: tabular-nums;
+}
+
+.readings-panel .position-only {
+  color: color-mix(in srgb, orange 70%, currentColor);
+}
+
+.photo-field-preview img {
+  max-width: 100%;
+  max-height: 12rem;
+  display: block;
+  margin-top: 0.5rem;
+}
+
+.save-button button {
+  width: 100%;
+  min-height: 3.5rem;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.save-button-reason,
+.save-error {
+  color: color-mix(in srgb, orangered 70%, currentColor);
+}
+
+.last-saved {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}

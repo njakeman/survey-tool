@@ -1,0 +1,268 @@
+import { describe, expect, test, vi } from 'vitest';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/preact';
+import { html } from 'htm/preact';
+import { CapturePage } from './CapturePage.js';
+
+const OPEN_SESSION = {
+  id: 'sess-1',
+  name: 'Ashton Keynes',
+  status: 'open',
+  startedAt: '2026-08-06T09:00:00.000Z',
+};
+const POSITION = {
+  lat: 51.5,
+  lon: -0.14,
+  accuracyM: 8.2,
+  altitudeM: null,
+  altitudeAccuracyM: null,
+  fixAt: 'x',
+  fixAtMs: 1,
+};
+const HEADING = { headingDeg: 247, headingAccuracyDeg: 5, source: 'webkit-compass' };
+
+function createFakeService({ openSession = null, obsCount = 0 } = {}) {
+  return {
+    getOpenSession: vi.fn().mockResolvedValue(openSession),
+    startSession: vi.fn().mockResolvedValue(OPEN_SESSION),
+    endSession: vi.fn().mockResolvedValue({ ...OPEN_SESSION, status: 'closed' }),
+    saveObservation: vi.fn().mockResolvedValue({ id: 'obs-1', sessionId: 'sess-1' }),
+    countObservations: vi.fn().mockResolvedValue(obsCount),
+    deleteObservation: vi.fn().mockResolvedValue(undefined),
+  };
+}
+
+function createFakeSensors() {
+  let positionHandlers = null;
+  let headingHandlers = null;
+  const positionStop = vi.fn();
+  const headingStop = vi.fn();
+  return {
+    sensors: {
+      watchPosition: (handlers) => {
+        positionHandlers = handlers;
+        return positionStop;
+      },
+      watchHeading: (handlers) => {
+        headingHandlers = handlers;
+        return headingStop;
+      },
+      requestHeadingPermission: vi.fn().mockResolvedValue('granted'),
+    },
+    pushPosition: (reading) => act(() => positionHandlers?.onReading(reading)),
+    pushHeading: (reading) => act(() => headingHandlers?.onReading(reading)),
+    positionStop,
+    headingStop,
+  };
+}
+
+describe('CapturePage — session', () => {
+  test("mounts with no open session, showing the start form pre-filled with today's date", async () => {
+    const service = createFakeService({ openSession: null });
+    const { sensors } = createFakeSensors();
+    render(html`<${CapturePage} service=${service} sensors=${sensors} downscale=${vi.fn()} />`);
+
+    const input = await screen.findByLabelText(/session name/i);
+    expect(input).toHaveValue(new Date().toISOString().slice(0, 10));
+  });
+
+  test('mounts with an open session and shows it', async () => {
+    const service = createFakeService({ openSession: OPEN_SESSION });
+    const { sensors } = createFakeSensors();
+    render(html`<${CapturePage} service=${service} sensors=${sensors} downscale=${vi.fn()} />`);
+
+    await screen.findByText('Ashton Keynes');
+  });
+});
+
+describe('CapturePage — save gating', () => {
+  test('save is disabled with no fix, and the reason is shown', async () => {
+    const service = createFakeService({ openSession: OPEN_SESSION });
+    const { sensors } = createFakeSensors();
+    render(html`<${CapturePage} service=${service} sensors=${sensors} downscale=${vi.fn()} />`);
+
+    await screen.findByText('Ashton Keynes');
+    expect(screen.getByRole('button', { name: /save observation/i })).toBeDisabled();
+    // Exact match: ReadingsPanel's own "Waiting for GPS fix…" text also
+    // matches a case-insensitive substring search, so disambiguate exactly.
+    expect(screen.getByText('waiting for GPS fix')).toBeInTheDocument();
+  });
+
+  test('pushing a position reading through the sensor enables save', async () => {
+    const service = createFakeService({ openSession: OPEN_SESSION });
+    const { sensors, pushPosition } = createFakeSensors();
+    render(html`<${CapturePage} service=${service} sensors=${sensors} downscale=${vi.fn()} />`);
+    await screen.findByText('Ashton Keynes');
+
+    pushPosition(POSITION);
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /save observation/i })).not.toBeDisabled(),
+    );
+  });
+
+  test('save is disabled with a fix but no open session', async () => {
+    const service = createFakeService({ openSession: null });
+    const { sensors, pushPosition } = createFakeSensors();
+    render(html`<${CapturePage} service=${service} sensors=${sensors} downscale=${vi.fn()} />`);
+    await screen.findByLabelText(/session name/i);
+
+    pushPosition(POSITION);
+
+    await waitFor(() => expect(screen.getByText(/start a session/i)).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: /save observation/i })).toBeDisabled();
+  });
+});
+
+describe('CapturePage — saving an observation', () => {
+  async function renderReady(serviceOverrides) {
+    const service = createFakeService({ openSession: OPEN_SESSION, ...serviceOverrides });
+    const { sensors, pushPosition, pushHeading, positionStop, headingStop } = createFakeSensors();
+    render(html`<${CapturePage} service=${service} sensors=${sensors} downscale=${vi.fn()} />`);
+    await screen.findByText('Ashton Keynes');
+    pushPosition(POSITION);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /save observation/i })).not.toBeDisabled(),
+    );
+    return { service, sensors, pushPosition, pushHeading, positionStop, headingStop };
+  }
+
+  // The compass watcher only registers once "Enable compass" is tapped
+  // (useHeading's enable()) — pushHeading is a no-op before that.
+  async function enableCompassAndWait() {
+    fireEvent.click(screen.getByRole('button', { name: /enable compass/i }));
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: /enable compass/i })).not.toBeInTheDocument(),
+    );
+  }
+
+  test('tapping Save calls saveObservation with the reading, heading, note and photo on screen', async () => {
+    const { service, pushHeading } = await renderReady();
+    await enableCompassAndWait();
+    pushHeading(HEADING);
+    fireEvent.input(screen.getByLabelText(/note/i), { target: { value: 'gate post' } });
+
+    fireEvent.click(screen.getByRole('button', { name: /save observation/i }));
+
+    await waitFor(() =>
+      expect(service.saveObservation).toHaveBeenCalledWith({
+        reading: POSITION,
+        heading: HEADING,
+        note: 'gate post',
+        photo: null,
+      }),
+    );
+  });
+
+  test('after a successful save, the note and photo are cleared and the count updates', async () => {
+    const { service } = await renderReady({ obsCount: 0 });
+    service.countObservations.mockResolvedValue(1);
+    fireEvent.input(screen.getByLabelText(/note/i), { target: { value: 'gate post' } });
+
+    fireEvent.click(screen.getByRole('button', { name: /save observation/i }));
+
+    await waitFor(() => expect(screen.getByLabelText(/note/i)).toHaveValue(''));
+    await waitFor(() => expect(screen.getByText(/1 saved/)).toBeInTheDocument());
+  });
+
+  test('after a failed save, the note and photo are retained and an error is shown', async () => {
+    const { service } = await renderReady();
+    service.saveObservation.mockRejectedValue(new Error('disk full'));
+    fireEvent.input(screen.getByLabelText(/note/i), { target: { value: 'gate post' } });
+
+    fireEvent.click(screen.getByRole('button', { name: /save observation/i }));
+
+    await screen.findByText(/disk full/);
+    expect(screen.getByLabelText(/note/i)).toHaveValue('gate post');
+  });
+
+  test('double-tapping Save only calls saveObservation once', async () => {
+    const { service } = await renderReady();
+    let resolveSave;
+    service.saveObservation.mockReturnValue(new Promise((resolve) => (resolveSave = resolve)));
+
+    const button = screen.getByRole('button', { name: /save observation/i });
+    fireEvent.click(button);
+    fireEvent.click(button);
+
+    expect(service.saveObservation).toHaveBeenCalledTimes(1);
+    await act(async () => resolveSave({ id: 'obs-1' }));
+  });
+
+  test('selecting a photo calls the injected downscale and stores its result', async () => {
+    const downscaleResult = {
+      blob: new Blob(['x'], { type: 'image/jpeg' }),
+      width: 100,
+      height: 100,
+    };
+    const downscale = vi.fn().mockResolvedValue(downscaleResult);
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:fake');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const service = createFakeService({ openSession: OPEN_SESSION });
+    const { sensors } = createFakeSensors();
+    render(html`<${CapturePage} service=${service} sensors=${sensors} downscale=${downscale} />`);
+    await screen.findByText('Ashton Keynes');
+    const file = new File(['bytes'], 'photo.jpg', { type: 'image/jpeg' });
+
+    fireEvent.change(document.querySelector('input[type="file"]'), { target: { files: [file] } });
+
+    expect(downscale).toHaveBeenCalledWith(file);
+    await screen.findByRole('img');
+
+    URL.createObjectURL.mockRestore();
+    URL.revokeObjectURL.mockRestore();
+  });
+
+  test('a rejecting downscale shows a photo error and does not crash the page', async () => {
+    const downscale = vi.fn().mockRejectedValue(new Error('could not decode'));
+    const service = createFakeService({ openSession: OPEN_SESSION });
+    const { sensors } = createFakeSensors();
+    render(html`<${CapturePage} service=${service} sensors=${sensors} downscale=${downscale} />`);
+    await screen.findByText('Ashton Keynes');
+    const file = new File(['bytes'], 'photo.jpg', { type: 'image/jpeg' });
+
+    fireEvent.change(document.querySelector('input[type="file"]'), { target: { files: [file] } });
+
+    await screen.findByText(/could not decode/);
+  });
+});
+
+describe('CapturePage — lifecycle and gesture ordering', () => {
+  test('unmount stops the position watcher (always active) and the heading watcher once enabled', async () => {
+    const service = createFakeService({ openSession: OPEN_SESSION });
+    const { sensors, positionStop, headingStop } = createFakeSensors();
+    const { unmount } = render(
+      html`<${CapturePage} service=${service} sensors=${sensors} downscale=${vi.fn()} />`,
+    );
+    await screen.findByText('Ashton Keynes');
+    fireEvent.click(screen.getByRole('button', { name: /enable compass/i }));
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: /enable compass/i })).not.toBeInTheDocument(),
+    );
+
+    unmount();
+
+    expect(positionStop).toHaveBeenCalled();
+    expect(headingStop).toHaveBeenCalled();
+  });
+
+  test('Start-session calls requestHeadingPermission before awaiting startSession (iOS gesture rule)', async () => {
+    const service = createFakeService({ openSession: null });
+    const { sensors } = createFakeSensors();
+    const callOrder = [];
+    sensors.requestHeadingPermission = vi.fn(() => {
+      callOrder.push('requestHeadingPermission');
+      return Promise.resolve('granted');
+    });
+    service.startSession = vi.fn(() => {
+      callOrder.push('startSession');
+      return Promise.resolve(OPEN_SESSION);
+    });
+    render(html`<${CapturePage} service=${service} sensors=${sensors} downscale=${vi.fn()} />`);
+    await screen.findByLabelText(/session name/i);
+
+    fireEvent.click(screen.getByRole('button', { name: /start session/i }));
+
+    await waitFor(() => expect(service.startSession).toHaveBeenCalled());
+    expect(callOrder).toEqual(['requestHeadingPermission', 'startSession']);
+  });
+});

@@ -1,8 +1,14 @@
 import { render } from 'preact';
 import { html } from 'htm/preact';
 import { registerSW } from 'virtual:pwa-register';
-import { ProbePage } from './probe/ProbePage.js';
+import { App } from './ui/App.js';
 import { formatError } from './error-display.js';
+import { openDatabase } from './storage/db.js';
+import { createCaptureService } from './app/captureService.js';
+import { newId, nowIso } from './domain/id.js';
+import { watchPosition } from './sensors/position.js';
+import { watchHeading, requestHeadingPermission } from './sensors/heading.js';
+import { downscaleImageBlob } from './photo/encode.js';
 import './style.css';
 
 // A blank screen with no console access (no Mac nearby for Web Inspector) is
@@ -21,9 +27,27 @@ function showFatalError(errorLike) {
 window.addEventListener('error', (event) => showFatalError(event));
 window.addEventListener('unhandledrejection', (event) => showFatalError(event.reason));
 
-try {
+// Composition root: open storage, build the capture service, bind sensor
+// adapters to real browser globals, and render. Deliberately dumb — any
+// conditional here belongs in a tested module instead (see plan Phase 3).
+async function main() {
   registerSW({ immediate: true });
-  render(html`<${ProbePage} />`, document.getElementById('app'));
-} catch (error) {
-  showFatalError(error);
+
+  const db = await openDatabase();
+  const service = createCaptureService({ db, newId, nowIso });
+
+  const sensors = {
+    watchPosition: (handlers) => watchPosition(navigator.geolocation, handlers),
+    watchHeading: (handlers) => watchHeading(window, handlers),
+    requestHeadingPermission: () => requestHeadingPermission(window.DeviceOrientationEvent),
+  };
+
+  const downscale = (file) => downscaleImageBlob(file);
+
+  render(
+    html`<${App} service=${service} sensors=${sensors} downscale=${downscale} />`,
+    document.getElementById('app'),
+  );
 }
+
+main().catch(showFatalError);
