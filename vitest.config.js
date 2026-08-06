@@ -1,4 +1,5 @@
 import { defineConfig } from 'vitest/config';
+import { playwright } from '@vitest/browser-playwright';
 
 // Three tiers, run independently:
 //  - node:    domain logic (crypto, storage, sync, geojson) — no DOM, real WebCrypto.
@@ -9,6 +10,7 @@ import { defineConfig } from 'vitest/config';
 //             contract tests that must catch divergence from WebKit's real behaviour.
 export default defineConfig({
   test: {
+    passWithNoTests: true,
     projects: [
       {
         test: {
@@ -32,7 +34,7 @@ export default defineConfig({
           include: ['src/**/*.browser.test.js'],
           browser: {
             enabled: true,
-            provider: 'playwright',
+            provider: playwright(),
             instances: [{ browser: 'chromium' }, { browser: 'webkit' }],
           },
         },
