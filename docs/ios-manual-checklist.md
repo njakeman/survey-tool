@@ -43,8 +43,17 @@ changes needed. Proceeding to Phase 2.
 ## Phase 3 — capture
 
 Needs a secure context to test real sensor permissions (geolocation, `requestPermission()`) — a
-plain-HTTP LAN URL won't exercise them. Use the local HTTPS dev server (`npm run dev -- --host`,
-now via `vite-plugin-mkcert`) or the deployed GitHub Pages URL once its deploy issue is resolved.
+plain-HTTP LAN URL won't exercise them. GitHub Pages deploys are working again (as of 2026-08-10)
+— use the deployed URL, `https://njakeman.github.io/survey-tool/`, as the primary target. The local
+HTTPS dev server (`npm run dev -- --host`, via `vite-plugin-mkcert`) remains useful for
+pre-deploy iteration, but see the offline-testing note below — it cannot substitute for a real
+build.
+
+**Before this round**, remove any home-screen icons added from earlier local ports
+(5173/5174/5175/4173) — each is a distinct origin with its own service-worker registration and its
+own IndexedDB, so observations saved against one won't appear in the Pages install. That's expected
+storage isolation, not data loss; it's why `vite.config.js` now sets `strictPort: true` so a second
+local server fails instead of silently opening yet another orphaned origin.
 
 - [ ] The standalone-mode geolocation prompt appears once and readings flow (WebKit 215884 territory
       — this app deliberately has no client-side router/hash changes to avoid re-triggering it)
@@ -57,15 +66,16 @@ now via `vite-plugin-mkcert`) or the deployed GitHub Pages URL once its deploy i
       unit/browser tests proved this with a hand-built fixture on Chromium+WebKit, but a real
       camera photo is the actual proof)
 - [ ] Full flow — start session, get a fix, take a photo, add a note, save — works in **airplane
-      mode**. **Must** be run against a production build: `npm run build && npm run
-preview:mobile`, re-add to home screen from `https://<LAN-IP>:4173/survey-tool/` (a
-      _different_ origin from the dev server's 5173 — the old icon won't pick this build up), and
-      launch it once online before flipping on airplane mode so the service worker precaches. The
-      plain dev server's SW precaches nothing by design (see CLAUDE.md) and will fail this check
-      every time even though nothing is broken — this exact confusion produced a false bug report
-      once already. If the capture page ever shows the red "No offline cache" banner, that's the
-      app correctly telling you it's not this build's fault; open the probe page for the full
-      readout.
+      mode**. **Must** be run against a production build. Preferred: add
+      `https://njakeman.github.io/survey-tool/` to the home screen (now that Pages deploys work
+      again) and launch it once online before flipping on airplane mode so the service worker
+      precaches. Local alternative: `npm run build && npm run preview:mobile`, re-add to home
+      screen from `https://<LAN-IP>:4173/survey-tool/` (a _different_ origin from the dev server's
+      5173 — the old icon won't pick this build up). Either way, the plain dev server's SW
+      precaches nothing by design (see CLAUDE.md) and will fail this check every time even though
+      nothing is broken — this exact confusion produced a false bug report once already. If the
+      capture page ever shows the red "No offline cache" banner, that's the app correctly telling
+      you it's not this build's fault; open the probe page for the full readout.
 - [ ] Force-quit mid-session and relaunch: the open session and every saved observation are still
       there (storage layer, not just capture UI)
 - [ ] A 20+ observation session doesn't degrade; spot-check thermals/battery over ~30 min of a live

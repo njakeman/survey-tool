@@ -39,6 +39,16 @@ reports `{ registered, controlled, precachedCount, offlineReady }` from real
 `precachedCount === 0` — silent on a real production build) and as a full readout + "Recheck"
 button on the probe page.
 
+GitHub Pages deploys are working again as of 2026-08-10 (deployment for `0c8a0ec` reports
+`state: success`, live `sw.js` carries a real precache) — `https://njakeman.github.io/survey-tool/`
+is now the primary target for on-device testing; `preview:mobile` remains for pre-deploy iteration.
+Every dev-server port is a **separate origin**, each with its own service-worker registration and
+its own IndexedDB — a home-screen icon added from 5173 shares nothing with one added from 5174 or
+4173, including saved observations. `vite.config.js` sets `strictPort: true` on both `server` and
+`preview` specifically so a second `npm run dev`/`preview` fails loudly with "port in use" instead
+of silently drifting to the next port and creating another orphaned origin. Remove any stale
+home-screen icons from earlier local ports before testing against Pages.
+
 ## Commands
 
 - `npm run dev` — Vite dev server

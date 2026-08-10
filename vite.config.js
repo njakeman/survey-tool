@@ -83,5 +83,14 @@ export default defineConfig(async ({ command, isPreview }) => {
     define: {
       __APP_VERSION__: JSON.stringify(pkg.version),
     },
+    // Both servers fail loudly on a busy port rather than silently taking the
+    // next one. Vite's default increment (5173 → 5174 → …) means a second
+    // `npm run dev` quietly succeeds on a *different origin*, with its own
+    // service-worker registration and its own IndexedDB — the exact
+    // ambiguity behind the "PWA doesn't work offline" report. On preview it
+    // also turns a 4173 clash with `preview:mobile` into an immediate
+    // "port in use" instead of Playwright's opaque 60s webServer timeout.
+    server: { strictPort: true },
+    preview: { strictPort: true },
   };
 });
