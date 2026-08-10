@@ -4,9 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-Phases 1–3 of the implementation plan are complete: device capability probe verified on iOS 26,
-storage/data model layer, and capture (GPS/compass readings, photo, save) — the app is field-usable
-offline as of Phase 3. See `field-survey-pwa-prompt.md` for the original brief. The approved
+Phases 1–4 are complete: device capability probe verified on iOS 26, storage/data model layer,
+capture (GPS/compass readings, photo, save), session history + zip export, and the offline vector
+basemap — the app is field-usable offline as of Phase 3. Phase 4 needs a `public/basemap.pmtiles`
+the user produces themselves (README → Offline basemap) and has **not yet been signed off on
+device**: run the Phase 4 section of `docs/ios-manual-checklist.md`. Phase 5 is sync. See `field-survey-pwa-prompt.md` for the original brief. The approved
 architecture corrected several of the brief's technical choices (raster tiles → PMTiles/MapLibre,
 download-as-primary-export → Web Share-as-primary) — read the plan history / recent commits before
 assuming the brief's map or export sections still describe the built app.
@@ -114,6 +116,14 @@ standalone })`, browser globals injected same as `probe/capabilities.js`, so it'
   "router": in-memory view state (`'capture' | 'history' | 'probe'`), no hash, no history API.
   `SessionHistoryPage.js` is read-only (past sessions + their observations + Export); `CapturePage.js`
   also offers Export for the _currently open_ session, so exporting doesn't require ending it first.
+- `src/map/` — the Phase 4 offline basemap. `mapAdapter.js` is the **only** module that imports
+  `maplibre-gl`/`pmtiles`, and `main.js` is its only importer (dynamic `import()`, so ~1.5 MB of
+  renderer stays out of the startup bundle) — same rule as `photo/encode.js`. Everything else is
+  pure and node-tested: `style.js` (one font stack, no sprite), `overlays.js` (position dot,
+  accuracy-ring expression, marker FeatureCollection — deliberately _not_ reusing
+  `domain/geojson.js`, whose bytes sync depends on), `followMode.js`, `viewport.js`,
+  `pmtilesSource.js` (an `ArrayBuffer`-backed pmtiles `Source`), `glyphs.js`. `src/ui/CaptureMap.js`
+  receives an injected `createMap` factory, so it tests against a fake adapter.
 - `src/probe/` — the Phase 1 device-capability probe, still reachable via a footer link in the
   capture UI. Findings recorded in `docs/ios-manual-checklist.md`.
 - Test tiers (`vitest.config.js`): `node` for domain/storage logic (real WebCrypto; jsdom is
@@ -144,6 +154,20 @@ standalone })`, browser globals injected same as `probe/capabilities.js`, so it'
   pre-seeding areas for offline use) or from OpenFreeMap's CDN (planet-only downloads, no PMTiles,
   ToS silent-to-hostile on automated collection). Use `pmtiles extract` against Protomaps' public
   planet build instead — the documented, ODbL-licensed, no-key route to a small regional extract.
+- Four map facts, each learned by something breaking. **MapLibre 6 loads its worker from a separate
+  file** resolved against `import.meta.url`, which does not survive bundling — `?worker&url` +
+  `setWorkerUrl` (mapAdapter.js) is why production and offline work; dev mode hides the failure.
+  **A whole-world `maxBounds` throws during MapLibre construction** in both Chromium and WebKit, so
+  `viewport.js` returns null for world-covering archives. **Never clamp the map's zoom range to the
+  archive's tile zooms** — it blocks zooming past the deepest tile, and a degenerate `min === max`
+  range breaks MapLibre's viewport maths. **Glyphs must be vendored and precached**
+  (`public/fonts/`, `pbf` in the precache glob): they're fetched lazily at render time, so hosted
+  glyphs mean an unlabelled map offline with no visible error. The font-stack directory is
+  hyphenated so precache keys and request URLs can't disagree over encoding.
+- The `.pmtiles` archive is **never precached** — Workbox silently drops anything over its 2 MiB
+  default (green build, broken map) and precached responses can't serve the HTTP Range requests the
+  pmtiles client uses. It lives in IndexedDB as an ArrayBuffer (`storage/basemapStore.js`), is
+  fetched by an explicit in-app download, and is produced by the user (README → Offline basemap).
 
 ## Security constraints (non-negotiable)
 

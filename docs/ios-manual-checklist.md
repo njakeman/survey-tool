@@ -119,9 +119,45 @@ local server fails instead of silently opening yet another orphaned origin.
       the exported JPEGs and confirm a portrait-held shot is stored right-way-up, not rotated
 - [ ] If Share is dismissed/unavailable, the download fallback still produces the same zip
 
+## Phase 4 — offline basemap
+
+Needs `public/basemap.pmtiles` committed and deployed first (see the README). Everything below is
+against the real device; Playwright cannot exercise any of it.
+
+**Download and offline render — the acceptance criterion**
+
+- [ ] Fresh install (remove the home-screen icon, clear site data, re-add) shows the map panel
+      offering "Download offline map" with a plausible size
+- [ ] Tapping it shows progress and, on completion, the map appears without a reload
+- [ ] Force-quit, enable airplane mode, relaunch from the home screen: **the map renders
+      immediately**, labels included, with no network at all
+- [ ] Place names and road names are legible — if labels are missing, the glyph ranges in
+      `src/map/glyphs.js` don't cover this region's scripts
+
+**Feel in the field**
+
+- [ ] Map is readable in direct sunlight at arm's length
+- [ ] One finger dragging over the map scrolls the _page_; two fingers pan the map (a "use two
+      fingers" overlay appears on a one-finger drag). Confirm this is right with gloves on —
+      if two-finger panning is unusable gloved, say so and we'll revisit
+- [ ] The map cannot be rotated or tilted by any gesture
+- [ ] Panning stops at the edge of the extracted area rather than revealing blank grey
+- [ ] Blue dot tracks position; the accuracy ring grows/shrinks sensibly when zooming
+- [ ] Panning away reveals "Re-centre"; tapping it returns to the current fix and resumes following
+- [ ] Saving an observation adds a marker without a reload; pending and synced markers are
+      distinguishable
+- [ ] Switching to Session history and back leaves the map visible and correctly sized (not blank,
+      not a sliver)
+
+**Degradation**
+
+- [ ] With airplane mode on and no archive downloaded, the panel explains it needs a connection
+      rather than offering a download that cannot work
+- [ ] Battery/heat: after ~15 minutes of continuous capture with the map on screen, the phone is
+      not alarmingly hot and the app has not been killed in the background
+
 ## Later phases (fill in as each lands)
 
-- [ ] Phase 4 — map renders offline immediately after a fresh install, no network at all
 - [ ] Phase 5 — sync completes on a real connection; killing the app mid-sync and reopening
       resumes without duplicating or losing observations
 - [ ] Phase 6 — export via Web Share works for both a synced and an unsynced session; app storage
