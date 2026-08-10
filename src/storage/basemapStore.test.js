@@ -61,9 +61,7 @@ describe('basemapStore', () => {
     const db = await openDatabase('basemap-store-no-blob');
     const blob = new Blob(['bytes']);
 
-    await expect(putBasemap(db, makeRecord({ arrayBuffer: blob }))).rejects.toThrow(
-      /ArrayBuffer/,
-    );
+    await expect(putBasemap(db, makeRecord({ arrayBuffer: blob }))).rejects.toThrow(/ArrayBuffer/);
     db.close();
   });
 });

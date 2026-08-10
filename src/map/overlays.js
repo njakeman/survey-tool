@@ -18,8 +18,7 @@ const MIN_ANCHOR_ZOOM = 0;
 const MAX_ANCHOR_ZOOM = 22;
 
 export function metresToPixels(metres, lat, zoom) {
-  const metresPerPixel =
-    (EQUATOR_METRES_PER_PIXEL * Math.cos((lat * Math.PI) / 180)) / 2 ** zoom;
+  const metresPerPixel = (EQUATOR_METRES_PER_PIXEL * Math.cos((lat * Math.PI) / 180)) / 2 ** zoom;
   return metres / metresPerPixel;
 }
 

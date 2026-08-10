@@ -79,7 +79,10 @@ describe('observationsFeatureCollection', () => {
   });
 
   test('carries synced state so the marker can show it, per the pending/synced rule', () => {
-    const collection = observationsFeatureCollection([observation, { ...observation, id: 'obs-2', synced: true }]);
+    const collection = observationsFeatureCollection([
+      observation,
+      { ...observation, id: 'obs-2', synced: true },
+    ]);
 
     expect(collection.features.map((f) => f.properties.synced)).toEqual([false, true]);
   });
