@@ -60,7 +60,14 @@ export default defineConfig(async ({ command, isPreview }) => {
       srcDir: 'src/sw',
       filename: 'sw.js',
       injectManifest: {
-        globPatterns: ['**/*.{js,css,html,svg,png,woff2,pmtiles}'],
+        // pmtiles deliberately excluded: Workbox's 2 MiB
+        // maximumFileSizeToCacheInBytes default would silently drop any real
+        // regional extract from the manifest (green build, map broken
+        // offline), and precached responses can't serve the HTTP Range
+        // requests the pmtiles client reads archives with. The Phase 4 plan
+        // stores the archive in IndexedDB as ArrayBuffer instead (CLAUDE.md,
+        // Platform constraints).
+        globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
       },
       manifest: {
         name: 'Field Survey',
