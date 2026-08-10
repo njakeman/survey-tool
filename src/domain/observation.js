@@ -26,10 +26,18 @@ export function createObservation({
   if (!sessionId) throw new Error('createObservation: sessionId is required');
   if (!recordedAt) throw new Error('createObservation: recordedAt is required');
   if (!fixAt) throw new Error('createObservation: fixAt is required');
-  if (lat < -90 || lat > 90) throw new Error(`createObservation: lat ${lat} is out of range`);
-  if (lon < -180 || lon > 180) throw new Error(`createObservation: lon ${lon} is out of range`);
-  if (gpsAccuracyM < 0) {
-    throw new Error(`createObservation: gpsAccuracyM must not be negative (got ${gpsAccuracyM})`);
+  // Number.isFinite first: NaN/undefined compare false against every bound,
+  // so bare range checks would let a missing or garbage reading through.
+  if (!Number.isFinite(lat) || lat < -90 || lat > 90) {
+    throw new Error(`createObservation: lat ${lat} is not a finite in-range number`);
+  }
+  if (!Number.isFinite(lon) || lon < -180 || lon > 180) {
+    throw new Error(`createObservation: lon ${lon} is not a finite in-range number`);
+  }
+  if (!Number.isFinite(gpsAccuracyM) || gpsAccuracyM < 0) {
+    throw new Error(
+      `createObservation: gpsAccuracyM must be a non-negative number (got ${gpsAccuracyM})`,
+    );
   }
 
   return {

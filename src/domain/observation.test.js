@@ -63,11 +63,23 @@ describe('createObservation', () => {
     ['lat below -90', { ...baseFields, lat: -91 }],
     ['lon above 180', { ...baseFields, lon: 181 }],
     ['lon below -180', { ...baseFields, lon: -181 }],
-  ])('throws for out-of-range coordinate: %s', (_label, fields) => {
+    // Non-finite values sail through `<`/`>` comparisons (NaN and undefined
+    // compare false against everything), so they need explicit rejection —
+    // otherwise they persist and export as invalid [null, null] coordinates.
+    ['lat NaN', { ...baseFields, lat: NaN }],
+    ['lat undefined', { ...baseFields, lat: undefined }],
+    ['lat as string', { ...baseFields, lat: '51.5' }],
+    ['lon NaN', { ...baseFields, lon: NaN }],
+    ['lon undefined', { ...baseFields, lon: undefined }],
+  ])('throws for out-of-range or non-finite coordinate: %s', (_label, fields) => {
     expect(() => createObservation(fields)).toThrow(/lat|lon/i);
   });
 
   test('throws when gpsAccuracyM is negative, since a negative accuracy is meaningless', () => {
     expect(() => createObservation({ ...baseFields, gpsAccuracyM: -1 })).toThrow(/gpsAccuracyM/i);
+  });
+
+  test.each([NaN, undefined])('throws when gpsAccuracyM is non-finite (%s)', (value) => {
+    expect(() => createObservation({ ...baseFields, gpsAccuracyM: value })).toThrow(/gpsAccuracyM/i);
   });
 });
