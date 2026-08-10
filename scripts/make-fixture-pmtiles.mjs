@@ -110,10 +110,13 @@ function buildArchive() {
   header[99] = 1; // tile type: MVT
   header[100] = 0; // min zoom
   header[101] = 0; // max zoom
-  view.setInt32(102, -180e7, true); // min lon (E7)
-  view.setInt32(106, -85e7, true); // min lat
-  view.setInt32(110, 180e7, true); // max lon
-  view.setInt32(114, 85e7, true); // max lat
+  // Regional bounds around London, like a real `pmtiles extract`: the map
+  // clamps panning to them, and a world-spanning maxBounds is a MapLibre
+  // construction crash (see src/map/viewport.js).
+  view.setInt32(102, -1.0e7, true); // min lon (E7)
+  view.setInt32(106, 51.0e7, true); // min lat
+  view.setInt32(110, 0.5e7, true); // max lon
+  view.setInt32(114, 52.0e7, true); // max lat
   header[118] = 0; // center zoom
   view.setInt32(119, -0.14e7, true); // center lon — the e2e's faked London fix
   view.setInt32(123, 51.5e7, true); // center lat
