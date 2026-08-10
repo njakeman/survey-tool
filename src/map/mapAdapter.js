@@ -24,21 +24,38 @@ import { initialZoomFromHeader, maxBoundsFromHeader } from './viewport.js';
 // points MapLibre at it.
 setWorkerUrl(workerUrl);
 
-// addProtocol is global to MapLibre, so register once per page rather than
-// per map; the Protocol instance keys archives by their source key.
+// One protocol for the page, but a unique archive key per map.
+//
+// The scheme has to be exactly `pmtiles`: the library parses tile URLs with a
+// hardcoded /pmtiles:\/\//  regex and reads the archive key as url.substr(10),
+// so any other scheme makes it treat the key as a remote URL and try to fetch
+// it. Uniqueness therefore lives in the key, not the scheme — otherwise two
+// regions collide on the shared key and the second silently replaces the
+// first underneath a live map.
+//
+// Protocol exposes no remove, so `destroy` deletes from its `tiles` map
+// directly. That reaches past the documented surface, but the alternative is
+// pinning every archive ever opened in memory at tens of megabytes each.
 const protocol = new Protocol();
 let protocolRegistered = false;
-
-const EMPTY_COLLECTION = { type: 'FeatureCollection', features: [] };
-
-// Close enough to read field boundaries and gate posts.
-const SURVEY_ZOOM = 16;
+let archiveCounter = 0;
 
 function ensureProtocol() {
   if (protocolRegistered) return;
   addProtocol('pmtiles', protocol.tile);
   protocolRegistered = true;
 }
+
+// How many archives the protocol is holding. Exported so the browser tier can
+// prove teardown actually releases them rather than trusting the comment.
+export function registeredArchiveCount() {
+  return protocol.tiles.size;
+}
+
+const EMPTY_COLLECTION = { type: 'FeatureCollection', features: [] };
+
+// Close enough to read field boundaries and gate posts.
+const SURVEY_ZOOM = 16;
 
 export async function createMapAdapter({
   container,
@@ -49,13 +66,15 @@ export async function createMapAdapter({
 }) {
   ensureProtocol();
 
-  const archive = new PMTiles(new ArrayBufferSource(archiveBuffer, 'basemap'));
+  archiveCounter += 1;
+  const archiveKey = `basemap-${archiveCounter}`;
+  const archive = new PMTiles(new ArrayBufferSource(archiveBuffer, archiveKey));
   protocol.add(archive);
   const header = await archive.getHeader();
 
   const map = new MapLibreMap({
     container,
-    style: buildStyle({ glyphsUrl }),
+    style: buildStyle({ glyphsUrl, archiveKey }),
     center: [header.centerLon, header.centerLat],
     zoom: initialZoomFromHeader(header, SURVEY_ZOOM),
     // Deliberately no min/maxZoom: those are the archive's *tile* zooms,
@@ -158,6 +177,9 @@ export async function createMapAdapter({
 
   function destroy() {
     map.remove();
+    // Releases this archive's PMTiles and its buffer; without it, switching
+    // regions accumulates them for the life of the page.
+    protocol.tiles.delete(archiveKey);
     delete container.dataset.mapLoaded;
   }
 
@@ -189,5 +211,6 @@ export async function createMapAdapter({
     getMaxBounds,
     isRotationEnabled,
     getSourceFeatureCount,
+    getArchiveKey: () => archiveKey,
   };
 }

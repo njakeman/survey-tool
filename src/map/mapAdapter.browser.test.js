@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import fixtureUrl from '../../e2e/fixtures/test-basemap.pmtiles?url';
-import { createMapAdapter } from './mapAdapter.js';
+import northFixtureUrl from '../../e2e/fixtures/test-basemap-north.pmtiles?url';
+import { createMapAdapter, registeredArchiveCount } from './mapAdapter.js';
 
 // Real MapLibre + real WebGL + the real pmtiles protocol, reading the real
 // fixture archive through our ArrayBufferSource. This is the only test that
@@ -21,8 +22,8 @@ function mountContainer() {
   return container;
 }
 
-async function loadFixtureBuffer() {
-  const response = await fetch(fixtureUrl);
+async function loadFixtureBuffer(url = fixtureUrl) {
+  const response = await fetch(url);
   return response.arrayBuffer();
 }
 
@@ -101,6 +102,53 @@ describe('mapAdapter against real MapLibre', () => {
     adapter.setPosition(null);
 
     expect(await adapter.getSourceFeatureCount('position')).toBe(0);
+  });
+
+  test('two regions can be open at once without serving each other tiles', async () => {
+    // The single shared protocol registry keyed every archive as 'basemap',
+    // so a second region silently replaced the first — a live map would go
+    // on rendering under the wrong archive's data. Each adapter now owns its
+    // own protocol scheme, so the two cannot see each other.
+    const onError = vi.fn();
+    const south = await createAdapter({ onError });
+    const north = await createAdapter({
+      onError,
+      archiveBuffer: await loadFixtureBuffer(northFixtureUrl),
+    });
+    await Promise.all([south.ready, north.ready]);
+
+    expect(south.getArchiveKey()).not.toBe(north.getArchiveKey());
+    // Each map keeps its own archive's coverage, which is how we know it is
+    // still reading the archive it was built with.
+    expect(south.getMaxBounds().getSouth()).toBeCloseTo(51, 1);
+    expect(north.getMaxBounds().getSouth()).toBeCloseTo(53, 1);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  test('switching region releases the outgoing archive and reads the new one', async () => {
+    // The memory half of the collision fix: pmtiles' Protocol has no remove
+    // API, so without an explicit release every region ever opened stays
+    // pinned — tens of megabytes each, on a phone.
+    const onError = vi.fn();
+    const before = registeredArchiveCount();
+
+    const south = await createAdapter({ onError });
+    await south.ready;
+    expect(registeredArchiveCount()).toBe(before + 1);
+
+    south.destroy();
+    adapters.length = 0;
+    expect(registeredArchiveCount()).toBe(before);
+
+    const north = await createAdapter({
+      onError,
+      archiveBuffer: await loadFixtureBuffer(northFixtureUrl),
+    });
+    await north.ready;
+
+    expect(north.getMaxBounds().getSouth()).toBeCloseTo(53, 1);
+    expect(north.container.dataset.mapLoaded).toBe('true');
+    expect(onError).not.toHaveBeenCalled();
   });
 
   test('destroy tears the map down and empties its container', async () => {

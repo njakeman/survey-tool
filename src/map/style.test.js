@@ -18,6 +18,18 @@ describe('buildStyle', () => {
     expect(style.sources.basemap.attribution).toMatch(/OpenStreetMap/);
   });
 
+  test('addresses the archive by key, so two open regions cannot collide', () => {
+    // The scheme must stay `pmtiles` — the library parses tile URLs with a
+    // hardcoded prefix — so per-map uniqueness lives in the key. The source
+    // id stays 'basemap' because @protomaps/basemaps binds every layer it
+    // emits to that name.
+    const style = buildStyle({ glyphsUrl: GLYPHS_URL, archiveKey: 'basemap-7' });
+
+    expect(Object.keys(style.sources)).toEqual(['basemap']);
+    expect(style.sources.basemap.url).toBe('pmtiles://basemap-7');
+    expect(style.layers.every((layer) => !layer.source || layer.source === 'basemap')).toBe(true);
+  });
+
   test('uses the given glyphs URL', () => {
     expect(makeStyle().glyphs).toBe(GLYPHS_URL);
   });

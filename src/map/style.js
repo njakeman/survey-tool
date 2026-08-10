@@ -32,7 +32,7 @@ function withoutIcons(layer) {
   return { ...layer, layout };
 }
 
-export function buildStyle({ glyphsUrl }) {
+export function buildStyle({ glyphsUrl, archiveKey = 'basemap' }) {
   const flavor = {
     ...namedFlavor('light'),
     regular: FONT_STACK,
@@ -49,9 +49,13 @@ export function buildStyle({ glyphsUrl }) {
     version: 8,
     glyphs: glyphsUrl,
     sources: {
+      // The source id must stay 'basemap': @protomaps/basemaps binds every
+      // layer it emits to that name. The archive key inside the URL is what
+      // varies per map, so two open regions address different archives in
+      // the shared pmtiles protocol registry.
       basemap: {
         type: 'vector',
-        url: 'pmtiles://basemap',
+        url: `pmtiles://${archiveKey}`,
         attribution: ATTRIBUTION,
       },
     },
