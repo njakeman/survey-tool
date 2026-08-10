@@ -27,10 +27,20 @@ function observationToFeature(obs, session, appVersion) {
   };
 }
 
+// Plain <  on ISO-8601 UTC strings and ULIDs, never localeCompare —
+// collation is host-ICU-dependent, and this ordering feeds canonicalStringify,
+// whose byte-identical-output guarantee sync's idempotency rests on. The id
+// tiebreak makes two saves in the same instant order identically everywhere.
+function compareObservations(a, b) {
+  if (a.recordedAt !== b.recordedAt) return a.recordedAt < b.recordedAt ? -1 : 1;
+  if (a.id !== b.id) return a.id < b.id ? -1 : 1;
+  return 0;
+}
+
 export function sessionToFeatureCollection(session, observations, { appVersion }) {
   const features = observations
     .slice()
-    .sort((a, b) => a.recordedAt.localeCompare(b.recordedAt))
+    .sort(compareObservations)
     .map((obs) => observationToFeature(obs, session, appVersion));
 
   return { type: 'FeatureCollection', features };

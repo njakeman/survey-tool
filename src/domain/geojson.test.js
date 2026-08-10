@@ -110,4 +110,28 @@ describe('sessionToFeatureCollection', () => {
 
     expect(fc.features.map((f) => f.properties.obs_id)).toEqual(['obs-early', 'obs-late']);
   });
+
+  test('breaks recorded_at ties by observation id, independent of input order', () => {
+    // Two saves inside the same second are entirely plausible in the field;
+    // without an explicit tiebreak the output order would depend on
+    // insertion order, and sync's byte-identical guarantee depends on
+    // identical content always serialising identically.
+    const shared = {
+      sessionId: 'sess-1',
+      recordedAt: '2026-08-06T10:00:00.000Z',
+      fixAt: '2026-08-06T10:00:00.000Z',
+      lat: 51.5,
+      lon: -0.14,
+      gpsAccuracyM: 8,
+    };
+    const first = createObservation({ ...shared, id: '01AAAAAAAAAAAAAAAAAAAAAAAA' });
+    const second = createObservation({ ...shared, id: '01BBBBBBBBBBBBBBBBBBBBBBBB' });
+
+    const fc = sessionToFeatureCollection(session, [second, first], { appVersion: '0.1.0' });
+
+    expect(fc.features.map((f) => f.properties.obs_id)).toEqual([
+      '01AAAAAAAAAAAAAAAAAAAAAAAA',
+      '01BBBBBBBBBBBBBBBBBBBBBBBB',
+    ]);
+  });
 });

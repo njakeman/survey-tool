@@ -1,9 +1,10 @@
 import { monotonicFactory } from 'ulid';
 
 // monotonicFactory (not the bare `ulid()` export) guarantees strictly
-// increasing IDs even for two calls in the same millisecond — sessions and
-// observations are sorted by id for a stable GeoJSON feature order (see
-// domain/geojson.js), and plain ulid()'s random suffix doesn't promise that.
+// increasing IDs even for two calls in the same millisecond — GeoJSON
+// feature order is recordedAt with id as the tiebreak (see
+// domain/geojson.js), so same-instant saves stay stably ordered, which
+// plain ulid()'s random suffix doesn't promise.
 const ulid = monotonicFactory();
 
 export function newId() {
