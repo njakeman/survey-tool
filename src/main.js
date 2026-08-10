@@ -14,6 +14,7 @@ import { zipEntries } from './export/zip.js';
 import { shareOrDownload } from './export/share.js';
 import { subscribeOfflineStatus } from './app/offlineStatus.js';
 import { createBasemapService } from './app/basemapService.js';
+import { deleteLegacyBasemap } from './storage/basemapStore.js';
 import { glyphsUrl } from './map/glyphs.js';
 import './style.css';
 
@@ -67,10 +68,14 @@ async function main() {
     return shareOrDownload(file, { title: filename });
   }
 
+  // Absolute, because the service resolves each region's relative manifest
+  // URL against it.
+  const baseUrl = new URL(import.meta.env.BASE_URL, window.location.origin).href;
   const basemapService = createBasemapService({
     db,
     fetchFn: (...args) => fetch(...args),
-    archiveUrl: `${import.meta.env.BASE_URL}basemap.pmtiles`,
+    manifestUrl: `${baseUrl}basemaps/manifest.json`,
+    baseUrl,
     nowIso,
   });
 
@@ -79,7 +84,7 @@ async function main() {
   // at startup. The split chunk is still precached, so the import resolves
   // offline (same rule as photo/encode.js: browser-only, main.js only).
   async function createMap({ container: mapContainer, onUserPan }) {
-    const archiveBuffer = await basemapService.loadArchive();
+    const archiveBuffer = await basemapService.loadArchive(state.activeBasemapId);
     if (!archiveBuffer) throw new Error('No offline map archive stored on this device');
     const { createMapAdapter } = await import('./map/mapAdapter.js');
     return createMapAdapter({
@@ -93,9 +98,35 @@ async function main() {
     });
   }
 
-  async function downloadBasemap(onProgress) {
-    state.basemap = await basemapService.download(onProgress);
+  // Which regions exist, which are on the device, and which one the map
+  // should open. Swallows its own failures: this runs at startup, and a
+  // failed read must not land on the fatal-error banner over a working
+  // capture page. 'unknown' rather than 'absent' — see the state comment.
+  async function refreshBasemapState() {
+    try {
+      const [{ regions }, selectedId] = await Promise.all([
+        basemapService.listAvailable(),
+        basemapService.getSelectedId(),
+      ]);
+      const downloaded = regions.filter((region) => region.downloaded);
+      const active = downloaded.find((region) => region.id === selectedId) ?? downloaded[0] ?? null;
+
+      state.basemapRegions = regions;
+      state.activeBasemapId = active?.id ?? null;
+      state.basemap = { state: active ? 'present' : 'absent' };
+      state.remoteSizeBytes = regions.find((region) => !region.downloaded)?.sizeBytes ?? null;
+    } catch {
+      state.basemap = { state: 'unknown' };
+    }
     renderApp();
+  }
+
+  async function downloadBasemap(onProgress) {
+    const target = state.basemapRegions.find((region) => !region.downloaded);
+    if (!target) return;
+    await basemapService.download(target.id, onProgress);
+    await basemapService.select(target.id);
+    await refreshBasemapState();
   }
 
   const container = document.getElementById('app');
@@ -121,7 +152,9 @@ async function main() {
     // reason offlineStatus starts null: before the read resolves we cannot
     // tell, and claiming "no offline map" would offer a redundant
     // multi-megabyte download to someone who already has one.
-    basemap: { state: 'unknown', sizeBytes: null, downloadedAt: null, etag: null },
+    basemap: { state: 'unknown' },
+    basemapRegions: [],
+    activeBasemapId: null,
     online: navigator.onLine,
     remoteSizeBytes: null,
   };
@@ -174,22 +207,12 @@ async function main() {
     },
   );
 
-  // Whether an archive is stored decides what the map panel offers, so read
-  // it as soon as the first paint is out of the way. Both of these swallow
-  // their own failures: a diagnostic that throws would land on the
-  // fatal-error banner over a working capture page.
-  basemapService.status().then((basemap) => {
-    state.basemap = basemap;
-    renderApp();
-    // Only ask the network about the published archive when there is a
-    // reason to: no stored copy (how big is the download?) or checking
-    // whether the deployed one has moved on.
-    return basemapService.checkRemote().then((remote) => {
-      if (!remote) return;
-      state.remoteSizeBytes = remote.sizeBytes;
-      renderApp();
-    });
-  });
+  // Phase 4 stored a single archive under the fixed id 'basemap'. Nothing
+  // references it now, so left alone it would sit on the device forever as
+  // an invisible hundred megabytes.
+  deleteLegacyBasemap(db).catch(() => {});
+
+  refreshBasemapState();
 
   for (const event of ['online', 'offline']) {
     window.addEventListener(event, () => {

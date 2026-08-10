@@ -20,8 +20,29 @@ test.describe('offline basemap', () => {
     'setOffline does not propagate to the service worker target on WebKit at this Playwright version',
   );
 
+  const MANIFEST = [
+    {
+      id: 'test-region',
+      name: 'Test Region',
+      url: 'basemaps/test-region.pmtiles',
+      sizeBytes: FIXTURE.byteLength,
+      bounds: [-1, 51, 0.5, 52],
+      minZoom: 0,
+      maxZoom: 0,
+    },
+  ];
+
   async function serveArchive(context) {
-    await context.route('**/basemap.pmtiles', (route) =>
+    // Routed before goto: the app reads the manifest at startup to decide
+    // what the map panel offers.
+    await context.route('**/basemaps/manifest.json', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(MANIFEST),
+      }),
+    );
+    await context.route('**/basemaps/*.pmtiles', (route) =>
       route.fulfill({
         status: 200,
         contentType: 'application/octet-stream',
@@ -43,6 +64,9 @@ test.describe('offline basemap', () => {
 
     // Nothing may reach the network from here on: the archive must come from
     // IndexedDB and every style asset, glyphs included, from the precache.
+    // The manifest fetch is among the things that now fail — the app must
+    // fall back to the regions already on the device rather than losing the
+    // map it holds.
     await context.setOffline(true);
     await context.route('**/*', (route) => route.abort('internetdisconnected'));
 
