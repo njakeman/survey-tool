@@ -38,6 +38,7 @@ function renderPage({
   downscale = vi.fn(),
   exportSession = vi.fn(),
   onOpenHistory = vi.fn(),
+  offlineStatus,
 } = {}) {
   return render(
     html`<${CapturePage}
@@ -46,6 +47,7 @@ function renderPage({
       downscale=${downscale}
       exportSession=${exportSession}
       onOpenHistory=${onOpenHistory}
+      offlineStatus=${offlineStatus}
     />`,
   );
 }
@@ -353,5 +355,42 @@ describe('CapturePage — session history link and export', () => {
     fireEvent.click(screen.getByRole('button', { name: /^export$/i }));
 
     await screen.findByText(/zip failed/);
+  });
+});
+
+describe('CapturePage — offline status badge', () => {
+  test('no badge when offlineStatus is not supplied', async () => {
+    const service = createFakeService({ openSession: null });
+    const { sensors } = createFakeSensors();
+    renderPage({ service, sensors });
+    await screen.findByLabelText(/session name/i);
+
+    expect(screen.queryByText(/no offline cache/i)).not.toBeInTheDocument();
+  });
+
+  test('no badge when the build has real precached entries', async () => {
+    const service = createFakeService({ openSession: null });
+    const { sensors } = createFakeSensors();
+    renderPage({
+      service,
+      sensors,
+      offlineStatus: { precachedCount: 9, offlineReady: true },
+    });
+    await screen.findByLabelText(/session name/i);
+
+    expect(screen.queryByText(/no offline cache/i)).not.toBeInTheDocument();
+  });
+
+  test('shows a warning when the build has nothing precached (dev server, not a production build)', async () => {
+    const service = createFakeService({ openSession: null });
+    const { sensors } = createFakeSensors();
+    renderPage({
+      service,
+      sensors,
+      offlineStatus: { precachedCount: 0, offlineReady: false },
+    });
+    await screen.findByLabelText(/session name/i);
+
+    expect(screen.getByText(/no offline cache/i)).toBeInTheDocument();
   });
 });

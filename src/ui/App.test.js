@@ -31,6 +31,7 @@ function renderApp(overrides = {}) {
       sensors=${overrides.sensors ?? fakeSensors()}
       downscale=${overrides.downscale ?? vi.fn()}
       exportSession=${overrides.exportSession ?? vi.fn()}
+      offlineStatus=${overrides.offlineStatus}
     />`,
   );
 }
@@ -61,6 +62,12 @@ describe('App', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /back to capture/i }));
     expect(await screen.findByRole('button', { name: /save observation/i })).toBeInTheDocument();
+  });
+
+  test('passes offlineStatus through to the capture view, surfacing the no-precache warning', async () => {
+    renderApp({ offlineStatus: { precachedCount: 0, offlineReady: false } });
+
+    expect(await screen.findByText(/no offline cache/i)).toBeInTheDocument();
   });
 
   test('never touches window.location.hash — no client-side router', async () => {

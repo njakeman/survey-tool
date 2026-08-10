@@ -12,6 +12,7 @@ import { downscaleImageBlob } from './photo/encode.js';
 import { buildSessionExport } from './export/buildSessionExport.js';
 import { zipEntries } from './export/zip.js';
 import { shareOrDownload } from './export/share.js';
+import { readOfflineStatus } from './app/offlineStatus.js';
 import './style.css';
 
 // A blank screen with no console access (no Mac nearby for Web Inspector) is
@@ -57,12 +58,26 @@ async function main() {
     return shareOrDownload(file, { title: filename });
   }
 
+  // Not gated on `navigator.serviceWorker.ready` — that can hang if
+  // activation never completes, and this diagnostic must never be able to
+  // block the app rendering at all. On the very first-ever install it may
+  // transiently under-report before the SW claims the page; ProbePage's
+  // "Recheck" covers that, and the checklist already calls for a relaunch
+  // before trusting a cold-launch reading either way.
+  const offlineStatus = await readOfflineStatus({
+    serviceWorker: navigator.serviceWorker,
+    cacheStorage: window.caches,
+    isSecureContext: window.isSecureContext,
+    standalone: navigator.standalone,
+  });
+
   render(
     html`<${App}
       service=${service}
       sensors=${sensors}
       downscale=${downscale}
       exportSession=${exportSession}
+      offlineStatus=${offlineStatus}
     />`,
     document.getElementById('app'),
   );

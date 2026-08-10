@@ -22,6 +22,7 @@ export function CapturePage({
   exportSession,
   onOpenProbe,
   onOpenHistory,
+  offlineStatus,
 }) {
   const [session, setSession] = useState(null);
   const [observations, setObservations] = useState([]);
@@ -203,6 +204,13 @@ export function CapturePage({
               </button>
               ${exportMessage ? html`<p class="capture-page-export-message">${exportMessage}</p>` : null}
             `
+          : null
+      }
+      ${
+        offlineStatus && offlineStatus.precachedCount === 0
+          ? html`<p class="offline-status-warning">
+              No offline cache — dev build, will not work offline
+            </p>`
           : null
       }
       <button type="button" class="link" onClick=${onOpenHistory}>Session history</button>

@@ -31,5 +31,10 @@ test.describe('offline reload', () => {
     expect(response).not.toBeNull();
     expect(response.fromServiceWorker()).toBe(true);
     await expect(page.getByRole('button', { name: 'Save observation' })).toBeVisible();
+
+    // Pins the happy path, not just the failure path: a real production
+    // build must never show the "no offline cache" warning that exists
+    // specifically to catch someone mistaking the dev server for this.
+    await expect(page.getByText(/no offline cache/i)).not.toBeVisible();
   });
 });

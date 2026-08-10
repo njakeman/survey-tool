@@ -22,6 +22,23 @@ preview:mobile` (opt-in `MOBILE_HTTPS=true`, not inferred from environment — P
 webServer also runs plain `vite preview` locally, so gating on CI-absence would silently break
 `npm run test:e2e` on a dev machine while passing in Actions).
 
+**`npm run dev` cannot demonstrate offline/PWA behaviour, full stop — don't test airplane mode
+against it.** This was mistaken for an app bug once already: the dev server's empty-manifest SW
+looks installed and controlling, so a home-screen icon backed by it fails offline exactly like a
+broken PWA would. Use `npm run build && npm run preview:mobile` for any offline/SW verification.
+Two easy-to-miss details: `preview:mobile` does **not** build for you (run `npm run build` first,
+or the icon will be testing a stale bundle), and it serves on port **4173** vs dev's **5173** —
+different origin, so re-add to the home screen from the new URL rather than reusing the old icon.
+`preview:mobile` also squats on port 4173 with HTTPS, which collides with `npm run test:e2e`'s own
+`vite preview` (plain HTTP, same port) — stop it before running the e2e suite locally.
+
+Because that confusion is exactly what caused the false bug report, offline-readiness is now
+self-diagnosing rather than something to infer: `src/app/offlineStatus.js`'s `readOfflineStatus()`
+reports `{ registered, controlled, precachedCount, offlineReady }` from real
+`navigator.serviceWorker`/`caches`, surfaced as a warning banner on the capture page (only when
+`precachedCount === 0` — silent on a real production build) and as a full readout + "Recheck"
+button on the probe page.
+
 ## Commands
 
 - `npm run dev` — Vite dev server
@@ -58,6 +75,14 @@ for a `*.browser.test.js` file).
   observation save + read-only `listSessions()` for the history view, over an injected
   `db`/`newId`/`nowIso`. Stateless — every call re-reads IndexedDB, which is what makes it correct
   after a force-quit and relaunch.
+- `src/app/offlineStatus.js` — `readOfflineStatus({ serviceWorker, cacheStorage, isSecureContext,
+standalone })`, browser globals injected same as `probe/capabilities.js`, so it's node-testable
+  with fakes (`.browser.test.js` covers real Cache Storage naming separately). Reports whether
+  _this install_ can actually work offline (`registered`/`controlled`/`precachedCount`/
+  `offlineReady`) — there's no console on an installed iOS PWA, so this has to be answerable on the
+  phone, not inferred from a passing test on a laptop. Computed once in `main.js` and passed down;
+  `CapturePage.js` shows a warning banner only when `precachedCount === 0`, `ProbePage.js` shows the
+  full readout plus a "Recheck" button.
 - `src/export/` — `buildSessionExport.js` (node-testable: session + observations + photo Blobs →
   `{filename, entries}`, reusing `domain/geojson.js` + `domain/canonical-json.js` as-is, so the zip's
   `session.geojson` is byte-identical to what sync will eventually commit), `zip.js` (browser-only

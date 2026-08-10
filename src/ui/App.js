@@ -9,7 +9,7 @@ import { ProbePage } from '../probe/ProbePage.js';
 // launches (WebKit bug 215884) — an on-screen Back button is the only route
 // back, which is fine since the iOS back swipe does nothing in standalone
 // mode anyway.
-export function App({ service, sensors, downscale, exportSession }) {
+export function App({ service, sensors, downscale, exportSession, offlineStatus }) {
   const [view, setView] = useState('capture');
 
   if (view === 'probe') {
@@ -37,6 +37,7 @@ export function App({ service, sensors, downscale, exportSession }) {
       sensors=${sensors}
       downscale=${downscale}
       exportSession=${exportSession}
+      offlineStatus=${offlineStatus}
       onOpenProbe=${() => setView('probe')}
       onOpenHistory=${() => setView('history')}
     />

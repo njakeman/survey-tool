@@ -32,6 +32,10 @@ screen icon** (not a Safari reload) and re-run the checks that might differ acro
       download is fine as the secondary export path; Share stays primary as planned.
 - [x] PBKDF2 600k-iteration benchmark — **128 ms.** No perceptible delay; a progress indicator at
       sync time is a nicety, not a requirement, on hardware this capable.
+- [ ] Offline-ready readout (added after the dev-server-vs-offline confusion below) — on a
+      **production build** reads `offlineReady: yes` with a non-zero precached-entry count; on
+      `npm run dev` reads `offlineReady: no` with `precachedCount: 0` — confirms the diagnostic
+      actually discriminates rather than always reporting "fine"
 
 **Verdict: every architecture-critical assumption from Phase 1 holds on this device.** No design
 changes needed. Proceeding to Phase 2.
@@ -53,10 +57,15 @@ now via `vite-plugin-mkcert`) or the deployed GitHub Pages URL once its deploy i
       unit/browser tests proved this with a hand-built fixture on Chromium+WebKit, but a real
       camera photo is the actual proof)
 - [ ] Full flow — start session, get a fix, take a photo, add a note, save — works in **airplane
-      mode**. Must be run against a **production build** (installed home-screen app, or `npm run
-build && npm run preview:mobile -- --host`) — the plain dev server's service worker
-      precaches nothing by design (see CLAUDE.md) and will fail this check even though nothing is
-      broken.
+      mode**. **Must** be run against a production build: `npm run build && npm run
+preview:mobile`, re-add to home screen from `https://<LAN-IP>:4173/survey-tool/` (a
+      _different_ origin from the dev server's 5173 — the old icon won't pick this build up), and
+      launch it once online before flipping on airplane mode so the service worker precaches. The
+      plain dev server's SW precaches nothing by design (see CLAUDE.md) and will fail this check
+      every time even though nothing is broken — this exact confusion produced a false bug report
+      once already. If the capture page ever shows the red "No offline cache" banner, that's the
+      app correctly telling you it's not this build's fault; open the probe page for the full
+      readout.
 - [ ] Force-quit mid-session and relaunch: the open session and every saved observation are still
       there (storage layer, not just capture UI)
 - [ ] A 20+ observation session doesn't degrade; spot-check thermals/battery over ~30 min of a live

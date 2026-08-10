@@ -134,6 +134,11 @@ button {
   color: color-mix(in srgb, orangered 70%, currentColor);
 }
 
+.offline-status-warning {
+  font-weight: 600;
+  color: color-mix(in srgb, orangered 70%, currentColor);
+}
+
 .last-saved {
   display: flex;
   align-items: center;

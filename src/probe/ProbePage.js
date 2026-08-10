@@ -4,6 +4,7 @@ import { isStandalone, canRequestOrientationPermission, canShareFiles } from './
 import { formatBytes, formatDuration } from './format.js';
 import { appendLogEntry, readLog, clearLog } from './log.js';
 import { benchmarkPbkdf2 } from './pbkdf2-benchmark.js';
+import { readOfflineStatus } from '../app/offlineStatus.js';
 
 // Throwaway on-device diagnostic (plan Phase 1). Answers the open questions
 // that decide whether this app's architecture is viable on the maintainer's
@@ -29,10 +30,23 @@ export function ProbePage() {
   const [orientationResult, setOrientationResult] = useState(null);
   const [shareResult, setShareResult] = useState(null);
   const [pbkdf2Result, setPbkdf2Result] = useState(null);
+  const [offlineStatusResult, setOfflineStatusResult] = useState(null);
   const [entries, setEntries] = useState(() => readLog(localStorage));
 
   function refreshLog() {
     setEntries(readLog(localStorage));
+  }
+
+  async function checkOfflineStatus(standaloneNow = standalone ?? false) {
+    const result = await readOfflineStatus({
+      serviceWorker: navigator.serviceWorker,
+      cacheStorage: window.caches,
+      isSecureContext: window.isSecureContext,
+      standalone: standaloneNow,
+    });
+    setOfflineStatusResult(result);
+    log('offline-status', result);
+    refreshLog();
   }
 
   useEffect(() => {
@@ -49,6 +63,12 @@ export function ProbePage() {
       log('storage-estimate', estimate);
       refreshLog();
     });
+
+    // Auto-run, not gated behind a button — no permission prompt involved,
+    // and this is exactly the check that needs to be seen without an extra
+    // tap, since "is this build actually offline-capable" is the question
+    // device-testing kept getting wrong answers to by inference.
+    checkOfflineStatus(standaloneNow);
   }, []);
 
   async function checkPersist() {
@@ -151,6 +171,26 @@ export function ProbePage() {
 
       <${ResultRow} label="Standalone (installed) mode">
         ${standalone === null ? '…' : standalone ? 'yes' : 'no — open from the home screen icon'}
+      <//>
+
+      <${ResultRow} label="Offline-ready">
+        <button onClick=${() => checkOfflineStatus()}>Recheck</button>
+        ${
+          offlineStatusResult === null
+            ? ' …'
+            : html`
+                <span>
+                  ${
+                    offlineStatusResult.offlineReady
+                      ? ' yes'
+                      : ' NO — this build will not work offline'
+                  }
+                  (secure context: ${String(offlineStatusResult.secureContext)}, SW controlling:
+                  ${String(offlineStatusResult.controlled)}, precached entries:
+                  ${offlineStatusResult.precachedCount})
+                </span>
+              `
+        }
       <//>
 
       <${ResultRow} label="Storage quota">
