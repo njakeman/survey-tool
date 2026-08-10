@@ -24,18 +24,29 @@ export async function buildSessionExport(db, { sessionId, appVersion }) {
   }
 
   const observations = await listObservationsForSession(db, sessionId);
-  const geojsonText = canonicalStringify(
-    sessionToFeatureCollection(session, observations, { appVersion }),
-  );
 
-  const entries = [{ name: 'session.geojson', input: geojsonText }];
-
+  // Photos are resolved before the GeoJSON is serialised so the two can't
+  // disagree: an orphan photoId (record missing) is skipped rather than
+  // failing the export, and the feature's `photo` property is nulled to
+  // match — the zip must never claim a file it doesn't contain.
+  const photoEntries = [];
+  const presentPhotoIds = new Set();
   for (const obs of observations) {
     if (!obs.photoId) continue;
     const photo = await getPhoto(db, obs.photoId);
-    if (!photo) continue; // orphan reference — skip rather than fail the whole export
-    entries.push({ name: `photos/${obs.photoId}.jpg`, input: photo.blob });
+    if (!photo) continue;
+    presentPhotoIds.add(obs.photoId);
+    photoEntries.push({ name: `photos/${obs.photoId}.jpg`, input: photo.blob });
   }
+
+  const exportObservations = observations.map((obs) =>
+    obs.photoId && !presentPhotoIds.has(obs.photoId) ? { ...obs, photoId: null } : obs,
+  );
+  const geojsonText = canonicalStringify(
+    sessionToFeatureCollection(session, exportObservations, { appVersion }),
+  );
+
+  const entries = [{ name: 'session.geojson', input: geojsonText }, ...photoEntries];
 
   const dateStr = session.startedAt.slice(0, 10); // YYYY-MM-DD
   const filename = `${slugify(session.name)}-${dateStr}.zip`;

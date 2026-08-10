@@ -108,5 +108,22 @@ describe('buildSessionExport', () => {
     const { entries } = await buildSessionExport(db, { sessionId: 'sess-1', appVersion: '0.1.0' });
 
     expect(entries.filter((e) => e.name.startsWith('photos/'))).toEqual([]);
+    // The GeoJSON must not claim a photo the zip doesn't contain — a dangling
+    // photos/obs-1.jpg reference reads as a broken link in QGIS/downstream.
+    const geojson = JSON.parse(entries.find((e) => e.name === 'session.geojson').input);
+    expect(geojson.features[0].properties.photo).toBeNull();
+  });
+
+  test('keeps the geojson photo reference when the photo record is present', async () => {
+    const db = await openDatabase('export-photo-ref-present');
+    await putSession(db, makeSession());
+    await putObservation(db, makeObservation({ photoId: 'obs-1' }));
+    const blob = new Blob(['fake jpeg bytes'], { type: 'image/jpeg' });
+    await putPhoto(db, { id: 'obs-1', blob, contentType: 'image/jpeg' });
+
+    const { entries } = await buildSessionExport(db, { sessionId: 'sess-1', appVersion: '0.1.0' });
+
+    const geojson = JSON.parse(entries.find((e) => e.name === 'session.geojson').input);
+    expect(geojson.features[0].properties.photo).toBe('obs-1.jpg');
   });
 });
