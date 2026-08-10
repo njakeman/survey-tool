@@ -1,4 +1,5 @@
 import { cleanupOutdatedCaches, precacheAndRoute } from 'workbox-precaching';
+import { hasCompletedFirstInstall, markFirstInstallComplete } from './firstInstall.js';
 
 // injectManifest strategy: Workbox fills __WB_MANIFEST with every build asset
 // at build time (revisioned, so updates are detected correctly). Runtime
@@ -21,15 +22,24 @@ precacheAndRoute(self.__WB_MANIFEST);
 // in-progress observation: note/photo live only in memory
 // (src/ui/CapturePage.js) until Save, and must never be wiped by a surprise
 // reload.
-let isUpdate = false;
-self.addEventListener('install', () => {
-  isUpdate = Boolean(self.registration.active);
-});
 self.addEventListener('activate', (event) => {
   // Claim only on a genuine first install — there is no older generation to
   // fall out of sync with, and it's what makes the very first visit
   // offline-capable immediately rather than only after a second load.
-  if (!isUpdate) event.waitUntil(self.clients.claim());
+  //
+  // "First install" is a persistent Cache Storage marker (firstInstall.js),
+  // not a module-scope flag: a worker can be terminated and re-evaluated
+  // while it waits behind the update prompt, and a reset flag would make a
+  // genuine update claim — the case everything above exists to prevent.
+  // Accepted residual: if the user wipes Cache Storage wholesale, the next
+  // update claims once, but in that state the old page's precache is gone
+  // anyway.
+  event.waitUntil(
+    (async () => {
+      if (!(await hasCompletedFirstInstall(caches))) await self.clients.claim();
+      await markFirstInstallComplete(caches);
+    })(),
+  );
 });
 self.addEventListener('message', (event) => {
   // { type: 'SKIP_WAITING' } is workbox-window's messageSkipWaiting()
