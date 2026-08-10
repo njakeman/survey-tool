@@ -78,14 +78,35 @@ export function subscribeOfflineStatus(
   onChange,
 ) {
   let stopped = false;
+  let latestSeq = 0;
 
   const emit = () => {
     if (stopped) return;
-    readOfflineStatus({ serviceWorker, cacheStorage, isSecureContext, standalone }).then(
-      (status) => {
-        if (!stopped) onChange(status);
-      },
-    );
+    // ready, controllerchange and the backstop can all be in flight at
+    // once; without the sequence guard an older read resolving last would
+    // overwrite a newer status — with precachedCount, exactly the false
+    // "No offline cache" banner this module exists to eliminate.
+    const seq = ++latestSeq;
+    readOfflineStatus({ serviceWorker, cacheStorage, isSecureContext, standalone })
+      .then((status) => {
+        if (!stopped && seq === latestSeq) onChange(status);
+      })
+      .catch(() => {
+        // A failed diagnostic read (e.g. WebKit privacy modes rejecting
+        // cache access) must never escape: main.js maps unhandledrejection
+        // onto the fatal-error banner. precachedCount is null, not 0 —
+        // unknown must not trip CapturePage's `=== 0` warning banner.
+        if (!stopped && seq === latestSeq) {
+          onChange({
+            secureContext: Boolean(isSecureContext),
+            standalone: Boolean(standalone),
+            registered: false,
+            controlled: false,
+            precachedCount: null,
+            offlineReady: false,
+          });
+        }
+      });
   };
 
   if (!serviceWorker) {

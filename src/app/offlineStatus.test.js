@@ -250,6 +250,81 @@ describe('subscribeOfflineStatus', () => {
     expect(onChange).toHaveBeenCalledTimes(1);
   });
 
+  test('a cacheStorage that rejects (WebKit privacy modes) yields a safe status, not an unhandled rejection', async () => {
+    // main.js maps unhandledrejection onto the fatal-error banner, so a
+    // failing diagnostic read must never escape — it would paint a red
+    // error over a perfectly working capture UI.
+    const serviceWorker = fakeServiceWorker({ ready: Promise.resolve() });
+    const cacheStorage = {
+      keys: () => Promise.reject(new Error('SecurityError: cache access denied')),
+    };
+    const timers = fakeTimers();
+    const onChange = vi.fn();
+
+    subscribeOfflineStatus(
+      {
+        serviceWorker,
+        cacheStorage,
+        isSecureContext: true,
+        standalone: true,
+        setTimeoutFn: timers.setTimeoutFn,
+        clearTimeoutFn: timers.clearTimeoutFn,
+      },
+      onChange,
+    );
+
+    await flush();
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+    const status = onChange.mock.calls[0][0];
+    expect(status.offlineReady).toBe(false);
+    // Unknown must not be reported as zero: CapturePage's warning banner
+    // triggers on precachedCount === 0, and a privacy-mode read failure on
+    // a healthy install would otherwise show a permanent false warning.
+    expect(status.precachedCount).toBeNull();
+  });
+
+  test('an older in-flight emit resolving after a newer one is discarded, not delivered last', async () => {
+    const serviceWorker = fakeServiceWorker({ ready: Promise.resolve() });
+    const pendingKeys = [];
+    // Each emit's readOfflineStatus blocks on cacheStorage.keys(); resolving
+    // them out of order simulates the ready/controllerchange race.
+    const cacheStorage = {
+      keys: () => new Promise((resolve) => pendingKeys.push(resolve)),
+      open: async () => ({ keys: async () => [{ url: '/one' }] }),
+    };
+    const timers = fakeTimers();
+    const onChange = vi.fn();
+
+    subscribeOfflineStatus(
+      {
+        serviceWorker,
+        cacheStorage,
+        isSecureContext: true,
+        standalone: true,
+        setTimeoutFn: timers.setTimeoutFn,
+        clearTimeoutFn: timers.clearTimeoutFn,
+      },
+      onChange,
+    );
+
+    await flush();
+    serviceWorker.fireControllerChange();
+    await flush();
+    expect(pendingKeys).toHaveLength(2);
+
+    // Newer emit (controllerchange) resolves first, with a real precache.
+    pendingKeys[1](['workbox-precache-v2-scope']);
+    await flush();
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange.mock.calls[0][0].precachedCount).toBe(1);
+
+    // Older emit (ready) resolves last, seeing no precache — stale, dropped.
+    pendingKeys[0]([]);
+    await flush();
+    expect(onChange).toHaveBeenCalledTimes(1);
+  });
+
   test('unsubscribe stops further emissions and clears the backstop timeout', async () => {
     const serviceWorker = fakeServiceWorker({ ready: Promise.resolve() });
     const timers = fakeTimers();
