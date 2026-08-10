@@ -80,6 +80,8 @@ describe('createObservation', () => {
   });
 
   test.each([NaN, undefined])('throws when gpsAccuracyM is non-finite (%s)', (value) => {
-    expect(() => createObservation({ ...baseFields, gpsAccuracyM: value })).toThrow(/gpsAccuracyM/i);
+    expect(() => createObservation({ ...baseFields, gpsAccuracyM: value })).toThrow(
+      /gpsAccuracyM/i,
+    );
   });
 });
