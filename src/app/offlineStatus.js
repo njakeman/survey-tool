@@ -53,3 +53,61 @@ export async function readOfflineStatus({
     offlineReady: controlled && precachedCount > 0,
   };
 }
+
+// A single `readOfflineStatus()` call made at startup (as main.js used to)
+// samples the registration mid-flight: right after registerSW() fires, the
+// worker is still installing/precaching, so `precachedCount` is genuinely 0
+// for an instant on *every* load — not just a dev build. That produced a
+// false "No offline cache" flash on a perfectly good production build. This
+// reports settled state instead: once after the registration is actually
+// ready, again whenever control changes (e.g. after the user taps Reload
+// for an update — see App.js), and once more via a timeout backstop so a
+// hung registration still reports something rather than leaving the UI
+// silently blank forever. Browser globals stay injected, same as
+// `readOfflineStatus` above, so this is node-testable with fakes.
+export function subscribeOfflineStatus(
+  {
+    serviceWorker,
+    cacheStorage,
+    isSecureContext,
+    standalone,
+    settleTimeoutMs = 5000,
+    setTimeoutFn = globalThis.setTimeout,
+    clearTimeoutFn = globalThis.clearTimeout,
+  } = {},
+  onChange,
+) {
+  let stopped = false;
+
+  const emit = () => {
+    if (stopped) return;
+    readOfflineStatus({ serviceWorker, cacheStorage, isSecureContext, standalone }).then(
+      (status) => {
+        if (!stopped) onChange(status);
+      },
+    );
+  };
+
+  if (!serviceWorker) {
+    // No service worker API at all (unsupported browser, or a non-secure
+    // context where it's undefined) — nothing will ever settle; report now.
+    emit();
+    return () => {
+      stopped = true;
+    };
+  }
+
+  serviceWorker.addEventListener?.('controllerchange', emit);
+
+  if (serviceWorker.ready?.then) {
+    serviceWorker.ready.then(emit);
+  }
+
+  const timeoutId = setTimeoutFn(emit, settleTimeoutMs);
+
+  return () => {
+    stopped = true;
+    serviceWorker.removeEventListener?.('controllerchange', emit);
+    clearTimeoutFn(timeoutId);
+  };
+}

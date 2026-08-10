@@ -173,3 +173,14 @@ button {
   font-weight: 600;
   color: color-mix(in srgb, currentColor 70%, transparent);
 }
+
+.update-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  margin: 0;
+  font-weight: 600;
+  background: color-mix(in srgb, orange 25%, transparent);
+}

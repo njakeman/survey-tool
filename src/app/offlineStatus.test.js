@@ -1,5 +1,5 @@
-import { describe, expect, test } from 'vitest';
-import { readOfflineStatus } from './offlineStatus.js';
+import { describe, expect, test, vi } from 'vitest';
+import { readOfflineStatus, subscribeOfflineStatus } from './offlineStatus.js';
 
 function fakeCacheStorage(cacheEntries) {
   // cacheEntries: { [cacheName]: string[] of urls }
@@ -99,5 +99,184 @@ describe('readOfflineStatus', () => {
     expect(status.controlled).toBe(false);
     expect(status.precachedCount).toBe(0);
     expect(status.offlineReady).toBe(false);
+  });
+});
+
+describe('subscribeOfflineStatus', () => {
+  // Fake timer plumbing: capture the callback instead of using a real clock,
+  // so "the settle timeout fired" is a deliberate test action, not a race.
+  function fakeTimers() {
+    let captured;
+    let clearedId;
+    return {
+      setTimeoutFn: (fn) => {
+        captured = fn;
+        return 'the-timeout-id';
+      },
+      clearTimeoutFn: (id) => {
+        clearedId = id;
+      },
+      fire: () => captured?.(),
+      wasCleared: () => clearedId === 'the-timeout-id',
+    };
+  }
+
+  // subscribeOfflineStatus's emit() chains several `await`s inside
+  // readOfflineStatus (getRegistration, cacheStorage.keys, cache.open,
+  // cache.keys) — more microtask hops than a fixed number of
+  // `await Promise.resolve()` reliably drains. A real (0ms) macrotask flush
+  // lets every pending microtask run first, regardless of how deep the
+  // chain is.
+  const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+  function fakeServiceWorker({ ready } = {}) {
+    const listeners = new Set();
+    return {
+      controller: {},
+      getRegistration: async () => ({}),
+      ready: ready ?? new Promise(() => {}), // never resolves unless given
+      addEventListener: (type, handler) => {
+        if (type === 'controllerchange') listeners.add(handler);
+      },
+      removeEventListener: (type, handler) => {
+        if (type === 'controllerchange') listeners.delete(handler);
+      },
+      fireControllerChange: () => listeners.forEach((handler) => handler()),
+    };
+  }
+
+  test('emits once serviceWorker.ready resolves, not before', async () => {
+    let resolveReady;
+    const ready = new Promise((resolve) => {
+      resolveReady = resolve;
+    });
+    const serviceWorker = fakeServiceWorker({ ready });
+    const timers = fakeTimers();
+    const onChange = vi.fn();
+
+    subscribeOfflineStatus(
+      {
+        serviceWorker,
+        cacheStorage: fakeCacheStorage({ 'workbox-precache-v2-scope': ['/one'] }),
+        isSecureContext: true,
+        standalone: true,
+        setTimeoutFn: timers.setTimeoutFn,
+        clearTimeoutFn: timers.clearTimeoutFn,
+      },
+      onChange,
+    );
+
+    await flush();
+    expect(onChange).not.toHaveBeenCalled();
+
+    resolveReady();
+    await flush();
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange.mock.calls[0][0].offlineReady).toBe(true);
+  });
+
+  test('re-emits on controllerchange, e.g. after tapping Reload for an update', async () => {
+    const serviceWorker = fakeServiceWorker({ ready: Promise.resolve() });
+    const timers = fakeTimers();
+    const onChange = vi.fn();
+
+    subscribeOfflineStatus(
+      {
+        serviceWorker,
+        cacheStorage: fakeCacheStorage({}),
+        isSecureContext: true,
+        standalone: true,
+        setTimeoutFn: timers.setTimeoutFn,
+        clearTimeoutFn: timers.clearTimeoutFn,
+      },
+      onChange,
+    );
+
+    await flush();
+    expect(onChange).toHaveBeenCalledTimes(1);
+
+    serviceWorker.fireControllerChange();
+    await flush();
+
+    expect(onChange).toHaveBeenCalledTimes(2);
+  });
+
+  test('emits immediately when there is no serviceWorker at all (unsupported or non-secure context)', async () => {
+    const timers = fakeTimers();
+    const onChange = vi.fn();
+
+    subscribeOfflineStatus(
+      {
+        serviceWorker: undefined,
+        cacheStorage: undefined,
+        isSecureContext: false,
+        standalone: false,
+        setTimeoutFn: timers.setTimeoutFn,
+        clearTimeoutFn: timers.clearTimeoutFn,
+      },
+      onChange,
+    );
+
+    await flush();
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange.mock.calls[0][0].offlineReady).toBe(false);
+  });
+
+  test('emits via the settle-timeout backstop if the registration never settles', async () => {
+    const serviceWorker = fakeServiceWorker(); // ready never resolves
+    const timers = fakeTimers();
+    const onChange = vi.fn();
+
+    subscribeOfflineStatus(
+      {
+        serviceWorker,
+        cacheStorage: fakeCacheStorage({}),
+        isSecureContext: true,
+        standalone: true,
+        setTimeoutFn: timers.setTimeoutFn,
+        clearTimeoutFn: timers.clearTimeoutFn,
+      },
+      onChange,
+    );
+
+    await flush();
+    expect(onChange).not.toHaveBeenCalled();
+
+    timers.fire();
+    await flush();
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+  });
+
+  test('unsubscribe stops further emissions and clears the backstop timeout', async () => {
+    const serviceWorker = fakeServiceWorker({ ready: Promise.resolve() });
+    const timers = fakeTimers();
+    const onChange = vi.fn();
+
+    const unsubscribe = subscribeOfflineStatus(
+      {
+        serviceWorker,
+        cacheStorage: fakeCacheStorage({}),
+        isSecureContext: true,
+        standalone: true,
+        setTimeoutFn: timers.setTimeoutFn,
+        clearTimeoutFn: timers.clearTimeoutFn,
+      },
+      onChange,
+    );
+
+    await flush();
+    expect(onChange).toHaveBeenCalledTimes(1);
+
+    unsubscribe();
+    expect(timers.wasCleared()).toBe(true);
+
+    serviceWorker.fireControllerChange();
+    timers.fire();
+    await flush();
+
+    expect(onChange).toHaveBeenCalledTimes(1);
   });
 });

@@ -37,7 +37,13 @@ self-diagnosing rather than something to infer: `src/app/offlineStatus.js`'s `re
 reports `{ registered, controlled, precachedCount, offlineReady }` from real
 `navigator.serviceWorker`/`caches`, surfaced as a warning banner on the capture page (only when
 `precachedCount === 0` — silent on a real production build) and as a full readout + "Recheck"
-button on the probe page.
+button on the probe page. `main.js` doesn't call `readOfflineStatus()` directly — it subscribes via
+`subscribeOfflineStatus()`, which reports once the registration has actually settled
+(`serviceWorker.ready`) rather than at the instant of registration. A single startup snapshot was
+itself a second false-positive source: `precachedCount` is genuinely 0 for a moment on _every_ load,
+including a perfectly good production build, while the SW is still precaching — the banner used to
+flash on first launch and disappear on refresh purely because of that timing, independent of the
+"dev vs prod" question.
 
 GitHub Pages deploys are working again as of 2026-08-10 (deployment for `0c8a0ec` reports
 `state: success`, live `sw.js` carries a real precache) — `https://njakeman.github.io/survey-tool/`
@@ -90,9 +96,12 @@ standalone })`, browser globals injected same as `probe/capabilities.js`, so it'
   with fakes (`.browser.test.js` covers real Cache Storage naming separately). Reports whether
   _this install_ can actually work offline (`registered`/`controlled`/`precachedCount`/
   `offlineReady`) — there's no console on an installed iOS PWA, so this has to be answerable on the
-  phone, not inferred from a passing test on a laptop. Computed once in `main.js` and passed down;
-  `CapturePage.js` shows a warning banner only when `precachedCount === 0`, `ProbePage.js` shows the
-  full readout plus a "Recheck" button.
+  phone, not inferred from a passing test on a laptop. `ProbePage.js`'s "Recheck" button calls it
+  directly. `subscribeOfflineStatus(deps, onChange)` wraps it for `main.js`: emits once after
+  `serviceWorker.ready` settles, again on `controllerchange` (e.g. after the update-reload below),
+  and once via a timeout backstop if registration never settles — deliberately _not_ on first call,
+  so the app never reports a startup snapshot. `CapturePage.js` shows a warning banner only when a
+  reported `precachedCount === 0`.
 - `src/export/` — `buildSessionExport.js` (node-testable: session + observations + photo Blobs →
   `{filename, entries}`, reusing `domain/geojson.js` + `domain/canonical-json.js` as-is, so the zip's
   `session.geojson` is byte-identical to what sync will eventually commit), `zip.js` (browser-only
@@ -179,3 +188,14 @@ standalone })`, browser globals injected same as `probe/capabilities.js`, so it'
 - `recordedAt` (when the surveyor tapped Save) and `fixAt` (when the position was actually measured)
   on an observation are deliberately distinct fields — a surveyor can stand at a point, type a note
   for 40 seconds, then save. Don't collapse them.
+- `src/sw/sw.js` must never call `self.skipWaiting()`/`self.clients.claim()` unconditionally on an
+  update (only on a genuine first install, where there's no older generation to fall out of sync
+  with). Doing so lets a new SW activate — and prune the previous build's precache — while a page
+  built from the _old_ generation is still open, which leaves that page requesting hashed JS/CSS
+  that no longer exist anywhere (a 404 there is exactly the "Something went wrong loading the app:
+  Script error." fatal screen). `registerType: 'prompt'` (`vite.config.js`) + the SW's
+  `SKIP_WAITING` message handler + `main.js`'s `onNeedRefresh` → App.js's "New version — Reload"
+  banner is the deliberate alternative: the old generation stays internally consistent until the
+  surveyor chooses to reload, and an in-progress observation's note/photo (in-memory only until
+  Save) can never be wiped by a surprise reload. `e2e/install.spec.js` guards the failure mode
+  directly by asserting no same-origin resource 404s during a fresh load.

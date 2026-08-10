@@ -209,7 +209,7 @@ export function CapturePage({
       ${
         offlineStatus && offlineStatus.precachedCount === 0
           ? html`<p class="offline-status-warning">
-              No offline cache — dev build, will not work offline
+              No offline cache — this build will not work offline
             </p>`
           : null
       }

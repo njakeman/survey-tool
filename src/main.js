@@ -12,7 +12,7 @@ import { downscaleImageBlob } from './photo/encode.js';
 import { buildSessionExport } from './export/buildSessionExport.js';
 import { zipEntries } from './export/zip.js';
 import { shareOrDownload } from './export/share.js';
-import { readOfflineStatus } from './app/offlineStatus.js';
+import { subscribeOfflineStatus } from './app/offlineStatus.js';
 import './style.css';
 
 // A blank screen with no console access (no Mac nearby for Web Inspector) is
@@ -21,11 +21,20 @@ import './style.css';
 function showFatalError(errorLike) {
   const app = document.getElementById('app');
   if (!app) return;
-  app.innerHTML = '';
   const pre = document.createElement('pre');
   pre.style.cssText = 'white-space: pre-wrap; padding: 1rem; color: #b00; font-size: 0.85rem;';
   pre.textContent = `Something went wrong loading the app:\n\n${formatError(errorLike)}`;
-  app.appendChild(pre);
+  if (app.firstChild) {
+    // #app already holds a real, rendered view — possibly mid-observation,
+    // with an unsaved note/photo in memory. A later, possibly-unrelated
+    // error (a stray rejection, a sensor hiccup) must not wipe that out from
+    // under the surveyor. Only a genuinely empty #app — nothing ever
+    // rendered, the actual "blank screen" case this exists for — gets the
+    // full-replacement treatment below.
+    app.prepend(pre);
+  } else {
+    app.appendChild(pre);
+  }
 }
 
 window.addEventListener('error', (event) => showFatalError(event));
@@ -35,8 +44,6 @@ window.addEventListener('unhandledrejection', (event) => showFatalError(event.re
 // adapters to real browser globals, and render. Deliberately dumb — any
 // conditional here belongs in a tested module instead (see plan Phase 3).
 async function main() {
-  registerSW({ immediate: true });
-
   const db = await openDatabase();
   const service = createCaptureService({ db, newId, nowIso });
 
@@ -58,28 +65,68 @@ async function main() {
     return shareOrDownload(file, { title: filename });
   }
 
-  // Not gated on `navigator.serviceWorker.ready` — that can hang if
-  // activation never completes, and this diagnostic must never be able to
-  // block the app rendering at all. On the very first-ever install it may
-  // transiently under-report before the SW claims the page; ProbePage's
-  // "Recheck" covers that, and the checklist already calls for a relaunch
-  // before trusting a cold-launch reading either way.
-  const offlineStatus = await readOfflineStatus({
-    serviceWorker: navigator.serviceWorker,
-    cacheStorage: window.caches,
-    isSecureContext: window.isSecureContext,
-    standalone: navigator.standalone,
+  const container = document.getElementById('app');
+
+  // Mutable render state, re-rendered in place (Preact diffs) rather than a
+  // one-shot render() call — two things need to update the page after first
+  // paint, independent of any user action: an update becoming available, and
+  // the offline-readiness reading settling. See the state fields' own
+  // comments below for why each exists.
+  const state = {
+    service,
+    sensors,
+    downscale,
+    exportSession,
+    // Starts null (banner hidden) rather than reading synchronously at
+    // startup: right after registration, precaching hasn't finished, so
+    // precachedCount is genuinely 0 for an instant on *every* load — not
+    // just a broken build. subscribeOfflineStatus below reports once that's
+    // actually settled, which is what makes the banner mean something.
+    offlineStatus: null,
+    updateAvailable: false,
+  };
+
+  function renderApp() {
+    render(
+      html`<${App}
+        service=${state.service}
+        sensors=${state.sensors}
+        downscale=${state.downscale}
+        exportSession=${state.exportSession}
+        offlineStatus=${state.offlineStatus}
+        updateAvailable=${state.updateAvailable}
+        onReload=${() => updateSW()}
+      />`,
+      container,
+    );
+  }
+
+  // registerType: 'prompt' (vite.config.js) — src/sw/sw.js deliberately
+  // waits rather than self-activating, so a new version sits idle until the
+  // surveyor chooses to reload. updateSW(), called with no args from the
+  // banner's Reload button, sends the skip-waiting message and reloads the
+  // page once the new worker takes control (vite-plugin-pwa's register.js).
+  const updateSW = registerSW({
+    immediate: true,
+    onNeedRefresh: () => {
+      state.updateAvailable = true;
+      renderApp();
+    },
   });
 
-  render(
-    html`<${App}
-      service=${service}
-      sensors=${sensors}
-      downscale=${downscale}
-      exportSession=${exportSession}
-      offlineStatus=${offlineStatus}
-    />`,
-    document.getElementById('app'),
+  renderApp();
+
+  subscribeOfflineStatus(
+    {
+      serviceWorker: navigator.serviceWorker,
+      cacheStorage: window.caches,
+      isSecureContext: window.isSecureContext,
+      standalone: navigator.standalone,
+    },
+    (offlineStatus) => {
+      state.offlineStatus = offlineStatus;
+      renderApp();
+    },
   );
 }
 

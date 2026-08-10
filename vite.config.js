@@ -50,6 +50,13 @@ export default defineConfig(async ({ command, isPreview }) => {
   plugins.push(
     VitePWA({
       strategies: 'injectManifest',
+      // 'prompt' is vite-plugin-pwa's default, but stated explicitly here
+      // because it's load-bearing: src/sw/sw.js deliberately never
+      // self-activates a waiting worker (see the comment there), and
+      // main.js's registerSW({ onNeedRefresh }) only gets wired up in
+      // prompt mode. Switching this to 'autoUpdate' without also removing
+      // that SW code would silently reintroduce the update race.
+      registerType: 'prompt',
       srcDir: 'src/sw',
       filename: 'sw.js',
       injectManifest: {

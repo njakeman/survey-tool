@@ -13,6 +13,23 @@ Device/OS this was last run on: iPhone, iOS 26.x (2026-08-06)
 - [x] Launch from the home screen icon — confirm standalone mode (no Safari chrome)
 - [ ] Orientation locks portrait — not yet exercised (probe page doesn't lock orientation itself)
 
+## Service worker updates (added after the update-race bug)
+
+Not covered by e2e — reproducing it needs two successive builds served in sequence, which
+Playwright's single `webServer` can't express cheaply. This is the only place it's actually
+verified, and it directly exercises the fix in `src/sw/sw.js` / `vite.config.js`'s
+`registerType: 'prompt'` / `App.js`'s reload banner.
+
+- [ ] Launch the installed app once online (so the current build is fully precached), then deploy a
+      change (any visible tweak works) and launch again: the app must offer a **"New version —
+      Reload"** banner, not a blank page, not the red `Script error.` fatal-error screen, and no
+      unstyled/broken page from a mismatched CSS/JS pair
+- [ ] Tapping Reload actually picks up the new version (check the change landed) and does **not**
+      lose whatever the surveyor was doing — a saved session/observations must still be there
+      afterward
+- [ ] Not tapping Reload leaves the app fully usable on the **old** version — a pending update must
+      never be forced
+
 ## Phase 1 — capability probe
 
 Run the probe page's checks in order, note results, then **force-quit and relaunch from the home
@@ -33,9 +50,12 @@ screen icon** (not a Safari reload) and re-run the checks that might differ acro
 - [x] PBKDF2 600k-iteration benchmark — **128 ms.** No perceptible delay; a progress indicator at
       sync time is a nicety, not a requirement, on hardware this capable.
 - [ ] Offline-ready readout (added after the dev-server-vs-offline confusion below) — on a
-      **production build** reads `offlineReady: yes` with a non-zero precached-entry count; on
-      `npm run dev` reads `offlineReady: no` with `precachedCount: 0` — confirms the diagnostic
-      actually discriminates rather than always reporting "fine"
+      **production build**, once settled (a moment after launch — `main.js` now waits for
+      `serviceWorker.ready` rather than sampling instantly), reads `offlineReady: yes` with a
+      non-zero precached-entry count; on `npm run dev` reads `offlineReady: no` with
+      `precachedCount: 0` — confirms the diagnostic actually discriminates rather than always
+      reporting "fine". The capture page's own banner must **not** flash on a fresh production
+      install even for that first settling moment.
 
 **Verdict: every architecture-critical assumption from Phase 1 holds on this device.** No design
 changes needed. Proceeding to Phase 2.

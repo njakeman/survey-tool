@@ -32,6 +32,8 @@ function renderApp(overrides = {}) {
       downscale=${overrides.downscale ?? vi.fn()}
       exportSession=${overrides.exportSession ?? vi.fn()}
       offlineStatus=${overrides.offlineStatus}
+      updateAvailable=${overrides.updateAvailable}
+      onReload=${overrides.onReload}
     />`,
   );
 }
@@ -68,6 +70,32 @@ describe('App', () => {
     renderApp({ offlineStatus: { precachedCount: 0, offlineReady: false } });
 
     expect(await screen.findByText(/no offline cache/i)).toBeInTheDocument();
+  });
+
+  test('shows no update banner by default', async () => {
+    renderApp();
+    await screen.findByRole('button', { name: /save observation/i });
+
+    expect(screen.queryByText(/new version/i)).not.toBeInTheDocument();
+  });
+
+  test('shows an update banner and reloads on tap when an update is waiting', async () => {
+    const onReload = vi.fn();
+    renderApp({ updateAvailable: true, onReload });
+    await screen.findByRole('button', { name: /save observation/i });
+
+    fireEvent.click(await screen.findByRole('button', { name: /reload/i }));
+    expect(onReload).toHaveBeenCalledTimes(1);
+  });
+
+  test('the update banner is visible from every view, not just capture', async () => {
+    renderApp({ updateAvailable: true, onReload: vi.fn() });
+    await screen.findByRole('button', { name: /save observation/i });
+
+    fireEvent.click(screen.getByRole('button', { name: /device probe/i }));
+    await screen.findByText('Device capability probe');
+
+    expect(screen.getByRole('button', { name: /reload/i })).toBeInTheDocument();
   });
 
   test('never touches window.location.hash — no client-side router', async () => {

@@ -9,37 +9,58 @@ import { ProbePage } from '../probe/ProbePage.js';
 // launches (WebKit bug 215884) — an on-screen Back button is the only route
 // back, which is fine since the iOS back swipe does nothing in standalone
 // mode anyway.
-export function App({ service, sensors, downscale, exportSession, offlineStatus }) {
+export function App({
+  service,
+  sensors,
+  downscale,
+  exportSession,
+  offlineStatus,
+  updateAvailable,
+  onReload,
+}) {
   const [view, setView] = useState('capture');
 
+  let content;
   if (view === 'probe') {
-    return html`
+    content = html`
       <div>
         <button type="button" onClick=${() => setView('capture')}>Back to capture</button>
         <${ProbePage} />
       </div>
     `;
-  }
-
-  if (view === 'history') {
-    return html`
+  } else if (view === 'history') {
+    content = html`
       <${SessionHistoryPage}
         service=${service}
         exportSession=${exportSession}
         onBack=${() => setView('capture')}
       />
     `;
+  } else {
+    content = html`
+      <${CapturePage}
+        service=${service}
+        sensors=${sensors}
+        downscale=${downscale}
+        exportSession=${exportSession}
+        offlineStatus=${offlineStatus}
+        onOpenProbe=${() => setView('probe')}
+        onOpenHistory=${() => setView('history')}
+      />
+    `;
   }
 
   return html`
-    <${CapturePage}
-      service=${service}
-      sensors=${sensors}
-      downscale=${downscale}
-      exportSession=${exportSession}
-      offlineStatus=${offlineStatus}
-      onOpenProbe=${() => setView('probe')}
-      onOpenHistory=${() => setView('history')}
-    />
+    <div>
+      ${
+        updateAvailable
+          ? html`<p class="update-banner">
+              New version available.
+              <button type="button" onClick=${onReload}>Reload</button>
+            </p>`
+          : null
+      }
+      ${content}
+    </div>
   `;
 }
