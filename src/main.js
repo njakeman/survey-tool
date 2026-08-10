@@ -13,6 +13,8 @@ import { buildSessionExport } from './export/buildSessionExport.js';
 import { zipEntries } from './export/zip.js';
 import { shareOrDownload } from './export/share.js';
 import { subscribeOfflineStatus } from './app/offlineStatus.js';
+import { createBasemapService } from './app/basemapService.js';
+import { glyphsUrl } from './map/glyphs.js';
 import './style.css';
 
 // A blank screen with no console access (no Mac nearby for Web Inspector) is
@@ -65,6 +67,37 @@ async function main() {
     return shareOrDownload(file, { title: filename });
   }
 
+  const basemapService = createBasemapService({
+    db,
+    fetchFn: (...args) => fetch(...args),
+    archiveUrl: `${import.meta.env.BASE_URL}basemap.pmtiles`,
+    nowIso,
+  });
+
+  // The renderer is imported only once an archive actually exists, so a
+  // device that has never downloaded one never pays for ~800 KB of MapLibre
+  // at startup. The split chunk is still precached, so the import resolves
+  // offline (same rule as photo/encode.js: browser-only, main.js only).
+  async function createMap({ container: mapContainer, onUserPan }) {
+    const archiveBuffer = await basemapService.loadArchive();
+    if (!archiveBuffer) throw new Error('No offline map archive stored on this device');
+    const { createMapAdapter } = await import('./map/mapAdapter.js');
+    return createMapAdapter({
+      container: mapContainer,
+      archiveBuffer,
+      glyphsUrl: glyphsUrl(import.meta.env.BASE_URL),
+      onUserPan,
+      // Map errors are diagnostics, not app failures: a missing tile must
+      // never reach the fatal-error banner over a working capture page.
+      onError: (error) => console.warn('map error', error),
+    });
+  }
+
+  async function downloadBasemap(onProgress) {
+    state.basemap = await basemapService.download(onProgress);
+    renderApp();
+  }
+
   const container = document.getElementById('app');
 
   // Mutable render state, re-rendered in place (Preact diffs) rather than a
@@ -84,6 +117,13 @@ async function main() {
     // actually settled, which is what makes the banner mean something.
     offlineStatus: null,
     updateAvailable: false,
+    // Tri-state, and it starts 'unknown' rather than 'absent' for the same
+    // reason offlineStatus starts null: before the read resolves we cannot
+    // tell, and claiming "no offline map" would offer a redundant
+    // multi-megabyte download to someone who already has one.
+    basemap: { state: 'unknown', sizeBytes: null, downloadedAt: null, etag: null },
+    online: navigator.onLine,
+    remoteSizeBytes: null,
   };
 
   function renderApp() {
@@ -96,6 +136,11 @@ async function main() {
         offlineStatus=${state.offlineStatus}
         updateAvailable=${state.updateAvailable}
         onReload=${() => updateSW()}
+        basemap=${state.basemap}
+        createMap=${createMap}
+        downloadBasemap=${downloadBasemap}
+        online=${state.online}
+        remoteSizeBytes=${state.remoteSizeBytes}
       />`,
       container,
     );
@@ -128,6 +173,30 @@ async function main() {
       renderApp();
     },
   );
+
+  // Whether an archive is stored decides what the map panel offers, so read
+  // it as soon as the first paint is out of the way. Both of these swallow
+  // their own failures: a diagnostic that throws would land on the
+  // fatal-error banner over a working capture page.
+  basemapService.status().then((basemap) => {
+    state.basemap = basemap;
+    renderApp();
+    // Only ask the network about the published archive when there is a
+    // reason to: no stored copy (how big is the download?) or checking
+    // whether the deployed one has moved on.
+    return basemapService.checkRemote().then((remote) => {
+      if (!remote) return;
+      state.remoteSizeBytes = remote.sizeBytes;
+      renderApp();
+    });
+  });
+
+  for (const event of ['online', 'offline']) {
+    window.addEventListener(event, () => {
+      state.online = navigator.onLine;
+      renderApp();
+    });
+  }
 }
 
 main().catch(showFatalError);
