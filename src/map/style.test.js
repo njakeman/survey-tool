@@ -66,7 +66,9 @@ describe('buildStyle', () => {
     const stacks = textLayers.flatMap((layer) => fontStacksIn(layer.layout['text-font']));
     expect(stacks.length).toBeGreaterThanOrEqual(textLayers.length);
     for (const stack of stacks) {
-      expect(stack).toEqual(['Noto Sans Regular']);
+      // Must match the vendored directory name exactly — glyphs.test.js
+      // holds the other end of that contract.
+      expect(stack).toEqual(['noto-sans-regular']);
     }
   });
 

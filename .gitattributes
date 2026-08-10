@@ -1,6 +1,7 @@
 * text=auto eol=lf
 *.jpg binary
 *.jpeg binary
+*.pbf binary
 *.png binary
 *.pmtiles binary
 *.woff2 binary

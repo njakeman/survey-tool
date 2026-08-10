@@ -1,4 +1,5 @@
 import { layers, namedFlavor } from '@protomaps/basemaps';
+import { FONT_STACK } from './glyphs.js';
 
 // Builds the MapLibre style for the offline basemap. Pure data — no browser
 // deps — so the offline-critical guarantees below are node-testable.
@@ -18,7 +19,6 @@ import { layers, namedFlavor } from '@protomaps/basemaps';
 // road and water names, the part that actually matters when you're standing
 // in a field working out where you are — are kept.
 
-const FONT_STACK = 'Noto Sans Regular';
 const ICON_ONLY_LAYERS = new Set(['roads_oneway', 'roads_shields']);
 
 const ATTRIBUTION =
