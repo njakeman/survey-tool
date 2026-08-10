@@ -1,13 +1,9 @@
 import { createSession, closeSession, findOpenSession } from '../domain/session.js';
 import { createObservation } from '../domain/observation.js';
 import { putSession, listSessions as listSessionsFromStore } from '../storage/sessionStore.js';
-import {
-  listObservationsForSession,
-  getObservation,
-  deleteObservation as deleteObservationRecord,
-} from '../storage/observationStore.js';
-import { deletePhoto } from '../storage/photoStore.js';
+import { listObservationsForSession } from '../storage/observationStore.js';
 import { saveObservationWithPhoto } from '../storage/captureWrite.js';
+import { deleteObservationWithPhoto } from '../storage/captureDelete.js';
 
 // Orchestration seam between the UI and storage. Stateless — every call
 // re-reads IndexedDB rather than caching the open session, which is what
@@ -83,12 +79,10 @@ export function createCaptureService({ db, newId, nowIso }) {
 
   // Undo-last-save support. Idempotent: deleting an id that's already gone
   // (or never existed) is a no-op, not an error — the UI doesn't need to
-  // track exactly what state it's in before offering Undo.
-  async function deleteObservation(id) {
-    const observation = await getObservation(db, id);
-    if (!observation) return;
-    await deleteObservationRecord(db, id);
-    if (observation.photoId) await deletePhoto(db, observation.photoId);
+  // track exactly what state it's in before offering Undo. One transaction
+  // (captureDelete.js), so a kill mid-delete can't orphan the photo.
+  function deleteObservation(id) {
+    return deleteObservationWithPhoto(db, id);
   }
 
   return {

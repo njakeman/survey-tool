@@ -370,4 +370,50 @@ describe('deleteObservation', () => {
     const service = await makeService('capture-service-delete-missing');
     await expect(service.deleteObservation('nope')).resolves.toBeUndefined();
   });
+
+  test('deletes the observation and its photo in one transaction, so a kill mid-delete cannot orphan the photo', async () => {
+    const db = await openDatabase('capture-service-delete-atomic');
+    // Every idb one-shot convenience call (db.get/db.delete/…) opens its own
+    // implicit transaction, so record those alongside explicit
+    // db.transaction() calls: the delete must show up as exactly one
+    // transaction spanning both stores.
+    const oneShotMethods = new Set(['get', 'getAll', 'getAllFromIndex', 'put', 'add', 'delete']);
+    const opened = [];
+    const trackingDb = new Proxy(db, {
+      get(target, prop) {
+        if (prop === 'transaction') {
+          return (storeNames, ...rest) => {
+            opened.push([].concat(storeNames).sort());
+            return target.transaction(storeNames, ...rest);
+          };
+        }
+        if (oneShotMethods.has(prop)) {
+          return (storeName, ...rest) => {
+            opened.push([storeName]);
+            return target[prop](storeName, ...rest);
+          };
+        }
+        const value = target[prop];
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    });
+    const service = createCaptureService({
+      db: trackingDb,
+      newId: fakeIdGenerator(),
+      nowIso: () => FIXED_NOW,
+    });
+    await service.startSession('Ashton Keynes');
+    const blob = new Blob(['fake jpeg bytes'], { type: 'image/jpeg' });
+    const obs = await service.saveObservation({
+      reading: READING,
+      heading: null,
+      note: '',
+      photo: { blob },
+    });
+
+    opened.length = 0;
+    await service.deleteObservation(obs.id);
+
+    expect(opened).toEqual([['observations', 'photos']]);
+  });
 });
