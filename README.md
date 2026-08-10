@@ -13,9 +13,9 @@ See [`field-survey-pwa-prompt.md`](./field-survey-pwa-prompt.md) for the origina
 Field-usable offline. Capture (GPS/compass/photo/save), session history, zip export and the
 offline vector basemap are built; sync to GitHub is not yet.
 
-To see a map you must first produce a basemap archive for your survey area — see
-[Offline basemap](#offline-basemap) below. Without one the app works exactly as before and the
-map panel simply offers the download.
+To see a map you must first produce basemap archives for your survey areas — see
+[Offline basemap](#offline-basemap) below. Without any, the app works exactly as before and the
+map panel simply offers to pick a region.
 
 ## Develop
 
@@ -39,30 +39,42 @@ instances and is slower — run it before pushing, not on every save.
 
 ## Offline basemap
 
-The map is MapLibre GL rendering a [PMTiles](https://protomaps.com/) archive of your survey area.
-The archive is **not** part of the build: you produce one for the region you're surveying, commit
-it, and the app downloads it once and keeps it in IndexedDB. After that the map works with no
-network at all.
+The map is MapLibre GL rendering [PMTiles](https://protomaps.com/) archives of your survey areas.
+The archives are **not** part of the build: you pre-bake one per region, commit them, and the app
+lists them so the surveyor can download the ones they need. Downloaded regions live in IndexedDB
+and work with no network at all — several can be held at once and switched between in the field.
 
-Produce one with the [`pmtiles` CLI](https://github.com/protomaps/go-pmtiles) against Protomaps'
-public daily planet build:
+Produce each with the [`pmtiles` CLI](https://github.com/protomaps/go-pmtiles) against Protomaps'
+public daily planet build, into `public/basemaps/`, named for the area:
 
 ```sh
-pmtiles extract https://build.protomaps.com/20260801.pmtiles public/basemap.pmtiles \
+pmtiles extract https://build.protomaps.com/20260801.pmtiles public/basemaps/north-wiltshire.pmtiles \
   --bbox=-2.2,51.5,-1.6,51.8 \
   --maxzoom=15
+
+npm run basemaps:manifest   # regenerates public/basemaps/manifest.json
 ```
 
-`--bbox` is `minLon,minLat,maxLon,maxLat`. Commit the result as `public/basemap.pmtiles`; the next
-deploy serves it, and the app offers "Download offline map" with its size. Re-running the extract
-and committing again makes the app offer an update (it compares ETags).
+`--bbox` is `minLon,minLat,maxLon,maxLat`. The filename becomes the region's name in the app
+(`north-wiltshire.pmtiles` → "North Wiltshire"), and the manifest records each archive's real
+bounds, zooms and size by reading its header — so the published list can't drift from the files.
+The manifest is also regenerated automatically by `npm run build`; commit it so `npm run dev`,
+which serves `public/` without a build, shows the same list.
 
-Constraints worth knowing before you pick a region:
+Once deployed, the app's map panel offers "Choose a region". The surveyor downloads what they
+need, and the app then suggests switching when their GPS fix falls inside a different downloaded
+region — it always asks, and never switches on its own.
 
-- **100 MB is a hard ceiling** — GitHub's per-file limit. Git LFS is not a way around it: Pages
+Constraints worth knowing before you pick regions:
+
+- **100 MB is a hard ceiling per file** — GitHub's limit. Git LFS is not a way around it: Pages
   serves LFS pointer files rather than the real bytes. Shrink the bbox or drop `--maxzoom` (each
   zoom level roughly quadruples the tile count) until it fits. A county at z15 is comfortably
   inside it; a country is not.
+- **Every archive is permanent repo weight**, checked out on every CI run, so prefer several
+  tight regions over one sprawling one.
+- A newly deployed region appears only after the surveyor accepts the app's update prompt: the
+  manifest is precached along with the rest of the build.
 - **Never bulk-fetch tiles from `tile.openstreetmap.org` or OpenFreeMap** to build one. `pmtiles
 extract` against Protomaps is the documented, ODbL-licensed, no-key route (see `CLAUDE.md`).
 - The archive is deliberately excluded from the service-worker precache: Workbox would silently

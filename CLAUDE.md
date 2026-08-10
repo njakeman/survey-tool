@@ -116,14 +116,16 @@ standalone })`, browser globals injected same as `probe/capabilities.js`, so it'
   "router": in-memory view state (`'capture' | 'history' | 'probe'`), no hash, no history API.
   `SessionHistoryPage.js` is read-only (past sessions + their observations + Export); `CapturePage.js`
   also offers Export for the _currently open_ session, so exporting doesn't require ending it first.
-- `src/map/` — the Phase 4 offline basemap. `mapAdapter.js` is the **only** module that imports
-  `maplibre-gl`/`pmtiles`, and `main.js` is its only importer (dynamic `import()`, so ~1.5 MB of
-  renderer stays out of the startup bundle) — same rule as `photo/encode.js`. Everything else is
-  pure and node-tested: `style.js` (one font stack, no sprite), `overlays.js` (position dot,
-  accuracy-ring expression, marker FeatureCollection — deliberately _not_ reusing
-  `domain/geojson.js`, whose bytes sync depends on), `followMode.js`, `viewport.js`,
-  `pmtilesSource.js` (an `ArrayBuffer`-backed pmtiles `Source`), `glyphs.js`. `src/ui/CaptureMap.js`
-  receives an injected `createMap` factory, so it tests against a fake adapter.
+- `src/map/` — the Phase 4 offline basemap, one archive per **region**. `mapAdapter.js` is the
+  **only** module that imports `maplibre-gl`/`pmtiles`, and `main.js` is its only importer
+  (dynamic `import()`, so ~1.5 MB of renderer stays out of the startup bundle) — same rule as
+  `photo/encode.js`. Everything else is pure and node-tested: `style.js` (one font stack, no
+  sprite), `overlays.js` (position dot, accuracy-ring expression, marker FeatureCollection —
+  deliberately _not_ reusing `domain/geojson.js`, whose bytes sync depends on), `followMode.js`,
+  `viewport.js`, `basemapSelection.js` (which region is active, and which merely _suggested_),
+  `pmtilesSource.js` (an `ArrayBuffer`-backed pmtiles `Source`), `glyphs.js`, `manifest.js`
+  (Node-only, for the generator script). `src/ui/CaptureMap.js` receives an injected `createMap`
+  factory, so it tests against a fake adapter; `src/ui/BasemapPicker.js` is the region list.
 - `src/probe/` — the Phase 1 device-capability probe, still reachable via a footer link in the
   capture UI. Findings recorded in `docs/ios-manual-checklist.md`.
 - Test tiers (`vitest.config.js`): `node` for domain/storage logic (real WebCrypto; jsdom is
@@ -164,10 +166,20 @@ standalone })`, browser globals injected same as `probe/capabilities.js`, so it'
   (`public/fonts/`, `pbf` in the precache glob): they're fetched lazily at render time, so hosted
   glyphs mean an unlabelled map offline with no visible error. The font-stack directory is
   hyphenated so precache keys and request URLs can't disagree over encoding.
-- The `.pmtiles` archive is **never precached** — Workbox silently drops anything over its 2 MiB
+- The `.pmtiles` archives are **never precached** — Workbox silently drops anything over its 2 MiB
   default (green build, broken map) and precached responses can't serve the HTTP Range requests the
-  pmtiles client uses. It lives in IndexedDB as an ArrayBuffer (`storage/basemapStore.js`), is
-  fetched by an explicit in-app download, and is produced by the user (README → Offline basemap).
+  pmtiles client uses. They live in IndexedDB as ArrayBuffers (`storage/basemapStore.js`), one
+  record per region, fetched by explicit in-app downloads and produced by the user (README →
+  Offline basemap). `public/basemaps/manifest.json` _is_ precached, which is what keeps region
+  names and bounds available offline.
+- Two rules the multi-region storage enforces. **Never read the `basemap` store with values in
+  bulk** — every value is a multi-megabyte buffer, so listing uses `getAllKeys`. And **region
+  metadata (name, bounds) is recorded in `settings` when a region is downloaded**, not on the
+  archive record: bounds drive the position suggestion, offline is when that matters, and updating
+  a field on an archive record would mean rewriting a hundred megabytes.
+- Region switching is **offered, never imposed** (`map/basemapSelection.js` returns `activeId` and
+  `suggestionId` separately). A surveyor mid-observation must never have the map change under
+  them. The suggestion is computed in `CapturePage`, because that is where the live fix is.
 
 ## Security constraints (non-negotiable)
 

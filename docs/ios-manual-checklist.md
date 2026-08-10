@@ -121,14 +121,16 @@ local server fails instead of silently opening yet another orphaned origin.
 
 ## Phase 4 — offline basemap
 
-Needs `public/basemap.pmtiles` committed and deployed first (see the README). Everything below is
-against the real device; Playwright cannot exercise any of it.
+Needs at least one archive in `public/basemaps/` committed and deployed first, and ideally two
+adjacent regions so switching can be exercised (see the README). Everything below is against the
+real device; Playwright cannot exercise any of it.
 
 **Download and offline render — the acceptance criterion**
 
 - [ ] Fresh install (remove the home-screen icon, clear site data, re-add) shows the map panel
-      offering "Download offline map" with a plausible size
-- [ ] Tapping it shows progress and, on completion, the map appears without a reload
+      offering "Choose a region", and the picker lists every published region with a plausible size
+- [ ] Tapping a region shows progress and, on completion, it reads as on-device; returning to
+      capture shows the map without a reload
 - [ ] Force-quit, enable airplane mode, relaunch from the home screen: **the map renders
       immediately**, labels included, with no network at all
 - [ ] Place names and road names are legible — if labels are missing, the glyph ranges in
@@ -149,10 +151,25 @@ against the real device; Playwright cannot exercise any of it.
 - [ ] Switching to Session history and back leaves the map visible and correctly sized (not blank,
       not a sliver)
 
+**Several regions**
+
+- [ ] Download a second region; the first stays on the device (both read as downloaded) and the
+      map does not change on its own
+- [ ] Switch regions from the picker — the new map draws, and the old one is gone rather than
+      showing through
+- [ ] Switch back and forth several times with the map on screen: memory holds up and the app is
+      not killed in the background (this is the leak the per-region archive release exists to
+      prevent, and a phone is the only place to see it)
+- [ ] In airplane mode, the picker still lists the downloaded regions **by name**, and switching
+      between them works with no signal
+- [ ] Standing in a region that is not the active one, the map offers to switch and **waits** —
+      it must never switch by itself. "Not now" dismisses it and does not nag again
+- [ ] Removing a non-active region frees it; the region in use offers no Remove
+
 **Degradation**
 
-- [ ] With airplane mode on and no archive downloaded, the panel explains it needs a connection
-      rather than offering a download that cannot work
+- [ ] With airplane mode on and nothing downloaded, the picker explains it needs a connection
+      rather than offering downloads that cannot work
 - [ ] Battery/heat: after ~15 minutes of continuous capture with the map on screen, the phone is
       not alarmingly hot and the app has not been killed in the background
 
