@@ -65,6 +65,7 @@ export function CapturePage({
   async function handleStart(name) {
     enableCompass(); // synchronous, before any await — iOS gesture rule
     setSessionBusy(true);
+    setLastSaved(null); // an Undo must never cross a session boundary
     try {
       await service.startSession(name);
       await refreshSession();
@@ -75,6 +76,7 @@ export function CapturePage({
 
   async function handleEnd() {
     setSessionBusy(true);
+    setLastSaved(null); // an Undo must never cross a session boundary
     try {
       await service.endSession();
       await refreshSession();
@@ -124,9 +126,14 @@ export function CapturePage({
 
   async function handleUndo() {
     if (!lastSaved) return;
-    await service.deleteObservation(lastSaved.id);
-    setLastSaved(null);
-    await refreshSession();
+    try {
+      await service.deleteObservation(lastSaved.id);
+      setLastSaved(null);
+      await refreshSession();
+    } catch (error) {
+      // Keep lastSaved so the surveyor can retry the undo.
+      setSaveError(error.message || 'Could not undo that save');
+    }
   }
 
   // Lets a surveyor export the current session before tapping End — the

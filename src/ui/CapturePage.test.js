@@ -269,6 +269,46 @@ describe('CapturePage — saving an observation', () => {
   });
 });
 
+describe('CapturePage — undo lifecycle', () => {
+  async function renderReadyWithSave() {
+    const service = createFakeService({ openSession: OPEN_SESSION });
+    const { sensors, pushPosition } = createFakeSensors();
+    render(html`<${CapturePage} service=${service} sensors=${sensors} downscale=${vi.fn()} />`);
+    await screen.findByText('Ashton Keynes');
+    pushPosition(POSITION);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /save observation/i })).not.toBeDisabled(),
+    );
+    fireEvent.click(screen.getByRole('button', { name: /save observation/i }));
+    await screen.findByRole('button', { name: /undo/i });
+    return { service };
+  }
+
+  test('ending the session removes the Undo affordance', async () => {
+    // A surviving Undo would delete from a session that is already closed.
+    const { service } = await renderReadyWithSave();
+    service.getOpenSession.mockResolvedValue(null);
+
+    fireEvent.click(screen.getByRole('button', { name: /^end session$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /confirm end session/i }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: /undo/i })).not.toBeInTheDocument(),
+    );
+  });
+
+  test('a failed undo shows an inline error instead of escaping to the fatal handler', async () => {
+    const { service } = await renderReadyWithSave();
+    service.deleteObservation.mockRejectedValue(new Error('delete failed'));
+
+    fireEvent.click(screen.getByRole('button', { name: /undo/i }));
+
+    await screen.findByText(/delete failed/);
+    // Undo stays available so the surveyor can retry.
+    expect(screen.getByRole('button', { name: /undo/i })).toBeInTheDocument();
+  });
+});
+
 describe('CapturePage — lifecycle and gesture ordering', () => {
   test('unmount stops the position watcher (always active) and the heading watcher once enabled', async () => {
     const service = createFakeService({ openSession: OPEN_SESSION });
