@@ -98,6 +98,44 @@ describe('App', () => {
     expect(screen.getByRole('button', { name: /reload/i })).toBeInTheDocument();
   });
 
+  test('switching to history and back preserves an in-progress note', async () => {
+    // The in-progress observation (note/photo) lives only in CapturePage
+    // state until Save — a view switch must never wipe it (CLAUDE.md's
+    // no-surprise-data-loss rule; unmounting the page is exactly that).
+    renderApp();
+    await screen.findByRole('button', { name: /save observation/i });
+
+    fireEvent.input(screen.getByLabelText(/note/i), { target: { value: 'half-typed note' } });
+    fireEvent.click(screen.getByRole('button', { name: /session history/i }));
+    await screen.findByText('Past sessions');
+    fireEvent.click(screen.getByRole('button', { name: /back to capture/i }));
+
+    await screen.findByRole('button', { name: /save observation/i });
+    expect(screen.getByLabelText(/note/i)).toHaveValue('half-typed note');
+  });
+
+  test('switching views neither tears down nor restarts the GPS watch', async () => {
+    const positionStop = vi.fn();
+    const watchPosition = vi.fn(() => positionStop);
+    renderApp({
+      sensors: {
+        watchPosition,
+        watchHeading: () => () => {},
+        requestHeadingPermission: vi.fn().mockResolvedValue('granted'),
+      },
+    });
+    await screen.findByRole('button', { name: /save observation/i });
+    expect(watchPosition).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole('button', { name: /session history/i }));
+    await screen.findByText('Past sessions');
+    expect(positionStop).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: /back to capture/i }));
+    await screen.findByRole('button', { name: /save observation/i });
+    expect(watchPosition).toHaveBeenCalledTimes(1); // no cold re-acquire
+  });
+
   test('never touches window.location.hash — no client-side router', async () => {
     const initialHash = window.location.hash;
     renderApp();

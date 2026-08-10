@@ -20,32 +20,25 @@ export function App({
 }) {
   const [view, setView] = useState('capture');
 
-  let content;
+  // CapturePage stays mounted whichever view is showing: the in-progress
+  // observation (note/photo) lives only in its state until Save and must
+  // never be wiped by a view switch, and unmounting would also tear down
+  // the ~1Hz GPS watch and force a cold re-acquire on return. Probe and
+  // history mount fresh per visit — history deliberately re-reads sessions.
+  let overlay = null;
   if (view === 'probe') {
-    content = html`
+    overlay = html`
       <div>
         <button type="button" onClick=${() => setView('capture')}>Back to capture</button>
         <${ProbePage} />
       </div>
     `;
   } else if (view === 'history') {
-    content = html`
+    overlay = html`
       <${SessionHistoryPage}
         service=${service}
         exportSession=${exportSession}
         onBack=${() => setView('capture')}
-      />
-    `;
-  } else {
-    content = html`
-      <${CapturePage}
-        service=${service}
-        sensors=${sensors}
-        downscale=${downscale}
-        exportSession=${exportSession}
-        offlineStatus=${offlineStatus}
-        onOpenProbe=${() => setView('probe')}
-        onOpenHistory=${() => setView('history')}
       />
     `;
   }
@@ -60,7 +53,18 @@ export function App({
             </p>`
           : null
       }
-      ${content}
+      <div hidden=${view !== 'capture'}>
+        <${CapturePage}
+          service=${service}
+          sensors=${sensors}
+          downscale=${downscale}
+          exportSession=${exportSession}
+          offlineStatus=${offlineStatus}
+          onOpenProbe=${() => setView('probe')}
+          onOpenHistory=${() => setView('history')}
+        />
+      </div>
+      ${overlay}
     </div>
   `;
 }
