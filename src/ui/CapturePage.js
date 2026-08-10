@@ -7,6 +7,7 @@ import { ReadingsPanel } from './ReadingsPanel.js';
 import { PhotoField } from './PhotoField.js';
 import { SaveButton } from './SaveButton.js';
 import { ObservationsTable } from './ObservationsTable.js';
+import { CaptureMap } from './CaptureMap.js';
 
 function todayDateString() {
   return new Date().toISOString().slice(0, 10);
@@ -23,6 +24,12 @@ export function CapturePage({
   onOpenProbe,
   onOpenHistory,
   offlineStatus,
+  basemap,
+  createMap,
+  downloadBasemap,
+  visible,
+  online,
+  remoteSizeBytes,
 }) {
   const [session, setSession] = useState(null);
   const [observations, setObservations] = useState([]);
@@ -176,6 +183,16 @@ export function CapturePage({
         heading=${heading}
         headingStatus=${headingStatus}
         onEnableCompass=${enableCompass}
+      />
+      <${CaptureMap}
+        basemap=${basemap}
+        createMap=${createMap}
+        downloadBasemap=${downloadBasemap}
+        position=${position}
+        observations=${observations}
+        visible=${visible}
+        online=${online}
+        remoteSizeBytes=${remoteSizeBytes}
       />
       <label>
         Note

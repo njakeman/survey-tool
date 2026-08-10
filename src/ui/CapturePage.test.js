@@ -398,6 +398,65 @@ describe('CapturePage — session history link and export', () => {
   });
 });
 
+describe('CapturePage — map panel', () => {
+  const PRESENT_BASEMAP = { state: 'present', sizeBytes: 1, downloadedAt: 'x', etag: '"v1"' };
+
+  test('feeds the live fix and saved observations to the map', async () => {
+    const observations = [{ id: 'obs-1', lat: 51.5, lon: -0.14, synced: false }];
+    const adapter = {
+      ready: Promise.resolve(),
+      setPosition: vi.fn(),
+      setObservations: vi.fn(),
+      centreOn: vi.fn(),
+      resize: vi.fn(),
+      destroy: vi.fn(),
+    };
+    const createMap = vi.fn().mockResolvedValue(adapter);
+    const service = createFakeService({ openSession: OPEN_SESSION, observations });
+    const { sensors, pushPosition } = createFakeSensors();
+
+    render(
+      html`<${CapturePage}
+        service=${service}
+        sensors=${sensors}
+        downscale=${vi.fn()}
+        basemap=${PRESENT_BASEMAP}
+        createMap=${createMap}
+        downloadBasemap=${vi.fn()}
+        visible=${true}
+        online=${true}
+      />`,
+    );
+    await screen.findByText('Ashton Keynes');
+    pushPosition(POSITION);
+
+    await waitFor(() => expect(adapter.setPosition).toHaveBeenCalledWith(POSITION));
+    await waitFor(() => expect(adapter.setObservations).toHaveBeenCalledWith(observations));
+  });
+
+  test('offers the basemap download when no archive is stored', async () => {
+    const service = createFakeService({ openSession: OPEN_SESSION });
+    const { sensors } = createFakeSensors();
+
+    render(
+      html`<${CapturePage}
+        service=${service}
+        sensors=${sensors}
+        downscale=${vi.fn()}
+        basemap=${{ state: 'absent' }}
+        createMap=${vi.fn()}
+        downloadBasemap=${vi.fn()}
+        visible=${true}
+        online=${true}
+      />`,
+    );
+
+    expect(
+      await screen.findByRole('button', { name: /download offline map/i }),
+    ).toBeInTheDocument();
+  });
+});
+
 describe('CapturePage — offline status badge', () => {
   test('no badge when offlineStatus is not supplied', async () => {
     const service = createFakeService({ openSession: null });

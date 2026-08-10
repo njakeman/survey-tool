@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/preact';
+import { render, screen, fireEvent, waitFor } from '@testing-library/preact';
 import { html } from 'htm/preact';
 import { App } from './App.js';
 
@@ -34,6 +34,11 @@ function renderApp(overrides = {}) {
       offlineStatus=${overrides.offlineStatus}
       updateAvailable=${overrides.updateAvailable}
       onReload=${overrides.onReload}
+      basemap=${overrides.basemap}
+      createMap=${overrides.createMap ?? vi.fn()}
+      downloadBasemap=${overrides.downloadBasemap ?? vi.fn()}
+      online=${overrides.online}
+      remoteSizeBytes=${overrides.remoteSizeBytes}
     />`,
   );
 }
@@ -96,6 +101,40 @@ describe('App', () => {
     await screen.findByText('Device capability probe');
 
     expect(screen.getByRole('button', { name: /reload/i })).toBeInTheDocument();
+  });
+
+  test('threads the basemap props down to the capture view', async () => {
+    renderApp({ basemap: { state: 'absent' }, online: true });
+
+    expect(
+      await screen.findByRole('button', { name: /download offline map/i }),
+    ).toBeInTheDocument();
+  });
+
+  test('tells the map when the capture view is hidden, so it can remeasure on return', async () => {
+    const adapter = {
+      ready: Promise.resolve(),
+      setPosition: vi.fn(),
+      setObservations: vi.fn(),
+      centreOn: vi.fn(),
+      resize: vi.fn(),
+      destroy: vi.fn(),
+    };
+    const createMap = vi.fn().mockResolvedValue(adapter);
+    renderApp({
+      basemap: { state: 'present', sizeBytes: 1, downloadedAt: 'x', etag: '"v1"' },
+      createMap,
+      online: true,
+    });
+    await screen.findByRole('button', { name: /save observation/i });
+    await waitFor(() => expect(createMap).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole('button', { name: /session history/i }));
+    await screen.findByText('Past sessions');
+    adapter.resize.mockClear();
+    fireEvent.click(screen.getByRole('button', { name: /back to capture/i }));
+
+    await waitFor(() => expect(adapter.resize).toHaveBeenCalled());
   });
 
   test('switching to history and back preserves an in-progress note', async () => {

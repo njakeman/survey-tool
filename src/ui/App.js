@@ -17,6 +17,11 @@ export function App({
   offlineStatus,
   updateAvailable,
   onReload,
+  basemap,
+  createMap,
+  downloadBasemap,
+  online,
+  remoteSizeBytes,
 }) {
   const [view, setView] = useState('capture');
 
@@ -60,6 +65,12 @@ export function App({
           downscale=${downscale}
           exportSession=${exportSession}
           offlineStatus=${offlineStatus}
+          basemap=${basemap}
+          createMap=${createMap}
+          downloadBasemap=${downloadBasemap}
+          online=${online}
+          remoteSizeBytes=${remoteSizeBytes}
+          visible=${view === 'capture'}
           onOpenProbe=${() => setView('probe')}
           onOpenHistory=${() => setView('history')}
         />
