@@ -9,7 +9,25 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
-const OUT_PATH = fileURLToPath(new URL('../e2e/fixtures/test-basemap.pmtiles', import.meta.url));
+// Two fixtures with non-overlapping bounds, so tests can prove that two
+// archives coexist without colliding and that region selection picks the one
+// covering a given position.
+const FIXTURES = [
+  {
+    file: 'test-basemap.pmtiles',
+    name: 'test-basemap fixture (south)',
+    // Around London — contains the position the e2e fakes.
+    bounds: { minLon: -1.0, minLat: 51.0, maxLon: 0.5, maxLat: 52.0 },
+    center: { lon: -0.14, lat: 51.5 },
+  },
+  {
+    file: 'test-basemap-north.pmtiles',
+    name: 'test-basemap fixture (north)',
+    // Around Leeds — deliberately nowhere near the southern fixture.
+    bounds: { minLon: -2.5, minLat: 53.0, maxLon: -1.0, maxLat: 54.0 },
+    center: { lon: -1.55, lat: 53.8 },
+  },
+];
 
 // --- protobuf/varint helpers -------------------------------------------------
 
@@ -79,10 +97,10 @@ function buildRootDirectory(tileLength) {
   ]);
 }
 
-function buildArchive() {
+function buildArchive({ name, bounds, center }) {
   const tile = buildTile();
   const rootDir = buildRootDirectory(tile.length);
-  const metadata = new TextEncoder().encode(JSON.stringify({ name: 'test-basemap fixture' }));
+  const metadata = new TextEncoder().encode(JSON.stringify({ name }));
 
   const HEADER_LENGTH = 127;
   const rootOffset = HEADER_LENGTH;
@@ -110,16 +128,16 @@ function buildArchive() {
   header[99] = 1; // tile type: MVT
   header[100] = 0; // min zoom
   header[101] = 0; // max zoom
-  // Regional bounds around London, like a real `pmtiles extract`: the map
-  // clamps panning to them, and a world-spanning maxBounds is a MapLibre
-  // construction crash (see src/map/viewport.js).
-  view.setInt32(102, -1.0e7, true); // min lon (E7)
-  view.setInt32(106, 51.0e7, true); // min lat
-  view.setInt32(110, 0.5e7, true); // max lon
-  view.setInt32(114, 52.0e7, true); // max lat
+  // Regional bounds, like a real `pmtiles extract`: the map clamps panning to
+  // them, and a world-spanning maxBounds is a MapLibre construction crash
+  // (see src/map/viewport.js).
+  view.setInt32(102, bounds.minLon * 1e7, true); // min lon (E7)
+  view.setInt32(106, bounds.minLat * 1e7, true); // min lat
+  view.setInt32(110, bounds.maxLon * 1e7, true); // max lon
+  view.setInt32(114, bounds.maxLat * 1e7, true); // max lat
   header[118] = 0; // center zoom
-  view.setInt32(119, -0.14e7, true); // center lon — the e2e's faked London fix
-  view.setInt32(123, 51.5e7, true); // center lat
+  view.setInt32(119, center.lon * 1e7, true); // center lon
+  view.setInt32(123, center.lat * 1e7, true); // center lat
 
   const archive = new Uint8Array(tileDataOffset + tile.length);
   archive.set(header, 0);
@@ -129,7 +147,10 @@ function buildArchive() {
   return archive;
 }
 
-const archive = buildArchive();
 await mkdir(new URL('../e2e/fixtures/', import.meta.url), { recursive: true });
-await writeFile(OUT_PATH, archive);
-console.log(`wrote ${OUT_PATH} (${archive.length} bytes)`);
+for (const fixture of FIXTURES) {
+  const archive = buildArchive(fixture);
+  const path = fileURLToPath(new URL(`../e2e/fixtures/${fixture.file}`, import.meta.url));
+  await writeFile(path, archive);
+  console.log(`wrote ${path} (${archive.length} bytes)`);
+}

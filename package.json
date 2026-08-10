@@ -6,6 +6,8 @@
   "description": "Offline-first field survey PWA — GPS, compass and photo observations synced to GitHub.",
   "scripts": {
     "dev": "vite",
+    "basemaps:manifest": "node scripts/build-basemap-manifest.mjs",
+    "prebuild": "node scripts/build-basemap-manifest.mjs",
     "build": "vite build",
     "preview": "vite preview",
     "preview:mobile": "cross-env MOBILE_HTTPS=true vite preview --host",
