@@ -399,8 +399,6 @@ describe('CapturePage — session history link and export', () => {
 });
 
 describe('CapturePage — map panel', () => {
-  const PRESENT_BASEMAP = { state: 'present', sizeBytes: 1, downloadedAt: 'x', etag: '"v1"' };
-
   test('feeds the live fix and saved observations to the map', async () => {
     const observations = [{ id: 'obs-1', lat: 51.5, lon: -0.14, synced: false }];
     const adapter = {
@@ -420,11 +418,10 @@ describe('CapturePage — map panel', () => {
         service=${service}
         sensors=${sensors}
         downscale=${vi.fn()}
-        basemap=${PRESENT_BASEMAP}
+        activeRegionId=${'south'}
+        statusKnown=${true}
         createMap=${createMap}
-        downloadBasemap=${vi.fn()}
         visible=${true}
-        online=${true}
       />`,
     );
     await screen.findByText('Ashton Keynes');
@@ -434,26 +431,63 @@ describe('CapturePage — map panel', () => {
     await waitFor(() => expect(adapter.setObservations).toHaveBeenCalledWith(observations));
   });
 
-  test('offers the basemap download when no archive is stored', async () => {
+  test('offers the region covering the current fix when a different one is in use', async () => {
+    // The fix only exists here, inside the sensor hook, so this is where the
+    // suggestion has to be worked out.
+    const regions = [
+      { id: 'south', name: 'South', bounds: [-1, 51, 0.5, 52], downloaded: true },
+      { id: 'north', name: 'North Wiltshire', bounds: [-2.5, 53, -1, 54], downloaded: true },
+    ];
     const service = createFakeService({ openSession: OPEN_SESSION });
-    const { sensors } = createFakeSensors();
+    const { sensors, pushPosition } = createFakeSensors();
 
     render(
       html`<${CapturePage}
         service=${service}
         sensors=${sensors}
         downscale=${vi.fn()}
-        basemap=${{ state: 'absent' }}
-        createMap=${vi.fn()}
-        downloadBasemap=${vi.fn()}
+        activeRegionId=${'south'}
+        statusKnown=${true}
+        regions=${regions}
+        createMap=${vi.fn().mockResolvedValue({
+          ready: Promise.resolve(),
+          setPosition: vi.fn(),
+          setObservations: vi.fn(),
+          centreOn: vi.fn(),
+          resize: vi.fn(),
+          destroy: vi.fn(),
+        })}
         visible=${true}
-        online=${true}
+      />`,
+    );
+    await screen.findByText('Ashton Keynes');
+
+    pushPosition({ lat: 53.8, lon: -1.55, accuracyM: 8, fixAt: 'x', fixAtMs: 1 });
+
+    expect(await screen.findByText(/North Wiltshire/)).toBeInTheDocument();
+  });
+
+  test('offers the region picker when no region is active', async () => {
+    const service = createFakeService({ openSession: OPEN_SESSION });
+    const { sensors } = createFakeSensors();
+    const onOpenPicker = vi.fn();
+
+    render(
+      html`<${CapturePage}
+        service=${service}
+        sensors=${sensors}
+        downscale=${vi.fn()}
+        activeRegionId=${null}
+        statusKnown=${true}
+        createMap=${vi.fn()}
+        onOpenPicker=${onOpenPicker}
+        visible=${true}
       />`,
     );
 
-    expect(
-      await screen.findByRole('button', { name: /download offline map/i }),
-    ).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: /choose a region/i }));
+
+    expect(onOpenPicker).toHaveBeenCalled();
   });
 });
 

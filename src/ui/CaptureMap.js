@@ -12,42 +12,42 @@ import {
 // arrives as the injected `createMap` factory (main.js loads the adapter
 // dynamically), which is what keeps this testable with a fake adapter and
 // keeps maplibre out of the UI layer.
-
-function formatMegabytes(bytes) {
-  if (!bytes) return null;
-  return `${Math.round(bytes / 1_000_000)} MB`;
-}
+//
+// Choosing and downloading regions lives in BasemapPicker; this panel only
+// shows the active one, offers a way to the picker, and relays a suggestion.
 
 export function CaptureMap({
-  basemap,
+  activeRegionId,
+  statusKnown,
+  suggestion,
   createMap,
-  downloadBasemap,
+  onSwitchRegion,
+  onDismissSuggestion,
+  onOpenPicker,
   position,
   observations,
   visible,
-  online,
-  remoteSizeBytes,
 }) {
   const containerRef = useRef(null);
   const adapterRef = useRef(null);
   const [adapterReady, setAdapterReady] = useState(false);
   const [follow, setFollow] = useState(createFollowState);
-  const [phase, setPhase] = useState('idle'); // idle | downloading | error
-  const [progress, setProgress] = useState(null);
   const [error, setError] = useState(null);
 
-  const present = basemap?.state === 'present';
-
   useEffect(() => {
-    if (!present || adapterRef.current || !containerRef.current) return undefined;
+    if (!activeRegionId || !containerRef.current) return undefined;
     let cancelled = false;
 
+    // Switching region rebuilds from scratch: a MapLibre map is bound to the
+    // archive it was constructed with.
+    setError(null);
     createMap({
       container: containerRef.current,
       onUserPan: () => setFollow((current) => onUserPan(current)),
     })
       .then((adapter) => {
-        // The view can be torn down while the renderer is still starting.
+        // The region can change again — or the view be torn down — while the
+        // renderer is still starting.
         if (cancelled) {
           adapter.destroy();
           return;
@@ -61,17 +61,13 @@ export function CaptureMap({
 
     return () => {
       cancelled = true;
-    };
-  }, [present]);
-
-  // Unmount only — the map outlives every prop change.
-  useEffect(
-    () => () => {
+      // Tear the outgoing map down here rather than on unmount alone, so
+      // switching region releases the archive it was holding.
       adapterRef.current?.destroy();
       adapterRef.current = null;
-    },
-    [],
-  );
+      setAdapterReady(false);
+    };
+  }, [activeRegionId]);
 
   useEffect(() => {
     const adapter = adapterRef.current;
@@ -103,55 +99,12 @@ export function CaptureMap({
     });
   }
 
-  async function handleDownload() {
-    setPhase('downloading');
-    setError(null);
-    setProgress(null);
-    try {
-      await downloadBasemap((update) => setProgress(update));
-      setPhase('idle');
-    } catch (downloadError) {
-      setPhase('error');
-      setError(downloadError.message || 'Could not download the offline map');
-    }
-  }
+  if (!statusKnown) return null;
 
-  if (!present) {
-    // 'unknown' says nothing and offers nothing: a failed status read must
-    // not nag the surveyor to re-download an archive they may already have.
+  if (!activeRegionId) {
     return html`
       <div class="capture-map capture-map-placeholder">
-        ${
-          phase === 'downloading'
-            ? html`<p class="capture-map-progress">${describeProgress(progress)}</p>`
-            : null
-        }
-        ${
-          phase === 'error'
-            ? html`<p class="capture-map-error">
-                ${error}
-                <button type="button" onClick=${handleDownload}>Try again</button>
-              </p>`
-            : null
-        }
-        ${
-          phase === 'idle' && basemap?.state === 'absent'
-            ? online
-              ? html`<button type="button" onClick=${handleDownload}>
-                  Download offline
-                  map${
-                    remoteSizeBytes
-                      ? html` <span class="capture-map-size"
-                          >(${formatMegabytes(remoteSizeBytes)})</span
-                        >`
-                      : null
-                  }
-                </button>`
-              : html`<p class="capture-map-note">
-                  Offline map not downloaded — connect to download it
-                </p>`
-            : null
-        }
+        <button type="button" onClick=${onOpenPicker}>Choose a region</button>
       </div>
     `;
   }
@@ -160,21 +113,27 @@ export function CaptureMap({
     <div class="capture-map">
       <div class="capture-map-canvas" ref=${containerRef}></div>
       ${
+        suggestion
+          ? html`<p class="capture-map-suggestion">
+              You appear to be in ${suggestion.name}.
+              <button type="button" onClick=${() => onSwitchRegion(suggestion.id)}>
+                Switch to it
+              </button>
+              <button type="button" onClick=${() => onDismissSuggestion(suggestion.id)}>
+                Not now
+              </button>
+            </p>`
+          : null
+      }
+      ${
         showsRecentre(follow)
           ? html`<button type="button" class="capture-map-recentre" onClick=${handleRecentre}>
               Re-centre
             </button>`
           : null
       }
+      <button type="button" class="capture-map-change" onClick=${onOpenPicker}>Change map</button>
       ${error ? html`<p class="capture-map-error">${error}</p>` : null}
     </div>
   `;
-}
-
-function describeProgress(progress) {
-  if (!progress) return 'Downloading offline map…';
-  const { receivedBytes, totalBytes } = progress;
-  const received = formatMegabytes(receivedBytes) ?? '0 MB';
-  if (!totalBytes) return `Downloading offline map — ${received}`;
-  return `Downloading offline map — ${Math.round((receivedBytes / totalBytes) * 100)}%`;
 }

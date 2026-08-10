@@ -3,11 +3,8 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/preact';
 import { html } from 'htm/preact';
 import { CaptureMap } from './CaptureMap.js';
 
-const PRESENT = { state: 'present', sizeBytes: 24_000_000, downloadedAt: 'x', etag: '"v1"' };
-const ABSENT = { state: 'absent', sizeBytes: null, downloadedAt: null, etag: null };
-const UNKNOWN = { state: 'unknown', sizeBytes: null, downloadedAt: null, etag: null };
-
 const POSITION = { lat: 51.5, lon: -0.14, accuracyM: 8 };
+const SUGGESTION = { id: 'north', name: 'North Wiltshire' };
 
 function fakeAdapter() {
   return {
@@ -20,235 +17,170 @@ function fakeAdapter() {
   };
 }
 
-function renderMap({
-  basemap = PRESENT,
-  adapter = fakeAdapter(),
-  createMap,
-  downloadBasemap = vi.fn().mockResolvedValue(undefined),
-  position = null,
-  observations = [],
-  visible = true,
-  online = true,
-  remoteSizeBytes = null,
-} = {}) {
-  const create = createMap ?? vi.fn().mockResolvedValue(adapter);
-  const result = render(
-    html`<${CaptureMap}
-      basemap=${basemap}
-      createMap=${create}
-      downloadBasemap=${downloadBasemap}
-      position=${position}
-      observations=${observations}
-      visible=${visible}
-      online=${online}
-      remoteSizeBytes=${remoteSizeBytes}
-    />`,
-  );
-  return { ...result, adapter, createMap: create, downloadBasemap };
+function props(overrides = {}) {
+  return {
+    activeRegionId: 'south',
+    statusKnown: true,
+    suggestion: null,
+    createMap: vi.fn().mockResolvedValue(fakeAdapter()),
+    onSwitchRegion: vi.fn(),
+    onDismissSuggestion: vi.fn(),
+    onOpenPicker: vi.fn(),
+    position: null,
+    observations: [],
+    visible: true,
+    ...overrides,
+  };
 }
 
-describe('CaptureMap — archive absent', () => {
-  test('offers the download with its size when online', async () => {
-    renderMap({ basemap: ABSENT, remoteSizeBytes: 24_000_000 });
+function renderMap(overrides = {}) {
+  const p = props(overrides);
+  const result = render(html`<${CaptureMap} ...${p} />`);
+  const rerender = (next = {}) => result.rerender(html`<${CaptureMap} ...${{ ...p, ...next }} />`);
+  return { ...result, ...p, rerender };
+}
 
-    const button = await screen.findByRole('button', { name: /download offline map/i });
-    expect(button).toBeInTheDocument();
-    expect(screen.getByText(/24 MB/)).toBeInTheDocument();
+describe('CaptureMap — no map to show', () => {
+  test('renders nothing at all while the stored regions are still unknown', () => {
+    // Same tri-state discipline as the offline banner: "cannot tell yet" must
+    // not be shown as "you have no map".
+    const { createMap, container } = renderMap({ statusKnown: false, activeRegionId: null });
+
+    expect(container.querySelector('.capture-map-canvas')).toBeNull();
+    expect(screen.queryByRole('button', { name: /choose a region/i })).not.toBeInTheDocument();
+    expect(createMap).not.toHaveBeenCalled();
   });
 
-  test('offers the download without a size when the size is unknown', async () => {
-    renderMap({ basemap: ABSENT, remoteSizeBytes: null });
+  test('offers the picker when no region is active', () => {
+    const { createMap, onOpenPicker } = renderMap({ activeRegionId: null });
 
-    expect(
-      await screen.findByRole('button', { name: /download offline map/i }),
-    ).toBeInTheDocument();
-    expect(screen.queryByText(/\bMB\b/)).not.toBeInTheDocument();
-  });
+    fireEvent.click(screen.getByRole('button', { name: /choose a region/i }));
 
-  test('explains rather than offering an impossible download when offline', async () => {
-    renderMap({ basemap: ABSENT, online: false });
-
-    expect(await screen.findByText(/connect to download/i)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /download offline map/i })).not.toBeInTheDocument();
-  });
-
-  test('never builds a map without an archive', () => {
-    const { createMap } = renderMap({ basemap: ABSENT });
+    expect(onOpenPicker).toHaveBeenCalled();
     expect(createMap).not.toHaveBeenCalled();
   });
 });
 
-describe('CaptureMap — archive status unknown', () => {
-  test('says nothing and offers nothing: unknown is not absent', async () => {
-    // A failed read must not nag the surveyor to re-download tens of
-    // megabytes they may well already have.
-    const { createMap } = renderMap({ basemap: UNKNOWN });
-
-    expect(screen.queryByRole('button', { name: /download offline map/i })).not.toBeInTheDocument();
-    expect(screen.queryByText(/connect to download/i)).not.toBeInTheDocument();
-    expect(createMap).not.toHaveBeenCalled();
-  });
-});
-
-describe('CaptureMap — downloading', () => {
-  test('shows progress while the archive downloads', async () => {
-    const downloadBasemap = vi.fn((onProgress) => {
-      onProgress({ receivedBytes: 12_000_000, totalBytes: 24_000_000 });
-      return new Promise(() => {}); // stays in flight
-    });
-    renderMap({ basemap: ABSENT, downloadBasemap, remoteSizeBytes: 24_000_000 });
-
-    fireEvent.click(await screen.findByRole('button', { name: /download offline map/i }));
-
-    expect(await screen.findByText(/50%/)).toBeInTheDocument();
-  });
-
-  test('reports progress without a percentage when the total is unknown', async () => {
-    const downloadBasemap = vi.fn((onProgress) => {
-      onProgress({ receivedBytes: 3_000_000, totalBytes: null });
-      return new Promise(() => {});
-    });
-    renderMap({ basemap: ABSENT, downloadBasemap });
-
-    fireEvent.click(await screen.findByRole('button', { name: /download offline map/i }));
-
-    expect(await screen.findByText(/3 MB/)).toBeInTheDocument();
-    expect(screen.queryByText(/%/)).not.toBeInTheDocument();
-  });
-
-  test('a failed download shows an error and lets the surveyor retry', async () => {
-    const downloadBasemap = vi.fn().mockRejectedValue(new Error('connection lost'));
-    renderMap({ basemap: ABSENT, downloadBasemap });
-
-    fireEvent.click(await screen.findByRole('button', { name: /download offline map/i }));
-
-    expect(await screen.findByText(/connection lost/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument();
-  });
-});
-
-describe('CaptureMap — archive present', () => {
-  test('builds the map exactly once', async () => {
+describe('CaptureMap — showing a region', () => {
+  test('builds the map once for the active region', async () => {
     const { createMap, rerender } = renderMap();
     await waitFor(() => expect(createMap).toHaveBeenCalledTimes(1));
 
-    rerender(
-      html`<${CaptureMap}
-        basemap=${PRESENT}
-        createMap=${createMap}
-        downloadBasemap=${vi.fn()}
-        position=${POSITION}
-        observations=${[]}
-        visible=${true}
-        online=${true}
-      />`,
-    );
+    rerender({ position: POSITION });
 
     await waitFor(() => expect(createMap).toHaveBeenCalledTimes(1));
   });
 
-  test('pushes the current fix to the map and centres on it', async () => {
-    const adapter = fakeAdapter();
-    const { rerender, createMap, downloadBasemap } = renderMap({ adapter });
-    await waitFor(() => expect(createMap).toHaveBeenCalled());
+  test('switching region tears the old map down and builds the new one', async () => {
+    const south = fakeAdapter();
+    const north = fakeAdapter();
+    const createMap = vi.fn().mockResolvedValueOnce(south).mockResolvedValueOnce(north);
+    const { rerender } = renderMap({ createMap });
+    await waitFor(() => expect(createMap).toHaveBeenCalledTimes(1));
 
-    rerender(
-      html`<${CaptureMap}
-        basemap=${PRESENT}
-        createMap=${createMap}
-        downloadBasemap=${downloadBasemap}
-        position=${POSITION}
-        observations=${[]}
-        visible=${true}
-        online=${true}
-      />`,
-    );
+    rerender({ activeRegionId: 'north' });
 
-    await waitFor(() => expect(adapter.setPosition).toHaveBeenCalledWith(POSITION));
-    expect(adapter.centreOn).toHaveBeenCalledWith(POSITION);
+    await waitFor(() => expect(createMap).toHaveBeenCalledTimes(2));
+    expect(south.destroy).toHaveBeenCalled();
   });
 
-  test('pushes saved observations to the map', async () => {
-    const adapter = fakeAdapter();
+  test('the replacement map is given the current fix and observations', async () => {
+    // adapterReady has to reset on rebuild, or the new map comes up blank
+    // while the old one had everything.
+    const south = fakeAdapter();
+    const north = fakeAdapter();
+    const createMap = vi.fn().mockResolvedValueOnce(south).mockResolvedValueOnce(north);
     const observations = [{ id: 'obs-1', lat: 51.5, lon: -0.14, synced: false }];
-    const { rerender, createMap, downloadBasemap } = renderMap({ adapter });
+    const { rerender } = renderMap({ createMap, position: POSITION, observations });
+    await waitFor(() => expect(south.setPosition).toHaveBeenCalledWith(POSITION));
+
+    rerender({ activeRegionId: 'north' });
+
+    await waitFor(() => expect(north.setPosition).toHaveBeenCalledWith(POSITION));
+    await waitFor(() => expect(north.setObservations).toHaveBeenCalledWith(observations));
+  });
+
+  test('offers a way back to the picker', async () => {
+    const { onOpenPicker, createMap } = renderMap();
     await waitFor(() => expect(createMap).toHaveBeenCalled());
 
-    rerender(
-      html`<${CaptureMap}
-        basemap=${PRESENT}
-        createMap=${createMap}
-        downloadBasemap=${downloadBasemap}
-        position=${null}
-        observations=${observations}
-        visible=${true}
-        online=${true}
-      />`,
-    );
+    fireEvent.click(screen.getByRole('button', { name: /change map/i }));
 
-    await waitFor(() => expect(adapter.setObservations).toHaveBeenCalledWith(observations));
+    expect(onOpenPicker).toHaveBeenCalled();
   });
 
   test('resizes when the capture view becomes visible again', async () => {
-    // CapturePage stays mounted while hidden, so the map is laid out at zero
-    // size until the surveyor comes back — without a resize it stays blank.
     const adapter = fakeAdapter();
-    const { rerender, createMap, downloadBasemap } = renderMap({ adapter, visible: false });
+    const createMap = vi.fn().mockResolvedValue(adapter);
+    const { rerender } = renderMap({ createMap, visible: false });
     await waitFor(() => expect(createMap).toHaveBeenCalled());
     adapter.resize.mockClear();
 
-    rerender(
-      html`<${CaptureMap}
-        basemap=${PRESENT}
-        createMap=${createMap}
-        downloadBasemap=${downloadBasemap}
-        position=${null}
-        observations=${[]}
-        visible=${true}
-        online=${true}
-      />`,
-    );
+    rerender({ visible: true });
 
     await waitFor(() => expect(adapter.resize).toHaveBeenCalled());
   });
 
   test('tears the map down on unmount', async () => {
     const adapter = fakeAdapter();
-    const { unmount, createMap } = renderMap({ adapter });
+    const createMap = vi.fn().mockResolvedValue(adapter);
+    const { unmount } = renderMap({ createMap });
     await waitFor(() => expect(createMap).toHaveBeenCalled());
 
     unmount();
 
     await waitFor(() => expect(adapter.destroy).toHaveBeenCalled());
   });
+
+  test('a map that fails to open reports it, and switching region clears the message', async () => {
+    const createMap = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('archive unreadable'))
+      .mockResolvedValueOnce(fakeAdapter());
+    const { rerender } = renderMap({ createMap });
+    await screen.findByText(/archive unreadable/);
+
+    rerender({ activeRegionId: 'north' });
+
+    await waitFor(() => expect(screen.queryByText(/archive unreadable/)).not.toBeInTheDocument());
+  });
 });
 
-describe('CaptureMap — follow mode', () => {
-  async function renderWithFix() {
-    const adapter = fakeAdapter();
-    const rendered = renderMap({ adapter, position: POSITION });
-    await waitFor(() => expect(adapter.setPosition).toHaveBeenCalledWith(POSITION));
-    return { ...rendered, adapter };
-  }
+describe('CaptureMap — region suggestion', () => {
+  test('offers the region covering the fix, naming it', async () => {
+    const { createMap } = renderMap({ suggestion: SUGGESTION });
+    await waitFor(() => expect(createMap).toHaveBeenCalled());
 
-  test('no re-centre button while the map is following', async () => {
-    await renderWithFix();
-    expect(screen.queryByRole('button', { name: /re-?centre/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/North Wiltshire/)).toBeInTheDocument();
   });
 
-  test('panning offers re-centre, and tapping it centres on the fix again', async () => {
-    const { adapter, createMap } = await renderWithFix();
-    const { onUserPan } = createMap.mock.calls[0][0];
-    adapter.centreOn.mockClear();
+  test('does not switch on its own — only the confirming tap switches', async () => {
+    // The whole point of the offer: a surveyor mid-observation must never
+    // have the map change under them.
+    const { createMap, onSwitchRegion } = renderMap({ suggestion: SUGGESTION });
+    await waitFor(() => expect(createMap).toHaveBeenCalledTimes(1));
 
-    onUserPan();
+    expect(onSwitchRegion).not.toHaveBeenCalled();
+    expect(createMap).toHaveBeenCalledTimes(1);
 
-    const button = await screen.findByRole('button', { name: /re-?centre/i });
-    fireEvent.click(button);
+    fireEvent.click(screen.getByRole('button', { name: /^switch/i }));
 
-    await waitFor(() => expect(adapter.centreOn).toHaveBeenCalledWith(POSITION));
-    await waitFor(() =>
-      expect(screen.queryByRole('button', { name: /re-?centre/i })).not.toBeInTheDocument(),
-    );
+    expect(onSwitchRegion).toHaveBeenCalledWith('north');
+  });
+
+  test('Not now dismisses the offer and leaves the map alone', async () => {
+    const { onDismissSuggestion, onSwitchRegion } = renderMap({ suggestion: SUGGESTION });
+
+    fireEvent.click(await screen.findByRole('button', { name: /not now/i }));
+
+    expect(onDismissSuggestion).toHaveBeenCalledWith('north');
+    expect(onSwitchRegion).not.toHaveBeenCalled();
+  });
+
+  test('no banner when there is nothing to suggest', async () => {
+    const { createMap } = renderMap({ suggestion: null });
+    await waitFor(() => expect(createMap).toHaveBeenCalled());
+
+    expect(screen.queryByRole('button', { name: /^switch/i })).not.toBeInTheDocument();
   });
 });

@@ -94,20 +94,56 @@ describe('basemapService.listAvailable', () => {
     expect(regions[0].bounds).toEqual([-2.2, 51.4, -1.6, 51.8]);
   });
 
-  test('falls back to the downloaded regions when the manifest cannot be reached', async () => {
-    // The manifest is precached, so this is the pathological case rather
-    // than plain offline — but losing it must not hide maps the surveyor
-    // already has on the device.
-    const fetchFn = routingFetch({});
-    const { db, service } = await makeService('service-list-offline', { fetchFn });
-    await putBasemap(db, { id: 'cotswolds', arrayBuffer: bytes('x').buffer, sizeBytes: 1 });
+  test('keeps a downloaded region usable when the manifest cannot be reached', async () => {
+    // Losing the manifest must not hide maps the surveyor already has. It
+    // must also not lose their names or bounds: bounds are what the
+    // position-based suggestion needs, and offline is exactly when it counts.
+    const fetchFn = routingFetch({
+      [MANIFEST_URL]: () => manifestResponse([NORTH_WILTSHIRE]),
+      'north-wiltshire.pmtiles': () => streamingResponse([bytes('archive')]),
+    });
+    const { service } = await makeService('service-list-offline', { fetchFn });
+    await service.download('north-wiltshire');
 
+    // Now the network is gone entirely.
+    fetchFn.mockImplementation(() => Promise.reject(new TypeError('Failed to fetch')));
     const { regions, manifestAvailable } = await service.listAvailable();
 
     expect(manifestAvailable).toBe(false);
     expect(regions).toEqual([
-      expect.objectContaining({ id: 'cotswolds', downloaded: true, bounds: null }),
+      expect.objectContaining({
+        id: 'north-wiltshire',
+        name: 'North Wiltshire',
+        bounds: [-2.2, 51.4, -1.6, 51.8],
+        downloaded: true,
+      }),
     ]);
+  });
+
+  test('falls back to bare ids for an archive stored before its metadata was known', async () => {
+    const fetchFn = routingFetch({});
+    const { db, service } = await makeService('service-list-no-meta', { fetchFn });
+    await putBasemap(db, { id: 'cotswolds', arrayBuffer: bytes('x').buffer, sizeBytes: 1 });
+
+    const { regions } = await service.listAvailable();
+
+    expect(regions).toEqual([
+      expect.objectContaining({ id: 'cotswolds', name: 'cotswolds', downloaded: true }),
+    ]);
+  });
+
+  test('forgets a region’s metadata when it is removed', async () => {
+    const fetchFn = routingFetch({
+      [MANIFEST_URL]: () => manifestResponse([NORTH_WILTSHIRE]),
+      'north-wiltshire.pmtiles': () => streamingResponse([bytes('archive')]),
+    });
+    const { service } = await makeService('service-forget-meta', { fetchFn });
+    await service.download('north-wiltshire');
+    await service.remove('north-wiltshire');
+
+    fetchFn.mockImplementation(() => Promise.reject(new TypeError('Failed to fetch')));
+
+    expect((await service.listAvailable()).regions).toEqual([]);
   });
 
   test('reports an empty list rather than throwing when there is nothing at all', async () => {

@@ -15,6 +15,7 @@ import { shareOrDownload } from './export/share.js';
 import { subscribeOfflineStatus } from './app/offlineStatus.js';
 import { createBasemapService } from './app/basemapService.js';
 import { deleteLegacyBasemap } from './storage/basemapStore.js';
+import { chooseActive } from './map/basemapSelection.js';
 import { glyphsUrl } from './map/glyphs.js';
 import './style.css';
 
@@ -84,7 +85,7 @@ async function main() {
   // at startup. The split chunk is still precached, so the import resolves
   // offline (same rule as photo/encode.js: browser-only, main.js only).
   async function createMap({ container: mapContainer, onUserPan }) {
-    const archiveBuffer = await basemapService.loadArchive(state.activeBasemapId);
+    const archiveBuffer = await basemapService.loadArchive(state.activeRegionId);
     if (!archiveBuffer) throw new Error('No offline map archive stored on this device');
     const { createMapAdapter } = await import('./map/mapAdapter.js');
     return createMapAdapter({
@@ -101,32 +102,62 @@ async function main() {
   // Which regions exist, which are on the device, and which one the map
   // should open. Swallows its own failures: this runs at startup, and a
   // failed read must not land on the fatal-error banner over a working
-  // capture page. 'unknown' rather than 'absent' — see the state comment.
+  // capture page. statusKnown stays false in that case — "cannot tell" is
+  // not "you have no map".
   async function refreshBasemapState() {
     try {
-      const [{ regions }, selectedId] = await Promise.all([
+      const [{ regions, manifestAvailable }, selectedId] = await Promise.all([
         basemapService.listAvailable(),
         basemapService.getSelectedId(),
       ]);
-      const downloaded = regions.filter((region) => region.downloaded);
-      const active = downloaded.find((region) => region.id === selectedId) ?? downloaded[0] ?? null;
-
-      state.basemapRegions = regions;
-      state.activeBasemapId = active?.id ?? null;
-      state.basemap = { state: active ? 'present' : 'absent' };
-      state.remoteSizeBytes = regions.find((region) => !region.downloaded)?.sizeBytes ?? null;
+      state.regions = regions;
+      state.manifestAvailable = manifestAvailable;
+      state.selectedRegionId = selectedId;
+      state.statusKnown = true;
+      applySelection();
     } catch {
-      state.basemap = { state: 'unknown' };
+      state.statusKnown = false;
+      renderApp();
     }
+  }
+
+  // Which region the map opens. The live fix isn't known here — it lives in
+  // the capture page's sensor hook — so the position-based *suggestion* is
+  // computed there; this is the remembered choice, or the only downloaded
+  // region, and never changes on its own.
+  function applySelection() {
+    const { activeId } = chooseActive({
+      regions: state.regions,
+      selectedId: state.selectedRegionId,
+    });
+    state.activeRegionId = activeId;
     renderApp();
   }
 
-  async function downloadBasemap(onProgress) {
-    const target = state.basemapRegions.find((region) => !region.downloaded);
-    if (!target) return;
-    await basemapService.download(target.id, onProgress);
-    await basemapService.select(target.id);
+  async function selectRegion(id) {
+    await basemapService.select(id);
+    state.selectedRegionId = id;
+    state.dismissedSuggestionId = null;
+    applySelection();
+  }
+
+  async function downloadRegion(id, onProgress) {
+    await basemapService.download(id, onProgress);
+    // First region downloaded becomes the one in use; later ones wait to be
+    // chosen, so a download never moves the map out from under anyone.
+    const hadNone = !state.activeRegionId;
     await refreshBasemapState();
+    if (hadNone) await selectRegion(id);
+  }
+
+  async function removeRegion(id) {
+    await basemapService.remove(id);
+    await refreshBasemapState();
+  }
+
+  function dismissSuggestion(id) {
+    state.dismissedSuggestionId = id;
+    applySelection();
   }
 
   const container = document.getElementById('app');
@@ -152,11 +183,15 @@ async function main() {
     // reason offlineStatus starts null: before the read resolves we cannot
     // tell, and claiming "no offline map" would offer a redundant
     // multi-megabyte download to someone who already has one.
-    basemap: { state: 'unknown' },
-    basemapRegions: [],
-    activeBasemapId: null,
+    // statusKnown false until the stored regions have actually been read:
+    // "cannot tell yet" must not render as "you have no map".
+    statusKnown: false,
+    regions: [],
+    manifestAvailable: false,
+    selectedRegionId: null,
+    activeRegionId: null,
+    dismissedSuggestionId: null,
     online: navigator.onLine,
-    remoteSizeBytes: null,
   };
 
   function renderApp() {
@@ -169,11 +204,17 @@ async function main() {
         offlineStatus=${state.offlineStatus}
         updateAvailable=${state.updateAvailable}
         onReload=${() => updateSW()}
-        basemap=${state.basemap}
+        activeRegionId=${state.activeRegionId}
+        statusKnown=${state.statusKnown}
+        dismissedSuggestionId=${state.dismissedSuggestionId}
+        regions=${state.regions}
+        manifestAvailable=${state.manifestAvailable}
         createMap=${createMap}
-        downloadBasemap=${downloadBasemap}
+        onSelectRegion=${selectRegion}
+        onDownloadRegion=${downloadRegion}
+        onRemoveRegion=${removeRegion}
+        onDismissSuggestion=${dismissSuggestion}
         online=${state.online}
-        remoteSizeBytes=${state.remoteSizeBytes}
       />`,
       container,
     );

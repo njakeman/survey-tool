@@ -4,15 +4,39 @@ import { test, expect } from '@playwright/test';
 
 // The recorded Phase 4 acceptance criterion: "map renders offline
 // immediately after a fresh install, no network at all"
-// (docs/ios-manual-checklist.md). Everything below it is unit-tested; this
-// is the only check that the download, the IndexedDB archive, the precached
-// glyphs and the service worker actually add up to a working offline map.
+// (docs/ios-manual-checklist.md), now across several regions. Everything
+// below this is unit-tested; this is the only check that the manifest, the
+// download, the IndexedDB archives, the precached glyphs and the service
+// worker actually add up to a working offline map.
 //
-// The archive is served from the committed fixture rather than a real
-// extract, so CI needs no multi-megabyte asset.
-const FIXTURE = readFileSync(
+// Archives come from the committed fixtures, so CI needs no real extract.
+const SOUTH = readFileSync(
   fileURLToPath(new URL('./fixtures/test-basemap.pmtiles', import.meta.url)),
 );
+const NORTH = readFileSync(
+  fileURLToPath(new URL('./fixtures/test-basemap-north.pmtiles', import.meta.url)),
+);
+
+const MANIFEST = [
+  {
+    id: 'test-south',
+    name: 'Test South',
+    url: 'basemaps/test-south.pmtiles',
+    sizeBytes: SOUTH.byteLength,
+    bounds: [-1, 51, 0.5, 52],
+    minZoom: 0,
+    maxZoom: 0,
+  },
+  {
+    id: 'test-north',
+    name: 'Test North',
+    url: 'basemaps/test-north.pmtiles',
+    sizeBytes: NORTH.byteLength,
+    bounds: [-2.5, 53, -1, 54],
+    minZoom: 0,
+    maxZoom: 0,
+  },
+];
 
 test.describe('offline basemap', () => {
   test.skip(
@@ -20,21 +44,9 @@ test.describe('offline basemap', () => {
     'setOffline does not propagate to the service worker target on WebKit at this Playwright version',
   );
 
-  const MANIFEST = [
-    {
-      id: 'test-region',
-      name: 'Test Region',
-      url: 'basemaps/test-region.pmtiles',
-      sizeBytes: FIXTURE.byteLength,
-      bounds: [-1, 51, 0.5, 52],
-      minZoom: 0,
-      maxZoom: 0,
-    },
-  ];
-
-  async function serveArchive(context) {
+  async function serveRegions(context) {
     // Routed before goto: the app reads the manifest at startup to decide
-    // what the map panel offers.
+    // what the picker offers.
     await context.route('**/basemaps/manifest.json', (route) =>
       route.fulfill({
         status: 200,
@@ -42,24 +54,41 @@ test.describe('offline basemap', () => {
         body: JSON.stringify(MANIFEST),
       }),
     );
-    await context.route('**/basemaps/*.pmtiles', (route) =>
+    await context.route('**/basemaps/*.pmtiles', (route) => {
+      const body = route.request().url().includes('north') ? NORTH : SOUTH;
       route.fulfill({
         status: 200,
         contentType: 'application/octet-stream',
         headers: { etag: '"fixture-v1"' },
-        body: FIXTURE,
-      }),
+        body,
+      });
+    });
+  }
+
+  function openPicker(page) {
+    return page.getByRole('button', { name: /choose a region|change map/i }).click();
+  }
+
+  // Downloading leaves you in the picker — only choosing a region already on
+  // the device closes it — so the row is waited on rather than the map.
+  async function downloadRegion(page, name) {
+    await page.getByRole('button', { name: new RegExp(`^${name}`) }).click();
+    await expect(page.getByRole('button', { name: new RegExp(`^${name}`) })).toContainText(
+      /in use|on this device/i,
+      { timeout: 20_000 },
     );
   }
 
-  test('downloads once online, then renders with the network cut', async ({ page, context }) => {
-    await serveArchive(context);
+  test('downloads a region, then renders it with the network cut', async ({ page, context }) => {
+    await serveRegions(context);
     await page.goto('/');
     await page.waitForFunction(() => navigator.serviceWorker.controller !== null, null, {
       timeout: 15_000,
     });
 
-    await page.getByRole('button', { name: /download offline map/i }).click();
+    await openPicker(page);
+    await downloadRegion(page, 'Test South');
+    await page.getByRole('button', { name: /back to capture/i }).click();
     await expect(page.locator('[data-map-loaded="true"]')).toBeAttached({ timeout: 20_000 });
 
     // Nothing may reach the network from here on: the archive must come from
@@ -75,18 +104,43 @@ test.describe('offline basemap', () => {
     expect(response.fromServiceWorker()).toBe(true);
     await expect(page.locator('[data-map-loaded="true"]')).toBeAttached({ timeout: 20_000 });
     await expect(page.locator('.capture-map canvas')).toBeVisible();
-    // The download offer must not reappear for an archive already held.
-    await expect(page.getByRole('button', { name: /download offline map/i })).toHaveCount(0);
   });
 
-  test('an install with no archive says so instead of showing a broken map', async ({
+  test('holds two regions and switches between them with no network', async ({ page, context }) => {
+    await serveRegions(context);
+    await page.goto('/');
+    await page.waitForFunction(() => navigator.serviceWorker.controller !== null, null, {
+      timeout: 15_000,
+    });
+
+    await openPicker(page);
+    await downloadRegion(page, 'Test South');
+    await downloadRegion(page, 'Test North');
+    await page.getByRole('button', { name: /back to capture/i }).click();
+    await expect(page.locator('[data-map-loaded="true"]')).toBeAttached({ timeout: 20_000 });
+
+    await context.setOffline(true);
+    await context.route('**/*', (route) => route.abort('internetdisconnected'));
+    await page.reload();
+    await expect(page.locator('[data-map-loaded="true"]')).toBeAttached({ timeout: 20_000 });
+
+    // Both are on the device now, so switching is a local operation.
+    await page.getByRole('button', { name: /change map/i }).click();
+    await expect(page.getByRole('button', { name: /^Test South/ })).toBeVisible();
+    await page.getByRole('button', { name: /^Test South/ }).click();
+
+    await expect(page.locator('[data-map-loaded="true"]')).toBeAttached({ timeout: 20_000 });
+    await expect(page.locator('.capture-map canvas')).toBeVisible();
+  });
+
+  test('an install with no region says so instead of showing a broken map', async ({
     page,
     context,
   }) => {
-    await serveArchive(context);
+    await serveRegions(context);
     await page.goto('/');
 
-    await expect(page.getByRole('button', { name: /download offline map/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /choose a region/i })).toBeVisible();
     await expect(page.locator('.capture-map canvas')).toHaveCount(0);
   });
 });

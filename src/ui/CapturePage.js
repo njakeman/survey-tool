@@ -8,6 +8,7 @@ import { PhotoField } from './PhotoField.js';
 import { SaveButton } from './SaveButton.js';
 import { ObservationsTable } from './ObservationsTable.js';
 import { CaptureMap } from './CaptureMap.js';
+import { chooseActive } from '../map/basemapSelection.js';
 
 function todayDateString() {
   return new Date().toISOString().slice(0, 10);
@@ -24,12 +25,15 @@ export function CapturePage({
   onOpenProbe,
   onOpenHistory,
   offlineStatus,
-  basemap,
+  activeRegionId,
+  statusKnown,
+  regions,
+  dismissedSuggestionId,
   createMap,
-  downloadBasemap,
+  onSwitchRegion,
+  onDismissSuggestion,
+  onOpenPicker,
   visible,
-  online,
-  remoteSizeBytes,
 }) {
   const [session, setSession] = useState(null);
   const [observations, setObservations] = useState([]);
@@ -160,6 +164,22 @@ export function CapturePage({
     }
   }
 
+  // Worked out here because this is where the live fix is. Only ever an
+  // offer — CaptureMap renders it as a prompt and nothing switches until the
+  // surveyor taps.
+  const { suggestionId } = chooseActive({
+    regions: regions ?? [],
+    selectedId: activeRegionId,
+    position,
+  });
+  const suggestedRegion =
+    suggestionId && suggestionId !== dismissedSuggestionId
+      ? (regions ?? []).find((region) => region.id === suggestionId)
+      : null;
+  const suggestion = suggestedRegion
+    ? { id: suggestedRegion.id, name: suggestedRegion.name }
+    : null;
+
   const disabledReason = !session
     ? 'start a session first'
     : !position
@@ -185,14 +205,16 @@ export function CapturePage({
         onEnableCompass=${enableCompass}
       />
       <${CaptureMap}
-        basemap=${basemap}
+        activeRegionId=${activeRegionId}
+        statusKnown=${statusKnown}
+        suggestion=${suggestion}
         createMap=${createMap}
-        downloadBasemap=${downloadBasemap}
+        onSwitchRegion=${onSwitchRegion}
+        onDismissSuggestion=${onDismissSuggestion}
+        onOpenPicker=${onOpenPicker}
         position=${position}
         observations=${observations}
         visible=${visible}
-        online=${online}
-        remoteSizeBytes=${remoteSizeBytes}
       />
       <label>
         Note

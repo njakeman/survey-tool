@@ -34,11 +34,17 @@ function renderApp(overrides = {}) {
       offlineStatus=${overrides.offlineStatus}
       updateAvailable=${overrides.updateAvailable}
       onReload=${overrides.onReload}
-      basemap=${overrides.basemap}
+      activeRegionId=${overrides.activeRegionId ?? null}
+      statusKnown=${overrides.statusKnown ?? true}
+      suggestion=${overrides.suggestion ?? null}
+      regions=${overrides.regions ?? []}
+      manifestAvailable=${overrides.manifestAvailable ?? true}
       createMap=${overrides.createMap ?? vi.fn()}
-      downloadBasemap=${overrides.downloadBasemap ?? vi.fn()}
+      onSelectRegion=${overrides.onSelectRegion ?? vi.fn()}
+      onDownloadRegion=${overrides.onDownloadRegion ?? vi.fn()}
+      onRemoveRegion=${overrides.onRemoveRegion ?? vi.fn()}
+      onDismissSuggestion=${overrides.onDismissSuggestion ?? vi.fn()}
       online=${overrides.online}
-      remoteSizeBytes=${overrides.remoteSizeBytes}
     />`,
   );
 }
@@ -104,11 +110,23 @@ describe('App', () => {
   });
 
   test('threads the basemap props down to the capture view', async () => {
-    renderApp({ basemap: { state: 'absent' }, online: true });
+    renderApp({ activeRegionId: null, online: true });
 
-    expect(
-      await screen.findByRole('button', { name: /download offline map/i }),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /choose a region/i })).toBeInTheDocument();
+  });
+
+  test('the map panel opens the region picker, and Back returns to capture', async () => {
+    renderApp({
+      activeRegionId: null,
+      regions: [{ id: 'south', name: 'South Wiltshire', sizeBytes: 1, downloaded: true }],
+    });
+    await screen.findByRole('button', { name: /save observation/i });
+
+    fireEvent.click(screen.getByRole('button', { name: /choose a region/i }));
+    expect(await screen.findByText('Offline maps')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /back to capture/i }));
+    expect(await screen.findByRole('button', { name: /save observation/i })).toBeInTheDocument();
   });
 
   test('tells the map when the capture view is hidden, so it can remeasure on return', async () => {
@@ -121,11 +139,7 @@ describe('App', () => {
       destroy: vi.fn(),
     };
     const createMap = vi.fn().mockResolvedValue(adapter);
-    renderApp({
-      basemap: { state: 'present', sizeBytes: 1, downloadedAt: 'x', etag: '"v1"' },
-      createMap,
-      online: true,
-    });
+    renderApp({ activeRegionId: 'south', createMap, online: true });
     await screen.findByRole('button', { name: /save observation/i });
     await waitFor(() => expect(createMap).toHaveBeenCalled());
 

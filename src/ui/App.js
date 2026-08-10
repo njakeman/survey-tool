@@ -3,6 +3,7 @@ import { useState } from 'preact/hooks';
 import { CapturePage } from './CapturePage.js';
 import { SessionHistoryPage } from './SessionHistoryPage.js';
 import { ProbePage } from '../probe/ProbePage.js';
+import { BasemapPicker } from './BasemapPicker.js';
 
 // The entire "router": in-memory view state, no hash, no history API. Hash
 // routing re-triggers iOS geolocation permission prompts on standalone
@@ -17,11 +18,17 @@ export function App({
   offlineStatus,
   updateAvailable,
   onReload,
-  basemap,
+  activeRegionId,
+  statusKnown,
+  dismissedSuggestionId,
+  regions,
+  manifestAvailable,
   createMap,
-  downloadBasemap,
+  onSelectRegion,
+  onDownloadRegion,
+  onRemoveRegion,
+  onDismissSuggestion,
   online,
-  remoteSizeBytes,
 }) {
   const [view, setView] = useState('capture');
 
@@ -46,6 +53,19 @@ export function App({
         onBack=${() => setView('capture')}
       />
     `;
+  } else if (view === 'basemaps') {
+    overlay = html`
+      <${BasemapPicker}
+        regions=${regions}
+        manifestAvailable=${manifestAvailable}
+        activeId=${activeRegionId}
+        online=${online}
+        onSelect=${onSelectRegion}
+        onDownload=${onDownloadRegion}
+        onRemove=${onRemoveRegion}
+        onBack=${() => setView('capture')}
+      />
+    `;
   }
 
   return html`
@@ -65,11 +85,14 @@ export function App({
           downscale=${downscale}
           exportSession=${exportSession}
           offlineStatus=${offlineStatus}
-          basemap=${basemap}
+          activeRegionId=${activeRegionId}
+          statusKnown=${statusKnown}
+          regions=${regions}
+          dismissedSuggestionId=${dismissedSuggestionId}
           createMap=${createMap}
-          downloadBasemap=${downloadBasemap}
-          online=${online}
-          remoteSizeBytes=${remoteSizeBytes}
+          onSwitchRegion=${onSelectRegion}
+          onDismissSuggestion=${onDismissSuggestion}
+          onOpenPicker=${() => setView('basemaps')}
           visible=${view === 'capture'}
           onOpenProbe=${() => setView('probe')}
           onOpenHistory=${() => setView('history')}

@@ -99,6 +99,91 @@ button {
   color: #b00;
 }
 
+/* Sits over the map, above the re-centre control, because it is a question
+   the surveyor should answer before carrying on. */
+.capture-map-suggestion {
+  position: absolute;
+  left: 0.5rem;
+  right: 0.5rem;
+  top: 0.5rem;
+  z-index: 2;
+  margin: 0;
+  padding: 0.5rem;
+  border-radius: 0.25rem;
+  background: #fffbe6;
+  border: 1px solid #d9c470;
+}
+
+.capture-map-change {
+  position: absolute;
+  left: 0.5rem;
+  bottom: 0.5rem;
+  z-index: 1;
+}
+
+/* Region picker. The first list styling in the app — session history is
+   still unstyled — so keep it plain and thumb-sized rather than clever. */
+.basemap-picker {
+  padding: 1rem;
+  max-width: 32rem;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.basemap-picker-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.basemap-picker-list > li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.basemap-picker-list > li > button:first-child {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  width: 100%;
+  text-align: left;
+}
+
+.basemap-picker-list > li > button[aria-current='true'] {
+  border-color: #2b2620;
+  border-width: 2px;
+  font-weight: 600;
+}
+
+.basemap-picker-name {
+  font-size: 1.05rem;
+}
+
+.basemap-picker-size,
+.basemap-picker-state {
+  font-size: 0.85rem;
+  opacity: 0.75;
+}
+
+.basemap-picker-error {
+  color: #b00;
+  margin: 0;
+}
+
+.basemap-picker-note,
+.basemap-picker-empty {
+  margin: 0;
+}
+
 .capture-map-note,
 .capture-map-progress {
   margin: 0;

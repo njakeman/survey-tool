@@ -19,6 +19,14 @@ import { getSetting, putSetting } from '../storage/settingsStore.js';
 
 const SELECTED_KEY = 'selectedBasemapId';
 
+// Each downloaded region's manifest entry, kept next to the selection rather
+// than on the archive record: the archive records hold multi-megabyte
+// buffers, and this has to be readable to render a list. Without it, losing
+// the manifest would cost the region's name and — worse — its bounds, which
+// is what the position-based suggestion needs, offline being exactly when
+// that matters.
+const REGION_META_KEY = 'basemapRegionMeta';
+
 function headerNumber(response, name) {
   const raw = response.headers.get(name);
   if (raw === null || raw === '') return null;
@@ -49,10 +57,19 @@ export function createBasemapService({ db, fetchFn, manifestUrl, baseUrl, nowIso
     }
   }
 
+  async function readRegionMeta() {
+    try {
+      return (await getSetting(db, REGION_META_KEY)) ?? {};
+    } catch {
+      return {};
+    }
+  }
+
   async function listAvailable() {
-    const [manifest, downloadedIds] = await Promise.all([
+    const [manifest, downloadedIds, meta] = await Promise.all([
       readManifest(),
       listDownloadedIds(db).catch(() => []),
+      readRegionMeta(),
     ]);
     const downloaded = new Set(downloadedIds);
 
@@ -67,6 +84,9 @@ export function createBasemapService({ db, fetchFn, manifestUrl, baseUrl, nowIso
           bounds: null,
           minZoom: null,
           maxZoom: null,
+          // Whatever was recorded when this region was downloaded — name and
+          // bounds included — overriding the bare-id fallback above.
+          ...(meta[id] ?? {}),
           downloaded: true,
         })),
       };
@@ -121,6 +141,20 @@ export function createBasemapService({ db, fetchFn, manifestUrl, baseUrl, nowIso
       sizeBytes: receivedBytes,
       downloadedAt: nowIso(),
     });
+
+    // Recorded now, while the manifest is in hand, so this region stays
+    // named and bounded even if the list can't be fetched again.
+    const meta = await readRegionMeta();
+    await putSetting(db, REGION_META_KEY, {
+      ...meta,
+      [id]: {
+        name: entry.name,
+        bounds: entry.bounds ?? null,
+        sizeBytes: entry.sizeBytes ?? receivedBytes,
+        minZoom: entry.minZoom ?? null,
+        maxZoom: entry.maxZoom ?? null,
+      },
+    });
   }
 
   async function loadArchive(id) {
@@ -145,6 +179,9 @@ export function createBasemapService({ db, fetchFn, manifestUrl, baseUrl, nowIso
 
   async function remove(id) {
     await deleteBasemap(db, id);
+    const meta = await readRegionMeta();
+    delete meta[id];
+    await putSetting(db, REGION_META_KEY, meta);
     // A selection pointing at a region that is no longer there would leave
     // the map trying to open an archive that does not exist.
     if ((await getSelectedId()) === id) await select(null);
