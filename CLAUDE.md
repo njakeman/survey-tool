@@ -12,8 +12,10 @@ device**: run the Phase 4 section of `docs/ios-manual-checklist.md`. Phase 5 is 
 design pass is implemented — `docs/styling.md` describes what was built and the constraints any
 change has to keep, `docs/design/` holds the handoff and mockups it came from. **Feature layers**
 (the surveyor's own GeoJSON drawn over the basemap, toggled in "Maps and layers", tappable for
-attributes and "Record here") are implemented and, like everything since Phase 3, **unverified on
-a device** — see the Feature layers section of `docs/ios-manual-checklist.md`. **The stylesheet is
+attributes and "Record here"), **OS grid references** (OSTN15, offline) and **marking a point the
+surveyor cannot reach** (a crosshair on the map, recorded as an ordinary observation with
+`positionSource: 'map'`) are implemented and, like everything since Phase 3, **unverified on a
+device** — see the Feature layers and Grid references sections of `docs/ios-manual-checklist.md`. **The stylesheet is
 no longer a placeholder**; do not restyle from scratch without reading `docs/styling.md` first.
 See `field-survey-pwa-prompt.md` for the original brief. The approved
 architecture corrected several of the brief's technical choices (raster tiles → PMTiles/MapLibre,
@@ -147,6 +149,13 @@ standalone })`, browser globals injected same as `probe/capabilities.js`, so it'
   holds the GeoJSON as a **string** (never a parsed object, never a Blob),
   `app/featureLayerService.js` mirrors `basemapService.js`, and `ui/FeatureLayerPanel.js` /
   `ui/FeatureSheet.js` are the toggle list and the tap result.
+- `src/geo/` — pure geodesy, node-tested, no browser or DOM deps. `osgb.js` turns WGS84 lat/lon
+  into an OS grid reference via **OSTN15** (project onto the National Grid, then interpolate the
+  datum shift — the second step is the one people skip, and skipping it costs ~100 m). The shift
+  grid is **injected, not imported**: it is 34 kB fetched from `public/geodesy/`, vendored by
+  `scripts/fetch-ostn15.mjs`, which also saves OS's 115 published test points to
+  `src/geo/fixtures/` — `osgb.test.js` matches every one to within a millimetre. `distance.js` has
+  haversine, bearing, and the metres-per-pixel figure behind a picked point's accuracy.
 - `src/probe/` — the Phase 1 device-capability probe, still reachable via a footer link in the
   capture UI. Findings recorded in `docs/ios-manual-checklist.md`.
 - Test tiers (`vitest.config.js`): `node` for domain/storage logic (real WebCrypto; jsdom is
@@ -280,6 +289,17 @@ standalone })`, browser globals injected same as `probe/capabilities.js`, so it'
   which rows happened to be linked. Read with `?? null`, because records predating the fields would
   otherwise export `undefined`, which `canonicalStringify` drops. Note this changed the exported
   bytes of existing sessions — free before sync exists, not after.
+- **A position can be marked on the map instead of measured**, for a thing the surveyor can see
+  but not reach. It produces an ordinary observation — the data model gains exactly one field,
+  `positionSource` (`'gps' | 'map'`) — but `gpsAccuracyM` then holds the **map precision at the
+  zoom it was picked at**, not a fix accuracy. That field is the only thing distinguishing
+  ±12 m measured from ±12 m eyeballed from 300 m away, so don't drop it and don't infer it.
+  `fixAt` and the heading still come from the surveyor's own fix; altitude is deliberately nulled,
+  because the far side of a valley is not at the height you are standing at.
+- **what3words was investigated and rejected — don't revisit it.** No offline JS/WASM build exists
+  (the offline SDKs are native only), so it cannot work at capture time; and API licence clause
+  6.3(b) forbids displaying or sharing a 3-word address alongside its coordinates, which is
+  precisely what this app's GeoJSON export is. Reasoning in full in README → Why not what3words.
 - `recordedAt` (when the surveyor tapped Save) and `fixAt` (when the position was actually measured)
   on an observation are deliberately distinct fields — a surveyor can stand at a point, type a note
   for 40 seconds, then save. Don't collapse them.

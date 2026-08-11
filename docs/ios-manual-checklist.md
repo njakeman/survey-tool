@@ -229,6 +229,46 @@ legibility and the label halo — all of them things a passing test says nothing
 - [ ] Export the session and open `session.geojson` in QGIS: `feature_layer`, `feature_id` and
       `feature_label` are present on every row, populated on the linked ones
 
+## Grid references
+
+The transformation itself is checked against Ordnance Survey's own 115 test points to within a
+millimetre, so the arithmetic is not in doubt. What is in doubt is everything a screen does to it.
+
+- [ ] Stand somewhere whose grid reference you can verify independently — a trig point, a gate on
+      a 1:25,000 sheet, a known corner — and confirm the app agrees to the metre. This is the one
+      check the test suite structurally cannot do: it proves the app is transforming _your_ fix,
+      not that the formula matches a file
+- [ ] The reference is legible at arm's length in sunlight, and the digits are distinguishable —
+      8 against B is the pair that goes wrong when reading one out
+- [ ] Reading one aloud over a phone or radio works without having to squint or re-check
+- [ ] It updates as you walk, and does not lag the coordinates above it
+- [ ] Saved cards show it, and it matches the live readout for the same spot
+- [ ] Export a session and open `session.geojson` in QGIS: `os_grid_ref` is populated and correct
+- [ ] In airplane mode from a cold launch, references still appear — the shift grid is precached,
+      and if this fails that is why
+
+## Marking a point you cannot reach
+
+- [ ] "Mark a distant point" is findable without being told it exists
+- [ ] The crosshair is visible over aerial imagery, over a pale vector basemap, and over a dark
+      one — the arms are accent-coloured with a pale outline, and that is untested against real
+      ground
+- [ ] Panning the map under the crosshair one-handed, with gloves, is actually workable. This is
+      the interaction the whole feature rests on and the reason a tap was rejected
+- [ ] The gap at the centre of the crosshair leaves the target visible rather than covering it
+- [ ] The readout updates smoothly while panning, and does not stutter the map
+- [ ] The distance reads plausibly for something you can see — pick a gate 200 m away and check it
+      says roughly 200 m, not 2 km
+- [ ] A GPS tick arriving mid-aim does **not** move the map. Wait a full minute with the crosshair
+      lined up before confirming
+- [ ] Cancel leaves everything as it was; confirm shows the strip above Save
+- [ ] The mark survives typing a note and taking a photo
+- [ ] "Use my position" reverts to the fix
+- [ ] After saving, the strip is gone and the next observation records the phone's own position
+- [ ] The saved card says "Marked on the map, not measured", and its accuracy figure is plausible
+      for the zoom you picked at — a few metres zoomed right in, tens zoomed out
+- [ ] Export and confirm `position_source` is `map` for those rows and `gps` for the others
+
 ## Later phases (fill in as each lands)
 
 - [ ] Phase 5 — sync completes on a real connection; killing the app mid-sync and reopening

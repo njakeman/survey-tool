@@ -11,7 +11,9 @@ See [`field-survey-pwa-prompt.md`](./field-survey-pwa-prompt.md) for the origina
 ## Status
 
 Field-usable offline. Capture (GPS/compass/photo/save), session history, zip export, the offline
-basemap and [feature layers](#feature-layers) are built; sync to GitHub is not yet.
+basemap, [feature layers](#feature-layers), [OS grid references](#grid-references) and
+[marking points you cannot reach](#marking-a-point-you-cannot-reach) are built; sync to GitHub is
+not yet.
 
 To see a map you must first produce basemap archives for your survey areas — see
 [Offline basemap](#offline-basemap) below. Without any, the app works exactly as before and the
@@ -170,6 +172,84 @@ Three things that will bite:
   readable offline, and the data belongs in IndexedDB where there is no 2 MiB cliff.
 - A layer the generator cannot read is **warned about and skipped**, never fatal — same rule as the
   basemap archives. Watch the build log for `SKIPPED`.
+
+## Grid references
+
+Every observation shows and exports an Ordnance Survey grid reference
+(`SU 14082 39216`) alongside its latitude and longitude — on the live readout, on each
+saved card, and as `os_grid_ref` in `session.geojson`. Computed offline, with no API key and no
+request budget.
+
+It is derived from the coordinates at display and export time rather than stored, because it is a
+restatement of them and a stored copy could only drift. Outside Great Britain it is `null`, and
+the column is still present in the export: a GIS consumer takes its schema from the rows it sees,
+so a column that appears only for southern surveys is worse than a column of nulls.
+
+The transformation is **OSTN15**, not a Helmert approximation. Projecting lat/lon onto the
+National Grid gives ETRS89 eastings and northings — right projection, wrong datum, about 100 m
+out. OSTN15 is the correction, and a single-parameter Helmert transform instead would leave 4–5 m
+of error on a reading whose GPS accuracy is 5–10 m.
+
+The shift grid is vendored from OS's **Lite** developer pack:
+
+```sh
+node scripts/fetch-ostn15.mjs
+```
+
+That downloads the pack, reduces it to `public/geodesy/ostn15-lite.json` (34 kB, precached), and
+saves OS's 115 published test points to `src/geo/fixtures/` — `src/geo/osgb.test.js` checks every
+one to within a millimetre. Lite rather than the full grid because the full transformation is a
+13 MB pack or a 28 MB NTv2 file, and OS put Lite's error at 0.08 m RMS against it: around one
+percent of the GPS error being transformed.
+
+**Licence, honestly:** OS publish OSTN15 free of charge "as raw data for developers", and the
+developer pack exists to be implemented in software. What is _not_ stated anywhere I could find —
+neither the pack's user guide nor the resources page — is whether the grid may be redistributed
+inside a repository. Other open-source implementations embed it, and the app carries the OS
+OpenData attribution at the foot of the capture page. If you would rather carry no doubt at all,
+add `public/geodesy/` to `.gitignore` and run the script as a setup step: the app degrades to
+showing no grid references rather than breaking.
+
+### Why not what3words
+
+Asked and answered, so it does not get re-investigated. Two independent blockers:
+
+- **No offline path.** what3words converts via their web API or their offline SDKs, and those SDKs
+  are native iOS/Android/C++/Java. There is no JavaScript or WASM build at any price, so in a PWA
+  a 3-word address can only resolve when there is signal — which is not when a surveyor is
+  standing in a field tapping Save.
+- **The licence forbids the useful part.** Clause 6.3(b) of the API licence: _"you must not
+  display, or otherwise share with any third party, any 3 Word Address alongside its corresponding
+  coordinates."_ Storage is permitted (6.3(e)(ii), up to 100 million), but this app's only outputs
+  are a GeoJSON carrying `lat`/`lon`, shared as a zip and committed to a data repo. The pairing is
+  the entire product.
+
+Plus Codes (Apache-2.0, offline, no key) would clear both bars if a global short code is ever
+wanted alongside the grid reference.
+
+## Marking a point you cannot reach
+
+A surveyor can often see a thing they cannot get to — the far side of a river, a pylon in standing
+crop, a roof. **Mark a distant point** on the map panel puts a crosshair at the centre of the map;
+pan the ground under it, check the grid reference and distance in the readout, and confirm. The
+next Save records that point instead of the phone's position.
+
+A crosshair rather than a tap because a gloved fingertip is a 44 px target that covers the thing
+being aimed at. Follow mode switches off while picking, so an incoming GPS fix cannot drag the map
+off the target.
+
+The observation is otherwise completely ordinary. Two things differ:
+
+- `gps_accuracy_m` holds the **map precision at the zoom it was picked at** — a few metres zoomed
+  right in, tens of metres zoomed out — rather than a fix accuracy. Zooming in genuinely is a more
+  precise placement, and the number reflects that.
+- `position_source` is `map` rather than `gps`. Without it, a point eyeballed from 300 m away and
+  a satellite fix would be indistinguishable, since the accuracy figure reads the same either way.
+  Saved cards say "Marked on the map, not measured"; the column is on every observation.
+
+`fix_at` and the heading still come from the surveyor's own fix — the sighting was made from
+somewhere, at a time, and that is worth keeping. Altitude is dropped rather than carried across:
+the far side of a valley is not at the height you are standing at.
 
 ## Fonts and styling
 
