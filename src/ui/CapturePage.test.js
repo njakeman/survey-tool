@@ -724,7 +724,7 @@ describe('CapturePage — saving against a point marked on the map', () => {
       setObservations: vi.fn(),
       setFeatureLayers: vi.fn(),
       setPickedPoint: vi.fn(),
-      getCentre: vi.fn(() => CENTRE),
+      getPointAtFraction: vi.fn(() => CENTRE),
       getZoom: vi.fn(() => 17),
       onMove: vi.fn(() => () => {}),
       centreOn: vi.fn(),

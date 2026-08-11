@@ -1,7 +1,7 @@
 import { describe, expect, test, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/preact';
 import { html } from 'htm/preact';
-import { CaptureMap } from './CaptureMap.js';
+import { CaptureMap, CROSSHAIR_Y_FRACTION } from './CaptureMap.js';
 
 const POSITION = { lat: 51.5, lon: -0.14, accuracyM: 8 };
 const SUGGESTION = { id: 'north', name: 'North Wiltshire' };
@@ -278,7 +278,7 @@ describe('CaptureMap — marking a point you cannot walk to', () => {
 
   function pickingAdapter() {
     const adapter = fakeAdapter();
-    adapter.getCentre = vi.fn(() => CENTRE);
+    adapter.getPointAtFraction = vi.fn(() => CENTRE);
     adapter.getZoom = vi.fn(() => 17);
     adapter.setPickedPoint = vi.fn();
     adapter.onMove = vi.fn(() => () => {});
@@ -399,6 +399,27 @@ describe('CaptureMap — marking a point you cannot walk to', () => {
     tap({ layerId: 'parcels' });
 
     expect(onFeatureTap).toHaveBeenCalledTimes(1);
+  });
+
+  test('aims and records at the same place, from one shared constant', async () => {
+    // The trap this exists for: raise the crosshair in CSS, leave the pick
+    // reading the map centre, and the app saves a point ~45 m north of where
+    // the surveyor aimed — at z17 a pixel is about 0.9 m — with nothing on
+    // screen to show it. Asserting both against the same exported constant in
+    // one test means neither can be changed on its own.
+    const { adapter, container } = await enterPicking();
+
+    const crosshair = container.querySelector('.capture-map-crosshair');
+    expect(crosshair.getAttribute('style')).toContain(`${CROSSHAIR_Y_FRACTION * 100}%`);
+    expect(adapter.getPointAtFraction).toHaveBeenCalledWith({ y: CROSSHAIR_Y_FRACTION });
+  });
+
+  test('the crosshair is not at the middle, which is what the panel covers', async () => {
+    // Guards the value itself, not just that the two agree: 0.5 would put the
+    // reticle back behind the confirm panel and both assertions above would
+    // still pass.
+    expect(CROSSHAIR_Y_FRACTION).toBeLessThan(0.5);
+    expect(CROSSHAIR_Y_FRACTION).toBeGreaterThan(0);
   });
 
   test('draws the mark the page hands back, and clears it when it goes', async () => {

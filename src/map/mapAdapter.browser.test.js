@@ -339,34 +339,59 @@ describe('mapAdapter against real MapLibre', () => {
     expect(adapter.queryFeatureAt({ x: 200, y: 150 })).toBeNull();
   });
 
-  test('reports the centre, which is where the picking crosshair sits', async () => {
+  test('unprojects the middle of the canvas to the map centre', async () => {
     const adapter = await createAdapter();
     await adapter.ready;
 
-    const centre = adapter.getCentre();
+    const middle = adapter.getPointAtFraction({ x: 0.5, y: 0.5 });
 
     // The fixture archive covers -1..0.5, 51..52, and the map opens on the
     // header's centre — so this is a real reading, not a default.
-    expect(centre.lat).toBeGreaterThan(51);
-    expect(centre.lat).toBeLessThan(52);
-    expect(centre.lon).toBeGreaterThan(-1);
-    expect(centre.lon).toBeLessThan(0.5);
+    expect(middle.lat).toBeGreaterThan(51);
+    expect(middle.lat).toBeLessThan(52);
+    expect(middle.lon).toBeGreaterThan(-1);
+    expect(middle.lon).toBeLessThan(0.5);
+  });
+
+  test('a fraction above the middle is further north, which is the whole safety property', async () => {
+    // The crosshair sits a third of the way down the map, not at its centre,
+    // because the confirm panel covers the bottom. If the recorded point did
+    // not move up with it, the app would silently save somewhere ~45 m north
+    // of where the surveyor aimed — at z17 a pixel is about 0.9 m — with
+    // nothing on screen to suggest anything was wrong. This is the test that
+    // catches the reticle and the point drifting apart.
+    const adapter = await createAdapter();
+    await adapter.ready;
+
+    const middle = adapter.getPointAtFraction({ x: 0.5, y: 0.5 });
+    const raised = adapter.getPointAtFraction({ x: 0.5, y: 0.33 });
+
+    expect(raised.lat).toBeGreaterThan(middle.lat);
+    // Straight up the screen: longitude is unchanged.
+    expect(raised.lon).toBeCloseTo(middle.lon, 9);
+  });
+
+  test('defaults to the middle when asked for nothing in particular', async () => {
+    const adapter = await createAdapter();
+    await adapter.ready;
+
+    expect(adapter.getPointAtFraction({})).toEqual(adapter.getPointAtFraction({ x: 0.5, y: 0.5 }));
   });
 
   test('the centre follows the map, which is the whole picking interaction', async () => {
     const adapter = await createAdapter();
     await adapter.ready;
-    const before = adapter.getCentre();
+    const before = adapter.getPointAtFraction({ x: 0.5, y: 0.5 });
 
     // Latitude only, and a small step. maxBounds clamps panning to the
     // archive's coverage, and the fixture is 1.5° wide against a 400px
     // viewport — so east-west is pinned outright and a longitude assertion
-    // here would be testing the clamp, not getCentre.
+    // here would be testing the clamp, not the unprojection.
     const target = { lat: before.lat + 0.05, lon: before.lon };
     adapter.centreOn(target);
     await adapter.whenIdle();
 
-    const after = adapter.getCentre();
+    const after = adapter.getPointAtFraction({ x: 0.5, y: 0.5 });
     expect(after.lat).toBeCloseTo(target.lat, 3);
     expect(after.lat).not.toBeCloseTo(before.lat, 3);
   });

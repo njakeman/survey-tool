@@ -498,7 +498,10 @@ button {
    scrolling page — never the whole screen. */
 .capture-map {
   position: relative;
-  height: 236px;
+  /* Raised from the design pass's 236px. The picking crosshair needs clear
+     map above and below it once the confirm panel takes the bottom ~94px,
+     and at 236 the reticle's target sat behind that panel entirely. */
+  height: 300px;
   margin-inline: calc(var(--space-4) * -1);
   overflow: hidden;
   background: var(--map-backdrop);
@@ -553,13 +556,22 @@ button {
   background: color-mix(in srgb, var(--paper) 72%, transparent);
 }
 
-/* Sits over the map, thumb-reachable at the bottom edge rather than under
-   the hand holding the phone. */
-.capture-map-recentre {
+/* Every map control in one row, thumb-reachable along the bottom edge rather
+   than under the hand holding the phone.
+   
+   One row rather than three boxes pinned to left, centre and right: pinned,
+   "Change map" + "Mark a distant point" + "Re-centre" came to roughly 380px
+   across a 320px map and overlapped. This wraps instead of colliding. */
+.capture-map-controls {
   position: absolute;
+  left: var(--space-2);
   right: var(--space-2);
   bottom: var(--space-2);
   z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-2);
 }
 
 .capture-map-error {
@@ -602,23 +614,6 @@ button {
   }
 }
 
-.capture-map-change {
-  position: absolute;
-  left: var(--space-2);
-  bottom: var(--space-2);
-  z-index: 1;
-}
-
-/* "Mark a distant point" sits beside "Change map" along the bottom of the
-   map, both of them things you do to the map rather than to the observation. */
-.capture-map-pick {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
-  bottom: var(--space-2);
-  z-index: 1;
-}
-
 /* The picking crosshair: fixed at the centre while the map moves under it.
    Drawn in CSS rather than as a map layer because it belongs to the viewport,
    not to the ground — it must not pan with the tiles, which is the entire
@@ -630,7 +625,10 @@ button {
 .capture-map-crosshair {
   position: absolute;
   left: 50%;
-  top: 50%;
+  /* Fed inline from CROSSHAIR_Y_FRACTION in CaptureMap.js, which is also what
+     the adapter unprojects to find the point being aimed at. One value, two
+     uses, so the mark and the recorded coordinates cannot drift apart. */
+  top: var(--crosshair-y, 50%);
   width: 44px;
   height: 44px;
   transform: translate(-50%, -50%);
@@ -683,12 +681,6 @@ button {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-}
-
-.capture-map-picking-copy {
-  margin: 0;
-  font-size: var(--type-fine);
-  color: var(--text-secondary);
 }
 
 /* The line the surveyor checks before committing, so it takes the same

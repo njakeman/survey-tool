@@ -10,6 +10,17 @@ import {
 import { bearingDeg, distanceM, pickAccuracyM } from '../geo/distance.js';
 import { compassPoint, formatDistance } from '../sensors/format.js';
 
+// Where the picking crosshair sits, as a fraction down the map panel. A third
+// rather than the middle because the confirm panel covers the bottom ~94px:
+// centred, the reticle's target landed *behind* that panel and there was
+// nothing to aim with.
+//
+// Exported and used twice — to position the crosshair in CSS, and to ask the
+// adapter what is under it — so the two cannot disagree. They must not: at
+// z17 a pixel is about 0.9 m, so a reticle and a recorded point 50px apart is
+// a 45 m error in the saved coordinates, with nothing on screen to show it.
+export const CROSSHAIR_Y_FRACTION = 0.33;
+
 // The map panel on the capture page. Imports nothing heavy: the renderer
 // arrives as the injected `createMap` factory (main.js loads the adapter
 // dynamically), which is what keeps this testable with a fake adapter and
@@ -169,7 +180,11 @@ export function CaptureMap({
     // moving thumb, but a standing subscription would re-render this panel on
     // every follow-mode recentre, about once a second, for a readout that is
     // not on screen.
-    const read = () => setCrosshair({ ...adapter.getCentre(), zoom: adapter.getZoom() });
+    const read = () =>
+      setCrosshair({
+        ...adapter.getPointAtFraction({ y: CROSSHAIR_Y_FRACTION }),
+        zoom: adapter.getZoom(),
+      });
     read();
     return adapter.onMove?.(read);
   }, [picking, adapterReady]);
@@ -274,9 +289,12 @@ export function CaptureMap({
       ${
         picking
           ? html`
-              <div class="capture-map-crosshair" aria-hidden="true"></div>
+              <div
+                class="capture-map-crosshair"
+                style=${`--crosshair-y: ${CROSSHAIR_Y_FRACTION * 100}%`}
+                aria-hidden="true"
+              ></div>
               <div class="capture-map-picking" role="status">
-                <p class="capture-map-picking-copy">Pan the map under the mark</p>
                 <p class="capture-map-picking-readout">${describeCrosshair()}</p>
                 <div class="capture-map-picking-actions">
                   <button type="button" class="button-primary" onClick=${confirmPick}>
@@ -291,31 +309,30 @@ export function CaptureMap({
           : null
       }
       ${
-        // Hidden while picking: the crosshair panel already owns the bottom
-        // of the map, and re-centring mid-aim would undo the aiming.
-        showsRecentre(follow) && !picking
-          ? html`<button
-              type="button"
-              class="capture-map-recentre button-surface"
-              onClick=${handleRecentre}
-            >
-              Re-centre
-            </button>`
-          : null
-      }
-      ${
+        // One flex row rather than three separately-positioned boxes. Pinned
+        // left, centre and right, these came to roughly 380px of buttons
+        // across a 320px map and overlapped — only visibly so once Re-centre
+        // appeared, which needs the surveyor to have panned away from their
+        // fix, which is why it went unnoticed. Hidden while picking: the
+        // confirm panel owns the bottom of the map, and re-centring mid-aim
+        // would undo the aiming.
         picking
           ? null
-          : html`<button
-                type="button"
-                class="capture-map-change button-surface"
-                onClick=${onOpenPicker}
-              >
+          : html`<div class="capture-map-controls">
+              <button type="button" class="button-surface" onClick=${onOpenPicker}>
                 Change map
               </button>
-              <button type="button" class="capture-map-pick button-surface" onClick=${startPicking}>
+              <button type="button" class="button-surface" onClick=${startPicking}>
                 Mark a distant point
-              </button>`
+              </button>
+              ${
+                showsRecentre(follow)
+                  ? html`<button type="button" class="button-surface" onClick=${handleRecentre}>
+                      Re-centre
+                    </button>`
+                  : null
+              }
+            </div>`
       }
       ${error ? html`<p class="capture-map-error" role="alert">${error}</p>` : null}
     </div>

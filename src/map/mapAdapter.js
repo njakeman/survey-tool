@@ -327,11 +327,20 @@ export async function createMapAdapter({
     );
   }
 
-  // Where the picking crosshair is pointing, and how precisely it can point
-  // there. Read on demand rather than pushed, because the map moves under the
-  // surveyor's thumb far faster than any state update should follow.
-  function getCentre() {
-    const { lat, lng } = map.getCenter();
+  // What is on the ground under a given fraction of the canvas. Read on
+  // demand rather than pushed, because the map moves under the surveyor's
+  // thumb far faster than any state update should follow.
+  //
+  // Fractions rather than a bare getCentre(), because the picking crosshair
+  // is deliberately *not* at the centre — the confirm panel covers the bottom
+  // of the map, so the reticle sits a third of the way down. The caller owns
+  // that fraction and uses the same value to position the crosshair, so the
+  // thing being aimed at and the thing being recorded cannot drift apart. At
+  // z17 a pixel is about 0.9 m, so an unnoticed 50px disagreement would be a
+  // 45 m error in the saved coordinates with nothing on screen to show it.
+  function getPointAtFraction({ x = 0.5, y = 0.5 } = {}) {
+    const canvas = map.getCanvas();
+    const { lat, lng } = map.unproject([canvas.clientWidth * x, canvas.clientHeight * y]);
     return { lat, lon: lng };
   }
 
@@ -405,7 +414,7 @@ export async function createMapAdapter({
     setObservations,
     setFeatureLayers,
     setPickedPoint,
-    getCentre,
+    getPointAtFraction,
     getZoom,
     onMove,
     queryFeatureAt,
