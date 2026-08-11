@@ -150,3 +150,46 @@ describe('buildStyle', () => {
     expect(ids.some((id) => id.startsWith('pois'))).toBe(false);
   });
 });
+
+describe('buildStyle online-raster', () => {
+  const ONLINE = {
+    glyphsUrl: GLYPHS_URL,
+    tileType: 'online-raster',
+    tiles: 'https://imagery.test/tiles/{z}/{y}/{x}',
+    tileSize: 256,
+    maxzoom: 19,
+    attribution: 'Esri, Maxar, Earthstar Geographics, and the GIS User Community',
+  };
+
+  test('the source is a tile URL template, not a pmtiles archive', () => {
+    // Construction must touch no network and no archive: a template is inert
+    // until MapLibre asks for a tile, which is what lets the map load with
+    // the imagery server unreachable.
+    const style = buildStyle(ONLINE);
+
+    expect(style.sources.basemap.type).toBe('raster');
+    expect(style.sources.basemap.tiles).toEqual(['https://imagery.test/tiles/{z}/{y}/{x}']);
+    expect(style.sources.basemap).not.toHaveProperty('url');
+    expect(style.layers).toHaveLength(1);
+    expect(style.layers[0].type).toBe('raster');
+  });
+
+  test('maxzoom sits on the source, never as a map zoom clamp', () => {
+    // The never-clamp rule: the map overzooms past the deepest real tile.
+    const style = buildStyle(ONLINE);
+
+    expect(style.sources.basemap.maxzoom).toBe(19);
+    expect(style).not.toHaveProperty('zoom');
+  });
+
+  test('carries the provider attribution and no OpenStreetMap claim', () => {
+    const style = buildStyle(ONLINE);
+
+    expect(style.sources.basemap.attribution).toMatch(/Esri/);
+    expect(style.sources.basemap.attribution).not.toMatch(/OpenStreetMap|Protomaps/);
+  });
+
+  test('still declares glyphs, because feature layers label over imagery too', () => {
+    expect(buildStyle(ONLINE).glyphs).toBe(GLYPHS_URL);
+  });
+});

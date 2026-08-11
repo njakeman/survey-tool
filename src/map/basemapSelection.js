@@ -15,8 +15,14 @@ export function chooseActive({ regions = [], selectedId = null, position = null 
   const downloaded = regions.filter((region) => region.downloaded);
 
   // A remembered selection wins, but only while that region is still here —
-  // it may have been deleted to free space since.
-  const remembered = downloaded.find((region) => region.id === selectedId);
+  // it may have been deleted to free space since. An online region (nothing
+  // downloaded, tiles fetched live) is honoured as a *choice* but appears
+  // nowhere else in this function: it is never the default and never
+  // suggested, because a map that needs signal must only ever be arrived at
+  // by a tap.
+  const remembered = regions.find(
+    (region) => region.id === selectedId && (region.downloaded || region.online),
+  );
   const covering = downloaded.find((region) => coversPosition(region, position));
   const active = remembered ?? covering ?? downloaded[0] ?? null;
 

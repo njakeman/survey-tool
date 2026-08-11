@@ -58,13 +58,42 @@ function buildRasterStyle({ glyphsUrl, archiveKey, tileSize, attribution }) {
   };
 }
 
+// An online raster basemap — aerial imagery fetched live. The same shape as
+// a raster archive, but the source carries a tile URL template instead of a
+// pmtiles URL. Building this style touches no network, so construction
+// succeeds offline every time; only the tile fetches themselves can fail,
+// and MapLibre reports those as error events over a map that keeps working —
+// which is the property the whole feature hangs on. maxzoom is the source's
+// deepest real tiles, never a map zoom clamp: the map overzooms past it.
+function buildOnlineRasterStyle({ glyphsUrl, tiles, tileSize, maxzoom, attribution }) {
+  return {
+    version: 8,
+    glyphs: glyphsUrl,
+    sources: {
+      basemap: {
+        type: 'raster',
+        tiles: [tiles],
+        tileSize: tileSize ?? 256,
+        ...(maxzoom ? { maxzoom } : {}),
+        ...(attribution ? { attribution } : {}),
+      },
+    },
+    layers: [{ id: 'basemap', type: 'raster', source: 'basemap' }],
+  };
+}
+
 export function buildStyle({
   glyphsUrl,
   archiveKey = 'basemap',
   tileType = 'vector',
   tileSize,
   attribution,
+  tiles,
+  maxzoom,
 }) {
+  if (tileType === 'online-raster') {
+    return buildOnlineRasterStyle({ glyphsUrl, tiles, tileSize, maxzoom, attribution });
+  }
   if (tileType === 'raster') {
     return buildRasterStyle({ glyphsUrl, archiveKey, tileSize, attribution });
   }
