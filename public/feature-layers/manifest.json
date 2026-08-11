@@ -1,1 +1,29 @@
-[]
+[
+  {
+    "id": "cissbury_features",
+    "name": "Cissbury Features",
+    "url": "feature-layers/cissbury_features.geojson",
+    "sizeBytes": 868485,
+    "featureCount": 142,
+    "bounds": [
+      -0.387941171882393,
+      50.85806786304816,
+      -0.383029582458732,
+      50.8612249957537
+    ],
+    "geometryTypes": [
+      "Polygon"
+    ],
+    "style": {
+      "colour": "#1c5f9e",
+      "lineWidth": 2,
+      "fillOpacity": 0.15,
+      "circleRadius": 5,
+      "idProperty": null,
+      "titleProperty": null,
+      "labelProperty": null,
+      "fieldOrder": [],
+      "minZoom": 0
+    }
+  }
+]
