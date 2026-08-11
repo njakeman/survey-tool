@@ -50,11 +50,87 @@ describe('sessionToFeatureCollection', () => {
           heading_accuracy_deg: null,
           note: 'gate post',
           photo: 'obs-1.jpg',
+          feature_layer: null,
+          feature_id: null,
+          feature_label: null,
           session_name: 'Ashton Keynes',
           app_version: '0.1.0',
         },
       },
     ]);
+  });
+
+  test('carries the source feature, so an export can be joined back to the dataset', () => {
+    const obs = createObservation({
+      id: 'obs-1',
+      sessionId: 'sess-1',
+      recordedAt: '2026-08-06T10:00:00.000Z',
+      fixAt: '2026-08-06T09:59:20.000Z',
+      lat: 51.5,
+      lon: -0.14,
+      gpsAccuracyM: 8.2,
+      featureLayerId: 'parcels',
+      featureId: 'P-42',
+      featureLabel: 'SU1408 3921',
+    });
+
+    const { properties } = sessionToFeatureCollection(session, [obs], { appVersion: '0.1.0' })
+      .features[0];
+
+    expect(properties.feature_layer).toBe('parcels');
+    expect(properties.feature_id).toBe('P-42');
+    expect(properties.feature_label).toBe('SU1408 3921');
+  });
+
+  test('emits the feature columns even when unlinked, so every row has the same shape', () => {
+    // A GIS consumer reading a FeatureCollection takes its columns from the
+    // features it sees. Omitting the keys on unlinked observations would make
+    // the columns depend on which rows happened to be linked — worse than
+    // three columns of null.
+    const obs = createObservation({
+      id: 'obs-1',
+      sessionId: 'sess-1',
+      recordedAt: '2026-08-06T10:00:00.000Z',
+      fixAt: '2026-08-06T09:59:20.000Z',
+      lat: 51.5,
+      lon: -0.14,
+      gpsAccuracyM: 8.2,
+    });
+
+    const { properties } = sessionToFeatureCollection(session, [obs], { appVersion: '0.1.0' })
+      .features[0];
+
+    expect(properties).toHaveProperty('feature_layer', null);
+    expect(properties).toHaveProperty('feature_id', null);
+    expect(properties).toHaveProperty('feature_label', null);
+  });
+
+  test('an observation saved before feature layers existed exports the same shape', () => {
+    // Records on real devices predate these three fields entirely. Reading
+    // undefined off them must produce null, not a missing key — canonical
+    // JSON drops undefined, so the row would silently lose its columns.
+    const legacy = {
+      id: 'obs-legacy',
+      sessionId: 'sess-1',
+      recordedAt: '2026-08-06T10:00:00.000Z',
+      fixAt: '2026-08-06T09:59:20.000Z',
+      lat: 51.5,
+      lon: -0.14,
+      gpsAccuracyM: 8.2,
+      altitudeM: null,
+      altitudeAccuracyM: null,
+      headingDeg: null,
+      headingAccuracyDeg: null,
+      note: '',
+      photoId: null,
+    };
+
+    const { properties } = sessionToFeatureCollection(session, [legacy], { appVersion: '0.1.0' })
+      .features[0];
+
+    expect(properties.feature_layer).toBeNull();
+    expect(properties.feature_id).toBeNull();
+    expect(properties.feature_label).toBeNull();
   });
 
   test('carries fix_at separately from recorded_at when the surveyor saved later than the fix', () => {

@@ -42,7 +42,9 @@ export function createCaptureService({ db, newId, nowIso }) {
   // (the UI downscales at capture time), so this save is instantaneous.
   // photo: { blob } | null — contentType is read from the blob itself,
   // since canvas.toBlob() already sets it correctly.
-  async function saveObservation({ reading, heading, note, photo }) {
+  // `feature` is the map feature the surveyor tapped Record here on, or null
+  // — { layerId, featureId, title } as featureQuery.js describes it.
+  async function saveObservation({ reading, heading, note, photo, feature = null }) {
     const session = await getOpenSession();
     if (!session) throw new Error('saveObservation: no open session');
     if (!reading) throw new Error('saveObservation: no position fix yet');
@@ -62,6 +64,12 @@ export function createCaptureService({ db, newId, nowIso }) {
       headingAccuracyDeg: heading?.headingAccuracyDeg ?? null,
       note: (note ?? '').trim(),
       photoId: photo ? id : null,
+      // Both or neither — createObservation rejects half a link. A feature
+      // with no id of its own (legal GeoJSON) therefore links to nothing,
+      // which is honest: there would be nothing to join back to.
+      featureLayerId: feature?.featureId ? feature.layerId : null,
+      featureId: feature?.featureId ?? null,
+      featureLabel: feature?.featureId ? (feature.title ?? null) : null,
     });
 
     await saveObservationWithPhoto(db, {

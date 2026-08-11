@@ -21,6 +21,12 @@ export function createObservation({
   headingAccuracyDeg = null,
   note = '',
   photoId = null,
+  // Where this observation was started from, when the surveyor tapped a
+  // feature on the map rather than just standing somewhere. Optional and
+  // null by default — most observations have no such origin.
+  featureLayerId = null,
+  featureId = null,
+  featureLabel = null,
 }) {
   if (!id) throw new Error('createObservation: id is required');
   if (!sessionId) throw new Error('createObservation: sessionId is required');
@@ -40,6 +46,19 @@ export function createObservation({
     );
   }
 
+  // Both halves or neither. A feature id without its layer cannot be joined
+  // back to any dataset; a layer without a feature says only "somewhere in
+  // there". Either half on its own is worse than nothing, because it looks
+  // like a link.
+  if (Boolean(featureLayerId) !== Boolean(featureId)) {
+    throw new Error(
+      'createObservation: featureLayerId and featureId must be given together (got ' +
+        `featureLayerId=${featureLayerId}, featureId=${featureId})`,
+    );
+  }
+  // The label is a convenience on top of the link, never the link itself.
+  const linked = Boolean(featureLayerId);
+
   return {
     id,
     sessionId,
@@ -54,6 +73,9 @@ export function createObservation({
     headingAccuracyDeg,
     note,
     photoId,
+    featureLayerId,
+    featureId,
+    featureLabel: linked ? featureLabel : null,
     synced: false,
     syncedAt: null,
   };

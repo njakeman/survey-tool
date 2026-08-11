@@ -21,6 +21,16 @@ function observationToFeature(obs, session, appVersion) {
       heading_accuracy_deg: obs.headingAccuracyDeg,
       note: obs.note,
       photo: obs.photoId ? `${obs.photoId}.jpg` : null,
+      // The feature the observation was started from, if any. Emitted even
+      // when null: a GIS consumer takes its columns from the features it
+      // sees, so omitting the keys would make the column set depend on which
+      // rows happened to be linked. `?? null` rather than a bare read because
+      // observations saved before these fields existed have no such keys, and
+      // canonicalStringify drops undefined — the row would lose the columns
+      // rather than carry them empty.
+      feature_layer: obs.featureLayerId ?? null,
+      feature_id: obs.featureId ?? null,
+      feature_label: obs.featureLabel ?? null,
       session_name: session.name,
       app_version: appVersion,
     },

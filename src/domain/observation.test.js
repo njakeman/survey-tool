@@ -28,9 +28,44 @@ describe('createObservation', () => {
       headingAccuracyDeg: null,
       note: '',
       photoId: null,
+      featureLayerId: null,
+      featureId: null,
+      featureLabel: null,
       synced: false,
       syncedAt: null,
     });
+  });
+
+  test('records the feature layer, feature and label an observation was started from', () => {
+    const obs = createObservation({
+      ...baseFields,
+      featureLayerId: 'parcels',
+      featureId: 'P-42',
+      featureLabel: 'SU1408 3921',
+    });
+
+    expect(obs.featureLayerId).toBe('parcels');
+    expect(obs.featureId).toBe('P-42');
+    expect(obs.featureLabel).toBe('SU1408 3921');
+  });
+
+  test('rejects half a feature link, which points at nothing resolvable', () => {
+    // A feature id without the layer it came from cannot be joined back to
+    // any dataset, and a layer without a feature says only "somewhere in
+    // there". Either way the link is worse than no link, because it looks
+    // like one.
+    expect(() => createObservation({ ...baseFields, featureId: 'P-42' })).toThrow(/featureLayerId/);
+    expect(() => createObservation({ ...baseFields, featureLayerId: 'parcels' })).toThrow(
+      /featureId/,
+    );
+  });
+
+  test('a label alone is not a link and is dropped rather than half-stored', () => {
+    // The label is a human-readable convenience on top of the link, never the
+    // link itself.
+    const obs = createObservation({ ...baseFields, featureLabel: 'SU1408 3921' });
+
+    expect(obs.featureLabel).toBeNull();
   });
 
   test('accepts optional altitude, heading, note and photo fields when provided', () => {

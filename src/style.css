@@ -725,6 +725,189 @@ button {
   color: var(--text-secondary);
 }
 
+/* Feature layers: the second section of the maps view. Rows are shaped like
+   the region rows above them on purpose — same height, same three columns —
+   because they sit on one screen and a second visual language would read as a
+   second screen. What differs is what differs in the model: these are
+   independent toggles, so no aria-current treatment and no accent left
+   border, both of which mean "this is the one". */
+.feature-layer-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+  margin-top: var(--space-4);
+}
+
+.feature-layer-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.feature-layer-list > li {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.feature-layer-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  min-height: 3rem;
+  padding: 14px 12px;
+  text-align: left;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--rule);
+  color: inherit;
+}
+
+.feature-layer-row[aria-pressed='true'] {
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+}
+
+.feature-layer-row:disabled {
+  opacity: 0.55;
+}
+
+/* The layer's own colour, so a row can be matched to what is on the map. Off,
+   it is an outline of that colour rather than a grey square: the colour is
+   how you identify the layer, and losing it would make a switched-off row
+   unidentifiable at exactly the moment you are looking for it. */
+.feature-layer-swatch {
+  flex: none;
+  width: 13px;
+  height: 13px;
+  margin-top: 4px;
+  border-radius: 2px;
+  border: 2px solid var(--layer-colour);
+}
+
+.feature-layer-swatch.is-on {
+  background: var(--layer-colour);
+}
+
+.feature-layer-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.feature-layer-name {
+  font-size: var(--type-control);
+  font-weight: 700;
+}
+
+.feature-layer-meta {
+  font-size: var(--type-small);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.feature-layer-state {
+  flex: none;
+  font-size: var(--type-fine);
+  color: var(--text-secondary);
+}
+
+/* A tapped map feature. A panel in the flow directly under the map, not a
+   modal: a dialog would trap focus and put a dismiss-on-outside-tap layer
+   over a map the surveyor is still reading. */
+.feature-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-3);
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-left: 4px solid var(--accent);
+  border-radius: var(--radius);
+}
+
+.feature-sheet-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.feature-sheet-heading {
+  min-width: 0;
+}
+
+.feature-sheet-title {
+  margin: 0;
+  font-size: var(--type-title);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.feature-sheet-fields {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+/* Key above value rather than beside it: attribute names in real GIS data run
+   to twenty characters and would leave the value a two-column ribbon. */
+.feature-sheet-field {
+  display: flex;
+  flex-direction: column;
+  padding-bottom: var(--space-1);
+  border-bottom: 1px solid var(--rule-faint);
+}
+
+.feature-sheet-field dt {
+  font-family: var(--font-label);
+  font-size: var(--type-label);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.feature-sheet-field dd {
+  margin: 0;
+  font-size: var(--type-body);
+  overflow-wrap: anywhere;
+}
+
+.feature-sheet-empty {
+  margin: 0;
+  font-size: var(--type-small);
+  color: var(--text-secondary);
+}
+
+/* Sits immediately above Save, which is the moment it takes effect. */
+.linked-feature {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-left: 3px solid var(--accent);
+  background: var(--surface);
+  font-size: var(--type-small);
+}
+
+.linked-feature-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 /* Session history: a read-only list of past sessions, each opening its own
    observations. Same shell as the capture page so views don't jump width. */
 .session-history {

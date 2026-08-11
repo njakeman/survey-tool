@@ -8,6 +8,7 @@ import { PhotoField } from './PhotoField.js';
 import { SaveButton } from './SaveButton.js';
 import { ObservationsList } from './ObservationsList.js';
 import { CaptureMap } from './CaptureMap.js';
+import { FeatureSheet } from './FeatureSheet.js';
 import { chooseActive } from '../map/basemapSelection.js';
 
 function todayDateString() {
@@ -47,6 +48,13 @@ export function CapturePage({
   const [photo, setPhoto] = useState(null);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [photoError, setPhotoError] = useState(null);
+
+  // Two distinct things, deliberately. `tappedFeature` is what the sheet is
+  // showing — transient, cleared by tapping the map again. `linkedFeature` is
+  // what the next Save will record, which survives dismissing the sheet and
+  // typing a note, and is cleared only by saving or by unlinking.
+  const [tappedFeature, setTappedFeature] = useState(null);
+  const [linkedFeature, setLinkedFeature] = useState(null);
 
   const [saveState, setSaveState] = useState('idle'); // idle | saving
   const [saveError, setSaveError] = useState(null);
@@ -127,9 +135,15 @@ export function CapturePage({
         heading,
         note,
         photo,
+        feature: linkedFeature,
       });
       setNote('');
       setPhoto(null);
+      // Cleared with the note and photo: the link belongs to the observation
+      // just saved, and leaving it armed would silently attach the next one
+      // to a feature the surveyor has walked away from.
+      setLinkedFeature(null);
+      setTappedFeature(null);
       setLastSaved(observation);
       await refreshSession();
     } catch (error) {
@@ -149,6 +163,16 @@ export function CapturePage({
       // Keep lastSaved so the surveyor can retry the undo.
       setSaveError(error.message || 'Could not undo that save');
     }
+  }
+
+  function handleRecordHere(feature) {
+    setLinkedFeature(feature);
+    setTappedFeature(null);
+    // Only into an empty note. Overwriting something already typed would
+    // discard work the surveyor cannot get back — and the link is recorded
+    // structurally regardless, so the note text is a convenience, not the
+    // record.
+    setNote((current) => (current.trim() ? current : feature.title));
   }
 
   // Lets a surveyor export the current session before tapping End — the
@@ -239,7 +263,18 @@ export function CapturePage({
         position=${position}
         observations=${observations}
         featureLayers=${featureLayers}
+        onFeatureTap=${setTappedFeature}
         visible=${visible}
+      />
+      <${FeatureSheet}
+        feature=${tappedFeature}
+        ${
+          '' /* Withheld without an open session or a fix, because Save would
+             refuse anyway — see SaveButton's disabledReason. */
+        }
+        canRecord=${canSave}
+        onRecord=${handleRecordHere}
+        onDismiss=${() => setTappedFeature(null)}
       />
       <label class="field">
         <span class="field-label">Note</span>
@@ -272,6 +307,26 @@ export function CapturePage({
       ${
         exportMessage
           ? html`<p class="capture-page-export-message" role="status">${exportMessage}</p>`
+          : null
+      }
+      ${
+        // Sits directly above Save because that is the moment it takes
+        // effect, and it is removable: a surveyor who tapped the wrong parcel
+        // must be able to say so without clearing their note and photo too.
+        linkedFeature
+          ? html`<p class="linked-feature">
+              <span class="linked-feature-label"
+                >Linked to ${linkedFeature.layerName}: ${linkedFeature.title}</span
+              >
+              <button
+                type="button"
+                class="link"
+                onClick=${() => setLinkedFeature(null)}
+                aria-label=${`Unlink ${linkedFeature.title}`}
+              >
+                Unlink
+              </button>
+            </p>`
           : null
       }
       <${SaveButton}

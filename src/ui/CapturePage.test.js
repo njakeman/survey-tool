@@ -172,6 +172,10 @@ describe('CapturePage — saving an observation', () => {
         heading: HEADING,
         note: 'gate post',
         photo: null,
+        // Explicitly null rather than omitted, and asserted as part of the
+        // exact object: an observation with no source feature has to say so,
+        // or a stale link from a previous save could slip through unnoticed.
+        feature: null,
       }),
     );
   });
@@ -550,5 +554,158 @@ describe('CapturePage — offline status badge', () => {
     await screen.findByLabelText(/session name/i);
 
     expect(screen.getByText(/no offline cache/i)).toBeInTheDocument();
+  });
+});
+
+describe('CapturePage — recording against a map feature', () => {
+  const FEATURE = {
+    layerId: 'parcels',
+    layerName: 'Field parcels',
+    featureId: 'P-42',
+    title: 'SU1408 3921',
+    fields: [{ key: 'area_ha', value: '4.2' }],
+  };
+
+  function renderWithMap({ service, sensors }) {
+    let tap;
+    const adapter = {
+      ready: Promise.resolve(),
+      setPosition: vi.fn(),
+      setObservations: vi.fn(),
+      setFeatureLayers: vi.fn(),
+      centreOn: vi.fn(),
+      resize: vi.fn(),
+      destroy: vi.fn(),
+    };
+    const createMap = vi.fn((options) => {
+      tap = options.onFeatureTap;
+      return Promise.resolve(adapter);
+    });
+    render(
+      html`<${CapturePage}
+        service=${service}
+        sensors=${sensors}
+        downscale=${vi.fn()}
+        activeRegionId=${'south'}
+        statusKnown=${true}
+        createMap=${createMap}
+        visible=${true}
+      />`,
+    );
+    return { tapFeature: (feature) => act(() => tap(feature)) };
+  }
+
+  async function armedPage() {
+    const service = createFakeService({ openSession: OPEN_SESSION });
+    const { sensors, pushPosition } = createFakeSensors();
+    const map = renderWithMap({ service, sensors });
+    await screen.findByText('Ashton Keynes');
+    pushPosition(POSITION);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /save observation/i })).not.toBeDisabled(),
+    );
+    return { service, ...map };
+  }
+
+  test('a tap on the map shows the feature, and tapping empty map puts it away', async () => {
+    const { tapFeature } = await armedPage();
+
+    tapFeature(FEATURE);
+    expect(await screen.findByRole('heading', { name: 'SU1408 3921' })).toBeInTheDocument();
+
+    tapFeature(null);
+    await waitFor(() =>
+      expect(screen.queryByRole('heading', { name: 'SU1408 3921' })).not.toBeInTheDocument(),
+    );
+  });
+
+  test('Record here links the feature and prefills the note', async () => {
+    const { tapFeature } = await armedPage();
+    tapFeature(FEATURE);
+
+    fireEvent.click(await screen.findByRole('button', { name: /record here/i }));
+
+    expect(screen.getByLabelText(/note/i)).toHaveValue('SU1408 3921');
+    expect(screen.getByText(/Linked to Field parcels: SU1408 3921/)).toBeInTheDocument();
+    // The sheet closes on Record here — the note field is where the surveyor
+    // is going next, and the sheet was covering it.
+    expect(screen.queryByRole('heading', { name: 'SU1408 3921' })).not.toBeInTheDocument();
+  });
+
+  test('never overwrites a note already typed', async () => {
+    // The link is recorded structurally either way, so the note text is a
+    // convenience — not worth discarding work the surveyor cannot get back.
+    const { tapFeature } = await armedPage();
+    fireEvent.input(screen.getByLabelText(/note/i), { target: { value: 'broken stile' } });
+
+    tapFeature(FEATURE);
+    fireEvent.click(await screen.findByRole('button', { name: /record here/i }));
+
+    expect(screen.getByLabelText(/note/i)).toHaveValue('broken stile');
+  });
+
+  test('the link reaches saveObservation', async () => {
+    const { service, tapFeature } = await armedPage();
+    tapFeature(FEATURE);
+    fireEvent.click(await screen.findByRole('button', { name: /record here/i }));
+
+    fireEvent.click(screen.getByRole('button', { name: /save observation/i }));
+
+    await waitFor(() =>
+      expect(service.saveObservation).toHaveBeenCalledWith(
+        expect.objectContaining({ feature: FEATURE }),
+      ),
+    );
+  });
+
+  test('the link is cleared after saving, so the next observation is not silently attached', async () => {
+    const { service, tapFeature } = await armedPage();
+    tapFeature(FEATURE);
+    fireEvent.click(await screen.findByRole('button', { name: /record here/i }));
+    fireEvent.click(screen.getByRole('button', { name: /save observation/i }));
+    await waitFor(() => expect(service.saveObservation).toHaveBeenCalled());
+
+    await waitFor(() =>
+      expect(screen.queryByText(/Linked to Field parcels/)).not.toBeInTheDocument(),
+    );
+
+    service.saveObservation.mockClear();
+    fireEvent.click(screen.getByRole('button', { name: /save observation/i }));
+    await waitFor(() =>
+      expect(service.saveObservation).toHaveBeenCalledWith(
+        expect.objectContaining({ feature: null }),
+      ),
+    );
+  });
+
+  test('Unlink drops the link without touching the note or the photo', async () => {
+    const { service, tapFeature } = await armedPage();
+    tapFeature(FEATURE);
+    fireEvent.click(await screen.findByRole('button', { name: /record here/i }));
+
+    fireEvent.click(screen.getByRole('button', { name: /unlink/i }));
+
+    expect(screen.queryByText(/Linked to Field parcels/)).not.toBeInTheDocument();
+    // The prefilled note stays: unlinking is about the link, not the work.
+    expect(screen.getByLabelText(/note/i)).toHaveValue('SU1408 3921');
+
+    fireEvent.click(screen.getByRole('button', { name: /save observation/i }));
+    await waitFor(() =>
+      expect(service.saveObservation).toHaveBeenCalledWith(
+        expect.objectContaining({ feature: null }),
+      ),
+    );
+  });
+
+  test('offers no Record here before a session is open', async () => {
+    const service = createFakeService({ openSession: null });
+    const { sensors } = createFakeSensors();
+    const { tapFeature } = renderWithMap({ service, sensors });
+    await screen.findByLabelText(/session name/i);
+
+    tapFeature(FEATURE);
+
+    expect(await screen.findByRole('heading', { name: 'SU1408 3921' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /record here/i })).not.toBeInTheDocument();
   });
 });
