@@ -10,6 +10,7 @@ import { formatBytes, formatDuration, describeRecording } from './format.js';
 import { appendLogEntry, readLog, clearLog } from './log.js';
 import { benchmarkPbkdf2 } from './pbkdf2-benchmark.js';
 import { readOfflineStatus } from '../app/offlineStatus.js';
+import { RECORDING_MIME_CANDIDATES } from '../audio/recordingTypes.js';
 
 // The on-device diagnostic page, reachable from the capture footer. Built in
 // Phase 1 to answer whether this architecture was viable on the maintainer's
@@ -19,14 +20,8 @@ import { readOfflineStatus } from '../app/offlineStatus.js';
 // whether voice notes get built. New capability doubts get a row here before
 // any feature is built on the assumption.
 
-// Ordered by preference: Opus is far more efficient for speech, mp4/AAC is
-// what Safari has always supported. Whichever the device accepts first wins.
-const RECORDING_CANDIDATES = [
-  'audio/webm;codecs=opus',
-  'audio/mp4;codecs=opus',
-  'audio/mp4',
-  'audio/webm',
-];
+// The same candidate list the real recorder uses (audio/recordingTypes.js),
+// so the probe can never report support for a list the feature doesn't ask.
 const RECORDING_MS = 3000;
 
 function ResultRow({ label, children }) {
@@ -175,7 +170,7 @@ export function ProbePage() {
   //
   // Press it twice. Working once and then not is the specific failure.
   async function checkMicrophone() {
-    const types = supportedRecordingTypes(window.MediaRecorder, RECORDING_CANDIDATES);
+    const types = supportedRecordingTypes(window.MediaRecorder, RECORDING_MIME_CANDIDATES);
     if (types.length === 0) {
       const result =
         typeof window.MediaRecorder === 'function'

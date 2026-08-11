@@ -6,6 +6,7 @@ import { SessionBar } from './SessionBar.js';
 import { ReadingsPanel } from './ReadingsPanel.js';
 import { PhotoField } from './PhotoField.js';
 import { SaveButton } from './SaveButton.js';
+import { VoiceNoteField } from './VoiceNoteField.js';
 import { ObservationsList } from './ObservationsList.js';
 import { CaptureMap } from './CaptureMap.js';
 import { FeatureSheet } from './FeatureSheet.js';
@@ -25,6 +26,7 @@ export function CapturePage({
   sensors,
   downscale,
   exportSession,
+  recordAudio,
   onOpenProbe,
   onOpenHistory,
   offlineStatus,
@@ -51,6 +53,12 @@ export function CapturePage({
   const [photo, setPhoto] = useState(null);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [photoError, setPhotoError] = useState(null);
+
+  // The recorded-but-unsaved voice note — { blob, durationMs } | null. Held
+  // here like the note and photo so it survives view switches and is cleared
+  // by the same save.
+  const [audio, setAudio] = useState(null);
+  const [audioError, setAudioError] = useState(null);
 
   // Two distinct things, deliberately. `tappedFeature` is what the sheet is
   // showing — transient, cleared by tapping the map again. `linkedFeature` is
@@ -143,11 +151,14 @@ export function CapturePage({
         heading,
         note,
         photo,
+        audio,
         feature: linkedFeature,
         pickedPoint,
       });
       setNote('');
       setPhoto(null);
+      setAudio(null);
+      setAudioError(null);
       // Cleared with the note and photo: the link belongs to the observation
       // just saved, and leaving it armed would silently attach the next one
       // to a feature the surveyor has walked away from.
@@ -237,8 +248,17 @@ export function CapturePage({
   // toLocaleTimeString, growing with the session, on the weakest CPU in the
   // system while the radio is busy. The rows only change on save, so hold the
   // vnode still between saves and Preact skips the subtree entirely.
+  const loadAudio = (id) => service.getAudio(id);
   const observationsList = useMemo(
-    () => html`<${ObservationsList} observations=${decoratedObservations} gridRef=${gridRef} />`,
+    () =>
+      html`<${ObservationsList}
+        observations=${decoratedObservations}
+        gridRef=${gridRef}
+        loadAudio=${loadAudio}
+      />`,
+    // loadAudio is a fresh closure every render but only wraps the stable
+    // service — deliberately not a dependency.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [decoratedObservations, gridRef],
   );
 
@@ -332,6 +352,20 @@ export function CapturePage({
             : null
         }
       </div>
+      ${
+        // Below the photo row: recording is rarer than photographing, and a
+        // recorded note shows an inline player where the button was.
+        recordAudio
+          ? html`<${VoiceNoteField}
+              audio=${audio}
+              error=${audioError}
+              onRecorded=${setAudio}
+              onRemove=${() => setAudio(null)}
+              onError=${setAudioError}
+              recordAudio=${recordAudio}
+            />`
+          : null
+      }
       ${
         exportMessage
           ? html`<p class="capture-page-export-message" role="status">${exportMessage}</p>`

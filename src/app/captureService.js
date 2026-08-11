@@ -6,6 +6,7 @@ import {
   countObservationsForSession,
 } from '../storage/observationStore.js';
 import { saveObservationWithPhoto } from '../storage/captureWrite.js';
+import { getAudio as getAudioFromStore } from '../storage/audioStore.js';
 import { deleteObservationWithPhoto } from '../storage/captureDelete.js';
 
 // Orchestration seam between the UI and storage. Stateless — every call
@@ -117,6 +118,13 @@ export function createCaptureService({ db, newId, nowIso }) {
     return deleteObservationWithPhoto(db, id);
   }
 
+  // A saved voice note, as { blob, contentType } — undefined when absent.
+  // Read on demand by the observation list's play control, never eagerly:
+  // listing a session must not deserialise every recording in it.
+  function getAudio(id) {
+    return getAudioFromStore(db, id);
+  }
+
   return {
     getOpenSession,
     listSessions,
@@ -126,5 +134,6 @@ export function createCaptureService({ db, newId, nowIso }) {
     countObservations,
     listObservations,
     deleteObservation,
+    getAudio,
   };
 }

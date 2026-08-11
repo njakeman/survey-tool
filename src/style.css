@@ -1121,6 +1121,54 @@ button {
   min-height: 3.25rem;
 }
 
+/* Recording a voice note: the field sits under the photo/export row. The
+   pulsing dot is the only animation in the app; it means a live microphone,
+   which is worth movement. */
+.voice-note-field {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.voice-note-elapsed {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--type-small);
+  font-variant-numeric: tabular-nums;
+}
+
+.voice-note-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent-deep, #b00);
+  animation: voice-note-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes voice-note-pulse {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+.voice-note-player,
+.observations-audio-player {
+  width: 100%;
+  max-width: 24rem;
+}
+
+.voice-note-error {
+  margin: 0;
+  font-size: var(--type-small);
+}
+
+.observations-audio {
+  margin: 7px 0 0;
+  font-size: var(--type-meta);
+}
+
 /* Outline, not primary: bringing a session in is the rarer act, and the row
    above it (a session, or the empty message) is what the eye should land on. */
 .session-history-import {

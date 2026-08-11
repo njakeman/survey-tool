@@ -10,6 +10,7 @@ import { newId, nowIso } from './domain/id.js';
 import { watchPosition } from './sensors/position.js';
 import { watchHeading, requestHeadingPermission } from './sensors/heading.js';
 import { downscaleImageBlob } from './photo/encode.js';
+import { startRecording } from './audio/record.js';
 import { buildSessionExport } from './export/buildSessionExport.js';
 import { zipEntries } from './export/zip.js';
 import { shareOrDownload } from './export/share.js';
@@ -63,6 +64,15 @@ async function main() {
   };
 
   const downscale = (file) => downscaleImageBlob(file);
+
+  // Voice notes. Browser-only module, main.js-only import — the same rule as
+  // photo/encode.js — with the real recorder bound here and a fake handed in
+  // everywhere tests need one.
+  const recordAudio = () =>
+    startRecording({
+      mediaDevices: navigator.mediaDevices,
+      MediaRecorderCtor: window.MediaRecorder,
+    });
 
   // The OSTN15 shift grid, 34 kB from the precache. Held here rather than
   // imported into geo/osgb.js so that module stays pure, and read through a
@@ -303,6 +313,7 @@ async function main() {
         downscale=${state.downscale}
         exportSession=${state.exportSession}
         importSession=${importSession}
+        recordAudio=${recordAudio}
         offlineStatus=${state.offlineStatus}
         updateAvailable=${state.updateAvailable}
         onReload=${() => updateSW()}

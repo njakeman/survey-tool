@@ -139,7 +139,11 @@ export function SessionHistoryPage({ service, exportSession, importSession, grid
           />
         </p>
         <p class="field-label">Observations</p>
-        <${ObservationsList} observations=${selected.observations} gridRef=${gridRef} />
+        <${ObservationsList}
+          observations=${selected.observations}
+          gridRef=${gridRef}
+          loadAudio=${(id) => service.getAudio(id)}
+        />
         <button
           type="button"
           class="button-primary session-history-export"

@@ -39,6 +39,7 @@ function renderPage({
   exportSession = vi.fn(),
   onOpenHistory = vi.fn(),
   offlineStatus,
+  recordAudio,
 } = {}) {
   return render(
     html`<${CapturePage}
@@ -48,6 +49,7 @@ function renderPage({
       exportSession=${exportSession}
       onOpenHistory=${onOpenHistory}
       offlineStatus=${offlineStatus}
+      recordAudio=${recordAudio}
     />`,
   );
 }
@@ -137,10 +139,17 @@ describe('CapturePage — save gating', () => {
 });
 
 describe('CapturePage — saving an observation', () => {
-  async function renderReady(serviceOverrides) {
+  async function renderReady(serviceOverrides, { recordAudio } = {}) {
     const service = createFakeService({ openSession: OPEN_SESSION, ...serviceOverrides });
     const { sensors, pushPosition, pushHeading, positionStop, headingStop } = createFakeSensors();
-    render(html`<${CapturePage} service=${service} sensors=${sensors} downscale=${vi.fn()} />`);
+    render(
+      html`<${CapturePage}
+        service=${service}
+        sensors=${sensors}
+        downscale=${vi.fn()}
+        recordAudio=${recordAudio}
+      />`,
+    );
     await screen.findByText('Ashton Keynes');
     pushPosition(POSITION);
     await waitFor(() =>
@@ -172,6 +181,7 @@ describe('CapturePage — saving an observation', () => {
         heading: HEADING,
         note: 'gate post',
         photo: null,
+        audio: null,
         // Both explicitly null rather than omitted, and asserted as part of
         // the exact object: an observation with no source feature and no
         // marked point has to say so, or a stale one from a previous save
@@ -424,6 +434,61 @@ describe('CapturePage — session history link and export', () => {
     fireEvent.click(screen.getByRole('button', { name: /^export$/i }));
 
     await screen.findByText(/zip failed/);
+  });
+});
+
+describe('CapturePage — voice note', () => {
+  const NOTE = { blob: new Blob([new Uint8Array(16)], { type: 'audio/mp4' }), durationMs: 2500 };
+
+  async function renderWithRecorder() {
+    const handle = { stop: vi.fn().mockResolvedValue(NOTE), cancel: vi.fn() };
+    const recordAudio = vi.fn().mockResolvedValue(handle);
+    const service = createFakeService({ openSession: OPEN_SESSION });
+    const { sensors, pushPosition } = createFakeSensors();
+    render(
+      html`<${CapturePage}
+        service=${service}
+        sensors=${sensors}
+        downscale=${vi.fn()}
+        recordAudio=${recordAudio}
+      />`,
+    );
+    await screen.findByText('Ashton Keynes');
+    pushPosition(POSITION);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /save observation/i })).not.toBeDisabled(),
+    );
+    return { service };
+  }
+
+  test('a recorded note rides in the save and is cleared by it', async () => {
+    const { service } = await renderWithRecorder();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Record voice note' }));
+    await screen.findByText(/Recording ·/);
+    fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
+    await waitFor(() => expect(document.querySelector('audio.voice-note-player')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: /save observation/i }));
+
+    await waitFor(() =>
+      expect(service.saveObservation).toHaveBeenCalledWith(
+        expect.objectContaining({ audio: NOTE }),
+      ),
+    );
+    // Cleared with the note and photo: the recording belongs to the
+    // observation just saved, not the next one.
+    await waitFor(() => expect(document.querySelector('audio.voice-note-player')).toBeNull());
+    expect(screen.getByRole('button', { name: 'Record voice note' })).toBeInTheDocument();
+  });
+
+  test('without an injected recorder the field simply is not offered', async () => {
+    const service = createFakeService({ openSession: OPEN_SESSION });
+    const { sensors } = createFakeSensors();
+    render(html`<${CapturePage} service=${service} sensors=${sensors} downscale=${vi.fn()} />`);
+    await screen.findByText('Ashton Keynes');
+
+    expect(screen.queryByRole('button', { name: 'Record voice note' })).toBeNull();
   });
 });
 

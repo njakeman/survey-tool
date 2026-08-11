@@ -16,6 +16,7 @@ export function App({
   downscale,
   exportSession,
   importSession,
+  recordAudio,
   offlineStatus,
   updateAvailable,
   onReload,
@@ -101,6 +102,7 @@ export function App({
           sensors=${sensors}
           downscale=${downscale}
           exportSession=${exportSession}
+          recordAudio=${recordAudio}
           offlineStatus=${offlineStatus}
           activeRegionId=${activeRegionId}
           statusKnown=${statusKnown}

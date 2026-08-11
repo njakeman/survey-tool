@@ -6,7 +6,52 @@ import {
   formatTime,
   accuracyQuality,
 } from '../sensors/format.js';
+import { useEffect, useState } from 'preact/hooks';
 import { ExportBadge } from './ExportBadge.js';
+
+// A saved voice note, loaded only when the surveyor asks to hear it — the
+// bytes stay in IndexedDB until the tap. Native <audio controls> once
+// loaded: play/pause/scrub for free, touch-sized on iOS.
+function SavedVoiceNote({ audioId, loadAudio }) {
+  const [url, setUrl] = useState(null);
+  const [state, setState] = useState('idle'); // idle | loading | ready | error
+
+  useEffect(() => () => url && URL.revokeObjectURL(url), [url]);
+
+  if (!loadAudio) return html`<p class="observations-audio">Voice note</p>`;
+
+  async function open() {
+    setState('loading');
+    try {
+      const record = await loadAudio(audioId);
+      if (!record) {
+        setState('error');
+        return;
+      }
+      setUrl(URL.createObjectURL(record.blob));
+      setState('ready');
+    } catch {
+      setState('error');
+    }
+  }
+
+  if (state === 'ready') {
+    return html`<audio controls src=${url} class="observations-audio-player"></audio>`;
+  }
+  if (state === 'error') {
+    return html`<p class="observations-audio">Voice note could not be loaded</p>`;
+  }
+  return html`
+    <button
+      type="button"
+      class="link observations-audio"
+      onClick=${open}
+      disabled=${state === 'loading'}
+    >
+      ${state === 'loading' ? 'Loading voice note…' : '▶ Voice note'}
+    </button>
+  `;
+}
 
 // Read-only, live-updating record of what's been saved this session — a
 // visual indicator of accumulated observations, not a review/edit screen
@@ -19,7 +64,7 @@ import { ExportBadge } from './ExportBadge.js';
 // furthest apart. The card also has room for the whole note, which retires
 // the clip-to-40-characters-and-hope-for-a-tooltip workaround: touch has no
 // hover, so that text was effectively unreachable.
-export function ObservationsList({ observations, gridRef }) {
+export function ObservationsList({ observations, gridRef, loadAudio }) {
   if (observations.length === 0) {
     return html`<p class="observations-empty">No observations saved yet</p>`;
   }
@@ -54,6 +99,11 @@ export function ObservationsList({ observations, gridRef }) {
                 ? html`<p class="observations-photo">
                     <span class="glyph-camera" aria-hidden="true"></span>Photo
                   </p>`
+                : null
+            }
+            ${
+              obs.audioId
+                ? html`<${SavedVoiceNote} audioId=${obs.audioId} loadAudio=${loadAudio} />`
                 : null
             }
             ${
