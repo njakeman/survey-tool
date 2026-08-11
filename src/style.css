@@ -1,23 +1,49 @@
-/* INTERIM STYLING — see docs/styling.md.
+/* Field Survey — implemented from the mobile design pass (docs/styling.md,
+ * mockups in docs/design/). The palette, type scale, spacing and border
+ * treatments here are the design's, not placeholders.
  *
- * This sheet is deliberately functional, not designed: it exists to make the
- * app legible and operable in the field, and every colour in it is a
- * placeholder awaiting a proper design pass. Read docs/styling.md before
- * restyling — it records the constraints the design has to keep (gloved
- * touch targets, sunlight contrast, offline-only assets, and the ARIA
- * attributes that double as styling hooks).
- *
- * Two conventions to preserve rather than replace:
- *  - `color-scheme: light dark` plus `color-mix(… currentColor …)` means most
- *    of the interface already follows the OS light/dark setting without a
- *    second palette to maintain. Literal hex values are the exception, and
- *    each one is a place that does NOT adapt.
- *  - The touch-target floor is a hard requirement, not a default.
+ * Four things in this sheet are load-bearing rather than decorative. Read
+ * docs/styling.md before changing any of them:
+ *  - The 44px touch-target floor. Gloved, one-handed, in a field. Not a
+ *    default to tidy away.
+ *  - Every asset is local. No webfont CDN, no icon set, no remote image —
+ *    the app has to render with no network at all. Every glyph below is CSS.
+ *  - ARIA attributes double as styling hooks: `aria-current="true"` selects
+ *    the basemap region in use, and role="alert"/aria-live carry state.
+ *    Restyling must not replace them with class-only equivalents.
+ *  - Colour is never the only signal. Every state carries a word and a shape
+ *    as well as a hue, so it survives greyscale and colour blindness.
  */
+
+/* Vendored, not hosted — see scripts/fetch-fonts.mjs. The absolute path is
+ * rebased onto the deploy base by Vite; `public/` assets are copied as-is and
+ * caught by the service worker's woff2 precache glob. */
+@font-face {
+  font-family: 'Atkinson Hyperlegible';
+  src: url('/fonts/atkinson/atkinson-regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Atkinson Hyperlegible';
+  src: url('/fonts/atkinson/atkinson-bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
 
 :root {
   color-scheme: light dark;
-  font-family: system-ui, sans-serif;
+
+  /* No italic face is vendored: the two italic uses in the app take the
+     browser's synthetic oblique rather than a third file. */
+  font-family: 'Atkinson Hyperlegible', system-ui, sans-serif;
+
+  /* The one place a second family appears. Small uppercase labels read as
+     labels rather than as small body text, and it needs no download. */
+  --font-label: ui-monospace, SFMono-Regular, Menlo, monospace;
 
   /* Spacing — a 0.25rem scale. */
   --space-1: 0.25rem;
@@ -36,49 +62,133 @@
   --shell: 32rem;
   --shell-wide: 40rem;
 
-  /* Semantic colours. The neutrals are currentColor-derived so they adapt to
-     light/dark for free; the three literals below do not adapt and are the
-     first thing a design pass should replace. */
-  --rule: color-mix(in srgb, currentColor 15%, transparent);
-  --rule-faint: color-mix(in srgb, currentColor 12%, transparent);
-  --surface-faint: color-mix(in srgb, currentColor 6%, transparent);
-  --text-muted: color-mix(in srgb, currentColor 55%, transparent);
-  --text-secondary: color-mix(in srgb, currentColor 70%, transparent);
-  --warning: color-mix(in srgb, orange 70%, currentColor);
-  --danger: color-mix(in srgb, orangered 70%, currentColor);
-  --danger-strong: #b00;
-  --accent: #2b2620; /* matches <meta name="theme-color"> in index.html */
+  /* Type scale. Two weights only, 400 and 700. Nothing in the capture flow
+     goes below 14px; nothing anywhere below 12.5px. */
+  --type-label: 10px; /* 700 / .14em / uppercase / --font-label */
+  --type-badge: 9.5px; /* 700 / .08em / uppercase / --font-label */
+  --type-fine: 12.5px;
+  --type-meta: 13.5px;
+  --type-small: 14px;
+  --type-body: 15px;
+  --type-control: 17px;
+  --type-title: 19px;
+  --type-save: 20px;
+  --type-heading-xl: 25px;
+  --type-readout: 27px;
+
+  /* Colour. Paper, ink and accent are literals, which is why this sheet has
+     a prefers-color-scheme block (below) for the first time — everything
+     derived from them via rgba()/color-mix() follows automatically. */
+  --paper: #f4f0e8;
+  --surface: #fbf9f4;
+  --ink: #1e2433;
+
+  --accent: #c2611f;
+  /* Accent as *text* on paper is under 4.5:1, so links, Undo and accent
+     borders take the darker pair instead. */
+  --accent-ink: #a8511a;
+  --accent-deep: #8a4a12;
+  /* Label colour on an accent fill. White on light; on dark the accent
+     lightens, so its label has to go the other way. */
+  --on-accent: #fff;
+
+  --danger-strong: #7d2208;
+  --danger-bg: #fdece4;
+  --danger-rule: #b3300b;
+
+  --suggestion-bg: #fdf6e3;
   --map-backdrop: #e8e4dc;
+
+  --rule: rgba(30, 36, 51, 0.14);
+  --rule-faint: rgba(30, 36, 51, 0.09);
+  --control-rule: rgba(30, 36, 51, 0.3);
+  --surface-faint: color-mix(in srgb, currentColor 6%, transparent);
+  --text-secondary: rgba(30, 36, 51, 0.62);
+  --text-muted: rgba(30, 36, 51, 0.55);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #16171c;
+    --surface: #1e2027;
+    /* Warm-tinted rather than neutral, so it does not read blue at dusk. */
+    --ink: #ece7dd;
+
+    --accent: #e07b33;
+    --accent-ink: #e07b33;
+    --accent-deep: #f2a05a;
+    --on-accent: #16171c;
+
+    --map-backdrop: #23252b;
+
+    --rule: rgba(236, 231, 221, 0.16);
+    --rule-faint: rgba(236, 231, 221, 0.1);
+    --control-rule: rgba(236, 231, 221, 0.3);
+    --text-secondary: rgba(236, 231, 221, 0.62);
+    --text-muted: rgba(236, 231, 221, 0.55);
+  }
+
+  /* The alert surfaces (error panel, region suggestion) deliberately keep
+     their light ground in both schemes: they read as a slip of paper laid
+     over the interface, which is the point of an alert. Their ink is dark to
+     match. */
 }
 
 body {
   margin: 0;
   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
     env(safe-area-inset-left);
+  background: var(--paper);
+  color: var(--ink);
+}
+
+/* The largest gap in the previous sheet: there was no focus styling at all.
+   :focus-visible rather than :focus, so a gloved tap does not leave a ring
+   behind on a touch-only device. */
+:where(button, [href], input, textarea, select, label.photo-field-button):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius);
+}
+
+/* There is no hover on touch. Press feedback is the whole interaction
+   vocabulary, and 92% opacity is all of it. */
+:where(button, label.photo-field-button):active {
+  opacity: 0.92;
+}
+
+/* Nothing else in this sheet moves. If that changes, it belongs above this
+   guard, not around it. */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
 }
 
 .probe {
-  padding: 1rem;
-  max-width: 40rem;
+  padding: var(--space-4);
+  max-width: var(--shell-wide);
   margin: 0 auto;
 }
 
 .probe-row {
   display: flex;
   align-items: baseline;
-  gap: 0.75rem;
-  padding: 0.75rem 0;
-  border-bottom: 1px solid color-mix(in srgb, currentColor 15%, transparent);
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--rule);
   flex-wrap: wrap;
 }
 
 .probe-label {
-  font-weight: 600;
+  font-weight: 700;
   min-width: 12rem;
 }
 
 button {
   font-size: 1rem;
+  font-family: inherit;
   padding: 0.6rem var(--space-4);
   /* Large touch target, usable one-handed with gloves. Do not lower. */
   min-height: var(--touch-target);
@@ -86,28 +196,28 @@ button {
 }
 
 .probe-log {
-  font-size: 0.75rem;
+  font-size: var(--type-fine);
   overflow-x: auto;
-  background: color-mix(in srgb, currentColor 6%, transparent);
-  padding: 0.5rem;
+  background: var(--surface-faint);
+  padding: var(--space-2);
 }
 
 /* Capture page: minimal interface, large touch targets, readable in
    sunlight, usable one-handed with gloves — per the brief. */
 
 .capture-page {
-  padding: 1rem;
-  max-width: 32rem;
+  padding: var(--space-4);
+  max-width: var(--shell);
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: var(--space-4);
 }
 
 .session-bar {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: var(--space-3);
   flex-wrap: wrap;
 }
 
@@ -117,9 +227,9 @@ button {
   position: relative;
   height: 40vh;
   min-height: 12rem;
-  border-radius: 0.25rem;
+  border-radius: var(--radius);
   overflow: hidden;
-  background: #e8e4dc;
+  background: var(--map-backdrop);
 }
 
 .capture-map-canvas {
@@ -131,7 +241,7 @@ button {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 1rem;
+  padding: var(--space-4);
   text-align: center;
 }
 
@@ -139,46 +249,47 @@ button {
    the hand holding the phone. */
 .capture-map-recentre {
   position: absolute;
-  right: 0.5rem;
-  bottom: 0.5rem;
+  right: var(--space-2);
+  bottom: var(--space-2);
   z-index: 1;
 }
 
 .capture-map-error {
-  color: #b00;
+  color: var(--danger-strong);
 }
 
 /* Sits over the map, above the re-centre control, because it is a question
    the surveyor should answer before carrying on. */
 .capture-map-suggestion {
   position: absolute;
-  left: 0.5rem;
-  right: 0.5rem;
-  top: 0.5rem;
+  left: var(--space-2);
+  right: var(--space-2);
+  top: var(--space-2);
   z-index: 2;
   margin: 0;
-  padding: 0.5rem;
-  border-radius: 0.25rem;
-  background: #fffbe6;
-  border: 1px solid #d9c470;
+  padding: var(--space-2);
+  border-radius: var(--radius);
+  background: var(--suggestion-bg);
+  border: 1px solid var(--accent);
+  color: var(--ink);
 }
 
 .capture-map-change {
   position: absolute;
-  left: 0.5rem;
-  bottom: 0.5rem;
+  left: var(--space-2);
+  bottom: var(--space-2);
   z-index: 1;
 }
 
 /* Region picker. The first list styling in the app — session history is
    still unstyled — so keep it plain and thumb-sized rather than clever. */
 .basemap-picker {
-  padding: 1rem;
-  max-width: 32rem;
+  padding: var(--space-4);
+  max-width: var(--shell);
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: var(--space-4);
   align-items: flex-start;
 }
 
@@ -189,13 +300,13 @@ button {
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: var(--space-3);
 }
 
 .basemap-picker-list > li {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: var(--space-1);
 }
 
 .basemap-picker-list > li > button:first-child {
@@ -208,23 +319,23 @@ button {
 }
 
 .basemap-picker-list > li > button[aria-current='true'] {
-  border-color: #2b2620;
+  border-color: var(--accent);
   border-width: 2px;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .basemap-picker-name {
-  font-size: 1.05rem;
+  font-size: var(--type-control);
 }
 
 .basemap-picker-size,
 .basemap-picker-state {
-  font-size: 0.85rem;
-  opacity: 0.75;
+  font-size: var(--type-small);
+  color: var(--text-secondary);
 }
 
 .basemap-picker-error {
-  color: #b00;
+  color: var(--danger-strong);
   margin: 0;
 }
 
@@ -267,13 +378,14 @@ button {
 }
 
 .session-history-name {
-  font-size: 1.05rem;
+  font-size: var(--type-control);
 }
 
 .session-history-date,
 .session-history-count {
-  font-size: 0.85rem;
+  font-size: var(--type-small);
   color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
 }
 
 .session-history-empty {
@@ -292,17 +404,18 @@ button {
   background: none;
   border: none;
   padding: var(--space-2) 0;
-  color: inherit;
+  color: var(--accent-ink);
   text-decoration: underline;
   min-width: 0;
 }
 
 .session-name {
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .session-count {
   color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
 }
 
 .photo-field {
@@ -314,7 +427,7 @@ button {
 
 .photo-field-error {
   margin: 0;
-  color: var(--danger);
+  color: var(--danger-strong);
 }
 
 .probe-result {
@@ -346,33 +459,34 @@ button {
 
 .session-bar input,
 .capture-page textarea {
-  font-size: 1.1rem;
-  padding: 0.5rem;
-  min-height: 2.75rem;
+  font-size: var(--type-control);
+  font-family: inherit;
+  padding: var(--space-2);
+  min-height: var(--touch-target);
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--control-rule);
+  border-radius: var(--radius);
 }
 
 .capture-page textarea {
   width: 100%;
-  min-height: 4rem;
+  min-height: 3.5rem;
   resize: vertical;
 }
 
 .readings-panel {
-  font-size: 1.25rem; /* legible at arm's length, in sunlight */
   font-variant-numeric: tabular-nums;
 }
 
 .reading-stale,
-.reading-problem {
-  color: var(--warning);
+.reading-problem,
+.readings-panel .position-only {
+  color: var(--accent-deep);
 }
 
 .reading-problem {
   margin: 0;
-}
-
-.readings-panel .position-only {
-  color: color-mix(in srgb, orange 70%, currentColor);
 }
 
 /* A styled label standing in for the file input's own control — browsers
@@ -385,12 +499,12 @@ button {
   align-items: center;
   justify-content: center;
   width: fit-content;
-  font-size: 1rem;
-  padding: 0.6rem 1rem;
-  min-height: 2.75rem;
-  min-width: 2.75rem;
-  border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
-  border-radius: 0.25rem;
+  font-size: var(--type-body);
+  padding: 0.6rem var(--space-4);
+  min-height: 3rem;
+  min-width: var(--touch-target);
+  border: 1px solid var(--control-rule);
+  border-radius: var(--radius);
   cursor: pointer;
 }
 
@@ -410,34 +524,41 @@ button {
   max-width: 100%;
   max-height: 12rem;
   display: block;
-  margin-top: 0.5rem;
+  margin-top: var(--space-2);
 }
 
 .save-button button {
   width: 100%;
   min-height: 3.5rem;
-  font-size: 1.25rem;
-  font-weight: 600;
+  font-size: var(--type-save);
+  font-weight: 700;
+  background: var(--accent);
+  color: var(--on-accent);
+  border: 1px solid var(--accent-ink);
+  border-radius: var(--radius);
 }
 
-.save-button-reason,
+.save-button-reason {
+  color: var(--accent-deep);
+}
+
 .save-error {
-  color: color-mix(in srgb, orangered 70%, currentColor);
+  color: var(--danger-strong);
 }
 
 .offline-status-warning {
-  font-weight: 600;
-  color: color-mix(in srgb, orangered 70%, currentColor);
+  font-weight: 700;
+  color: var(--danger-strong);
 }
 
 .last-saved {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 
 .observations-empty {
-  color: color-mix(in srgb, currentColor 55%, transparent);
+  color: var(--text-muted);
   font-style: italic;
 }
 
@@ -448,30 +569,31 @@ button {
 .observations-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.9rem;
+  font-size: var(--type-small);
   font-variant-numeric: tabular-nums;
 }
 
 .observations-table th,
 .observations-table td {
-  padding: 0.4rem 0.6rem;
+  padding: var(--space-1) var(--space-2);
   text-align: left;
   white-space: nowrap;
-  border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+  border-bottom: 1px solid var(--rule-faint);
 }
 
 .observations-table th {
-  font-weight: 600;
-  color: color-mix(in srgb, currentColor 70%, transparent);
+  font-weight: 700;
+  color: var(--text-secondary);
 }
 
 .update-banner {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.75rem 1rem;
+  gap: var(--space-3);
+  padding: 0.7rem var(--space-4);
   margin: 0;
-  font-weight: 600;
-  background: color-mix(in srgb, orange 25%, transparent);
+  font-weight: 700;
+  background: var(--accent);
+  color: var(--paper);
 }

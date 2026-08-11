@@ -81,8 +81,11 @@ export default defineConfig(async ({ command, isPreview }) => {
         scope: base,
         display: 'standalone',
         orientation: 'portrait',
-        background_color: '#f4f1ea',
-        theme_color: '#2b2620',
+        // --paper and --accent from src/style.css. The splash screen is
+        // drawn from these before any CSS loads, so a mismatch shows as a
+        // colour flash on every standalone launch.
+        background_color: '#f4f0e8',
+        theme_color: '#c2611f',
         icons: [
           { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png' },
           { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png' },
