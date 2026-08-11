@@ -12,6 +12,7 @@ import { downscaleImageBlob } from './photo/encode.js';
 import { buildSessionExport } from './export/buildSessionExport.js';
 import { zipEntries } from './export/zip.js';
 import { shareOrDownload } from './export/share.js';
+import { importSessionExport } from './import/importSession.js';
 import { subscribeOfflineStatus } from './app/offlineStatus.js';
 import { createBasemapService } from './app/basemapService.js';
 import { createFeatureLayerService } from './app/featureLayerService.js';
@@ -79,6 +80,11 @@ async function main() {
     const file = new File([zipBlob], filename, { type: 'application/zip' });
     return shareOrDownload(file, { title: filename });
   }
+
+  // The reverse trip: a previously exported zip (or bare session.geojson)
+  // back onto the device, always as a copy under fresh ids.
+  const importSession = async (file) =>
+    importSessionExport(db, { buffer: await file.arrayBuffer(), filename: file.name }, { newId });
 
   // Absolute, because the service resolves each region's relative manifest
   // URL against it.
@@ -288,6 +294,7 @@ async function main() {
         sensors=${state.sensors}
         downscale=${state.downscale}
         exportSession=${state.exportSession}
+        importSession=${importSession}
         offlineStatus=${state.offlineStatus}
         updateAvailable=${state.updateAvailable}
         onReload=${() => updateSW()}

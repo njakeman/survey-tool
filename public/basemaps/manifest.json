@@ -14,5 +14,21 @@
     "maxZoom": 17,
     "tileType": "raster",
     "tileSize": 256
+  },
+  {
+    "id": "newtimber",
+    "name": "Newtimber",
+    "url": "basemaps/newtimber.pmtiles",
+    "sizeBytes": 5428682,
+    "bounds": [
+      -0.213403,
+      50.8808999,
+      -0.154559,
+      50.9066
+    ],
+    "minZoom": 12,
+    "maxZoom": 17,
+    "tileType": "raster",
+    "tileSize": 256
   }
 ]

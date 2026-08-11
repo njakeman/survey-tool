@@ -1121,6 +1121,15 @@ button {
   min-height: 3.25rem;
 }
 
+/* Outline, not primary: bringing a session in is the rarer act, and the row
+   above it (a session, or the empty message) is what the eye should land on. */
+.session-history-import {
+  width: 100%;
+  min-height: 3.25rem;
+  margin-top: var(--space-4);
+}
+
+.session-history-import-message,
 .session-history-export-message,
 .capture-page-export-message {
   display: flex;

@@ -213,3 +213,72 @@ describe('SessionHistoryPage — detail', () => {
     await screen.findByText(/zip failed/);
   });
 });
+
+describe('SessionHistoryPage — import', () => {
+  function renderWithImport({ importSession, service = createFakeService() } = {}) {
+    render(
+      html`<${SessionHistoryPage}
+        service=${service}
+        exportSession=${vi.fn()}
+        importSession=${importSession}
+        onBack=${vi.fn()}
+      />`,
+    );
+    return service;
+  }
+
+  function pickFile(file) {
+    const input = document.querySelector('input[type="file"]');
+    Object.defineProperty(input, 'files', { value: [file], configurable: true });
+    fireEvent.change(input);
+  }
+
+  test('hands the chosen file to importSession and reports the summary', async () => {
+    const importSession = vi
+      .fn()
+      .mockResolvedValue({ name: 'Hedgerow survey', observationCount: 14, photoCount: 12 });
+    const service = renderWithImport({ importSession });
+    const file = new File(['zip bytes'], 'hedgerow-survey-2026-08-06.zip', {
+      type: 'application/zip',
+    });
+
+    pickFile(file);
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(/Imported 'Hedgerow survey' — 14 observations, 12 photos/),
+      ).toBeInTheDocument(),
+    );
+    expect(importSession).toHaveBeenCalledWith(file);
+    // The list snapshot re-reads, so the new session appears without leaving
+    // the view.
+    expect(service.listSessions.mock.calls.length).toBeGreaterThan(1);
+  });
+
+  test('omits the photo count when the export carried none', async () => {
+    const importSession = vi
+      .fn()
+      .mockResolvedValue({ name: 'Bare geojson', observationCount: 3, photoCount: 0 });
+    renderWithImport({ importSession });
+
+    pickFile(new File(['{}'], 'session.geojson', { type: 'application/geo+json' }));
+
+    await waitFor(() =>
+      expect(screen.getByText(/Imported 'Bare geojson' — 3 observations$/)).toBeInTheDocument(),
+    );
+  });
+
+  test('shows the named failure as an alert and re-reads nothing', async () => {
+    const importSession = vi
+      .fn()
+      .mockRejectedValue(new Error('Could not import: session.geojson is not valid JSON (x.zip)'));
+    const service = renderWithImport({ importSession });
+
+    pickFile(new File(['nope'], 'x.zip', { type: 'application/zip' }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent(/not valid JSON \(x\.zip\)/),
+    );
+    expect(service.listSessions).toHaveBeenCalledTimes(1);
+  });
+});

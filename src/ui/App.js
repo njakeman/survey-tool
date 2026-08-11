@@ -15,6 +15,7 @@ export function App({
   sensors,
   downscale,
   exportSession,
+  importSession,
   offlineStatus,
   updateAvailable,
   onReload,
@@ -57,6 +58,7 @@ export function App({
       <${SessionHistoryPage}
         service=${service}
         exportSession=${exportSession}
+        importSession=${importSession}
         gridRef=${gridRef}
         onBack=${() => setView('capture')}
       />

@@ -1,21 +1,28 @@
 import { html } from 'htm/preact';
-import { useEffect, useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import { formatDate } from '../sensors/format.js';
 import { ObservationsList } from './ObservationsList.js';
 import { SyncBadge } from './SyncBadge.js';
 
-// Read-only view of past (non-open) sessions, so ended-but-unsynced sessions
-// stay visible and inspectable instead of vanishing once you tap End —
-// per-row edit/delete stays a Phase 6 review-screen concern, this is
-// display + export only.
-export function SessionHistoryPage({ service, exportSession, gridRef, onBack }) {
+// Read-only view of past (non-open) sessions, so ended-but-unexported
+// sessions stay visible and inspectable instead of vanishing once you tap
+// End — per-row edit/delete stays a Phase 6 review-screen concern. This is
+// also where sessions come *in*: Import reads a previously exported zip (or
+// bare session.geojson) back onto the device, as a copy.
+export function SessionHistoryPage({ service, exportSession, importSession, gridRef, onBack }) {
   const [sessions, setSessions] = useState(null); // null = still loading
   const [openSessionId, setOpenSessionId] = useState(null);
   const [counts, setCounts] = useState({});
+  // Bumped after a successful import so the mount snapshot re-reads.
+  const [reloadKey, setReloadKey] = useState(0);
 
   const [selected, setSelected] = useState(null); // { session, observations } | null
   const [exportState, setExportState] = useState('idle'); // idle | exporting | done | error
   const [exportMessage, setExportMessage] = useState('');
+
+  const fileInputRef = useRef(null);
+  const [importState, setImportState] = useState('idle'); // idle | importing | done | error
+  const [importMessage, setImportMessage] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -38,9 +45,31 @@ export function SessionHistoryPage({ service, exportSession, gridRef, onBack }) 
     return () => {
       cancelled = true;
     };
-    // Mount only: the list is a snapshot taken when the view opens.
+    // A snapshot taken when the view opens, re-taken only after an import
+    // lands something new to show.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [reloadKey]);
+
+  async function handleImportFile(event) {
+    const [file] = event.target.files ?? [];
+    // Same file again must still fire change next time.
+    event.target.value = '';
+    if (!file) return;
+    setImportState('importing');
+    setImportMessage('');
+    try {
+      const summary = await importSession(file);
+      setImportState('done');
+      const photos = summary.photoCount ? `, ${summary.photoCount} photos` : '';
+      setImportMessage(
+        `Imported '${summary.name}' — ${summary.observationCount} observations${photos}`,
+      );
+      setReloadKey((key) => key + 1);
+    } catch (error) {
+      setImportState('error');
+      setImportMessage(error.message || 'Could not import that file');
+    }
+  }
 
   async function openSession(session) {
     const observations = await service.listObservations(session.id);
@@ -150,6 +179,34 @@ export function SessionHistoryPage({ service, exportSession, gridRef, onBack }) 
                   })}
                 </ul>
               `
+      }
+      <input
+        ref=${fileInputRef}
+        type="file"
+        accept=".zip,.geojson,.json,application/zip,application/geo+json,application/json"
+        class="visually-hidden"
+        aria-hidden="true"
+        tabindex="-1"
+        onChange=${handleImportFile}
+      />
+      <button
+        type="button"
+        class="button-outline session-history-import"
+        disabled=${importState === 'importing'}
+        onClick=${() => fileInputRef.current?.click()}
+      >
+        ${importState === 'importing' ? 'Importing…' : 'Import session'}
+      </button>
+      ${
+        importState === 'error'
+          ? html`<p class="session-history-import-message panel-danger" role="alert">
+              ${importMessage}
+            </p>`
+          : importMessage
+            ? html`<p class="session-history-import-message" role="status">
+                <span class="save-confirmation-tick" aria-hidden="true">✓</span> ${importMessage}
+              </p>`
+            : null
       }
     </main>
   `;
