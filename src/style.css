@@ -1,6 +1,54 @@
+/* INTERIM STYLING — see docs/styling.md.
+ *
+ * This sheet is deliberately functional, not designed: it exists to make the
+ * app legible and operable in the field, and every colour in it is a
+ * placeholder awaiting a proper design pass. Read docs/styling.md before
+ * restyling — it records the constraints the design has to keep (gloved
+ * touch targets, sunlight contrast, offline-only assets, and the ARIA
+ * attributes that double as styling hooks).
+ *
+ * Two conventions to preserve rather than replace:
+ *  - `color-scheme: light dark` plus `color-mix(… currentColor …)` means most
+ *    of the interface already follows the OS light/dark setting without a
+ *    second palette to maintain. Literal hex values are the exception, and
+ *    each one is a place that does NOT adapt.
+ *  - The touch-target floor is a hard requirement, not a default.
+ */
+
 :root {
   color-scheme: light dark;
   font-family: system-ui, sans-serif;
+
+  /* Spacing — a 0.25rem scale. */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+
+  --radius: 0.25rem;
+
+  /* 44px: the iOS minimum, and what "usable with gloves" actually needs.
+     Nothing interactive may go below this. */
+  --touch-target: 2.75rem;
+
+  /* Page shell width. The probe page deliberately runs wider (--shell-wide)
+     because it is a dense diagnostic table, not a field surface. */
+  --shell: 32rem;
+  --shell-wide: 40rem;
+
+  /* Semantic colours. The neutrals are currentColor-derived so they adapt to
+     light/dark for free; the three literals below do not adapt and are the
+     first thing a design pass should replace. */
+  --rule: color-mix(in srgb, currentColor 15%, transparent);
+  --rule-faint: color-mix(in srgb, currentColor 12%, transparent);
+  --surface-faint: color-mix(in srgb, currentColor 6%, transparent);
+  --text-muted: color-mix(in srgb, currentColor 55%, transparent);
+  --text-secondary: color-mix(in srgb, currentColor 70%, transparent);
+  --warning: color-mix(in srgb, orange 70%, currentColor);
+  --danger: color-mix(in srgb, orangered 70%, currentColor);
+  --danger-strong: #b00;
+  --accent: #2b2620; /* matches <meta name="theme-color"> in index.html */
+  --map-backdrop: #e8e4dc;
 }
 
 body {
@@ -31,9 +79,10 @@ body {
 
 button {
   font-size: 1rem;
-  padding: 0.6rem 1rem;
-  min-height: 2.75rem; /* large touch target, usable one-handed with gloves */
-  min-width: 2.75rem;
+  padding: 0.6rem var(--space-4);
+  /* Large touch target, usable one-handed with gloves. Do not lower. */
+  min-height: var(--touch-target);
+  min-width: var(--touch-target);
 }
 
 .probe-log {
@@ -184,9 +233,92 @@ button {
   margin: 0;
 }
 
-.capture-map-note,
-.capture-map-progress {
+/* Session history: a read-only list of past sessions, each opening its own
+   observations. Same shell as the capture page so views don't jump width. */
+.session-history {
+  padding: var(--space-4);
+  max-width: var(--shell);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  align-items: flex-start;
+}
+
+.session-history-list {
+  list-style: none;
   margin: 0;
+  padding: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* One button fills each row: the whole row is the touch target, not a link
+   buried in text. */
+.session-history-list > li > button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  width: 100%;
+  text-align: left;
+}
+
+.session-history-name {
+  font-size: 1.05rem;
+}
+
+.session-history-date,
+.session-history-count {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.session-history-empty {
+  color: var(--text-muted);
+}
+
+.session-history-export-message,
+.capture-page-export-message {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+/* Footer navigation. Visually a link, but still a real button with a real
+   touch target — the hit area stays full-height even though the ink doesn't. */
+.link {
+  background: none;
+  border: none;
+  padding: var(--space-2) 0;
+  color: inherit;
+  text-decoration: underline;
+  min-width: 0;
+}
+
+.session-name {
+  font-weight: 600;
+}
+
+.session-count {
+  color: var(--text-secondary);
+}
+
+.photo-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: flex-start;
+}
+
+.photo-field-error {
+  margin: 0;
+  color: var(--danger);
+}
+
+.probe-result {
+  overflow-wrap: anywhere;
 }
 
 .session-bar input,
