@@ -44,8 +44,14 @@ The archives are **not** part of the build: you pre-bake one per region, commit 
 lists them so the surveyor can download the ones they need. Downloaded regions live in IndexedDB
 and work with no network at all — several can be held at once and switched between in the field.
 
-Produce each with the [`pmtiles` CLI](https://github.com/protomaps/go-pmtiles) against Protomaps'
-public daily planet build, into `public/basemaps/`, named for the area:
+**Vector and raster archives both work.** A vector archive gives you styled roads, water and
+labels; a raster archive (PNG or JPEG tiles — aerial imagery, a scanned map, a site survey) is
+drawn as-is, with no labels beyond whatever is baked into the pictures. The type is detected from
+each archive's header, along with the raster tile size, so there is nothing to declare. Note that
+a region is one or the other: raster imagery is not currently composited over a vector basemap.
+
+Produce a vector region with the [`pmtiles` CLI](https://github.com/protomaps/go-pmtiles) against
+Protomaps' public daily planet build, into `public/basemaps/`, named for the area:
 
 ```sh
 pmtiles extract https://build.protomaps.com/20260801.pmtiles public/basemaps/north-wiltshire.pmtiles \
@@ -54,6 +60,10 @@ pmtiles extract https://build.protomaps.com/20260801.pmtiles public/basemaps/nor
 
 npm run basemaps:manifest   # regenerates public/basemaps/manifest.json
 ```
+
+A raster region comes from wherever your imagery does — `rio pmtiles` from a GeoTIFF, or
+`pmtiles convert` from an MBTiles pyramid — dropped into the same directory and followed by the
+same `npm run basemaps:manifest`.
 
 `--bbox` is `minLon,minLat,maxLon,maxLat`. The filename becomes the region's name in the app
 (`north-wiltshire.pmtiles` → "North Wiltshire"), and the manifest records each archive's real
@@ -75,6 +85,8 @@ Constraints worth knowing before you pick regions:
   tight regions over one sprawling one.
 - A newly deployed region appears only after the surveyor accepts the app's update prompt: the
   manifest is precached along with the rest of the build.
+- An archive the generator cannot read is **warned about and skipped**, not fatal — one bad file
+  costs you that region, never the deploy. Watch the build log for `SKIPPED`.
 - **Never bulk-fetch tiles from `tile.openstreetmap.org` or OpenFreeMap** to build one. `pmtiles
 extract` against Protomaps is the documented, ODbL-licensed, no-key route (see `CLAUDE.md`).
 - The archive is deliberately excluded from the service-worker precache: Workbox would silently

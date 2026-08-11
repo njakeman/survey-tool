@@ -177,6 +177,15 @@ standalone })`, browser globals injected same as `probe/capabilities.js`, so it'
   metadata (name, bounds) is recorded in `settings` when a region is downloaded**, not on the
   archive record: bounds drive the position suggestion, offline is when that matters, and updating
   a field on an archive record would mean rewriting a hundred megabytes.
+- Archives may be **vector or raster**; `map/manifest.js` detects which from the header (and, for
+  raster, the tile size from the image bytes — nothing records it, and guessing 512 for 256px
+  tiles halves the scale). `buildStyle` branches: the raster branch has no glyphs, no sprite and
+  **must not** carry the vector branch's OpenStreetMap/Protomaps attribution, which would be false
+  over a user's own imagery. Both `tileType` and `tileSize` are persisted per region, or an
+  offline raster region would be styled as vector and render blank.
+- The manifest generator runs as a **prebuild step**, so it must never throw: one unreadable
+  archive would otherwise take down the build, the e2e webServer and the deploy together (it has).
+  Warn and skip.
 - Region switching is **offered, never imposed** (`map/basemapSelection.js` returns `activeId` and
   `suggestionId` separately). A surveyor mid-observation must never have the map change under
   them. The suggestion is computed in `CapturePage`, because that is where the live fix is.

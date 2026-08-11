@@ -133,8 +133,12 @@ real device; Playwright cannot exercise any of it.
       capture shows the map without a reload
 - [ ] Force-quit, enable airplane mode, relaunch from the home screen: **the map renders
       immediately**, labels included, with no network at all
-- [ ] Place names and road names are legible — if labels are missing, the glyph ranges in
-      `src/map/glyphs.js` don't cover this region's scripts
+- [ ] **Vector regions:** place names and road names are legible — if labels are missing, the
+      glyph ranges in `src/map/glyphs.js` don't cover this region's scripts
+- [ ] **Raster regions** (e.g. `cissbury`): imagery draws at the right scale — features should sit
+      where the GPS dot says they are, not at half or double size (that would mean the detected
+      tile size is wrong), and zooming out should stop at the archive's lowest zoom rather than
+      going blank
 
 **Feel in the field**
 
