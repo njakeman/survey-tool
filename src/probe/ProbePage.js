@@ -11,10 +11,13 @@ import { appendLogEntry, readLog, clearLog } from './log.js';
 import { benchmarkPbkdf2 } from './pbkdf2-benchmark.js';
 import { readOfflineStatus } from '../app/offlineStatus.js';
 
-// Throwaway on-device diagnostic (plan Phase 1). Answers the open questions
-// that decide whether this app's architecture is viable on the maintainer's
-// actual phone before any real feature is built on top of the assumption.
-// Delete once every check has a confirmed answer recorded in the plan.
+// The on-device diagnostic page, reachable from the capture footer. Built in
+// Phase 1 to answer whether this architecture was viable on the maintainer's
+// actual phone, and kept since: it is now the permanent home of any check that
+// has to be answerable on the device itself — offline readiness (there is no
+// console on an installed iOS PWA), and the microphone question that decides
+// whether voice notes get built. New capability doubts get a row here before
+// any feature is built on the assumption.
 
 // Ordered by preference: Opus is far more efficient for speech, mp4/AAC is
 // what Safari has always supported. Whichever the device accepts first wins.
@@ -25,10 +28,6 @@ const RECORDING_CANDIDATES = [
   'audio/webm',
 ];
 const RECORDING_MS = 3000;
-
-function log(check, result) {
-  appendLogEntry(localStorage, { at: new Date().toISOString(), check, result });
-}
 
 function ResultRow({ label, children }) {
   return html`<div class="probe-row">
@@ -53,6 +52,15 @@ export function ProbePage() {
     setEntries(readLog(localStorage));
   }
 
+  // Every check funnels through here: one call both persists the finding
+  // (localStorage survives a relaunch, which the on-screen state does not)
+  // and refreshes the visible log, so a check cannot record without showing
+  // or show without recording.
+  function record(check, result) {
+    appendLogEntry(localStorage, { at: new Date().toISOString(), check, result });
+    refreshLog();
+  }
+
   async function checkOfflineStatus(standaloneNow = standalone ?? false) {
     const result = await readOfflineStatus({
       serviceWorker: navigator.serviceWorker,
@@ -61,8 +69,7 @@ export function ProbePage() {
       standalone: standaloneNow,
     });
     setOfflineStatusResult(result);
-    log('offline-status', result);
-    refreshLog();
+    record('offline-status', result);
   }
 
   useEffect(() => {
@@ -71,13 +78,11 @@ export function ProbePage() {
       matchMedia: window.matchMedia,
     });
     setStandalone(standaloneNow);
-    log('standalone', standaloneNow);
-    refreshLog();
+    record('standalone', standaloneNow);
 
     navigator.storage?.estimate?.().then((estimate) => {
       setStorageEstimate(estimate);
-      log('storage-estimate', estimate);
-      refreshLog();
+      record('storage-estimate', estimate);
     });
 
     // Auto-run, not gated behind a button — no permission prompt involved,
@@ -93,8 +98,7 @@ export function ProbePage() {
     const already = await navigator.storage?.persisted?.();
     const granted = already || (await navigator.storage?.persist?.());
     setPersisted(granted);
-    log('storage-persist', granted);
-    refreshLog();
+    record('storage-persist', granted);
   }
 
   function checkGeolocation() {
@@ -107,14 +111,12 @@ export function ProbePage() {
           accuracyM: position.coords.accuracy,
         };
         setGeoResult(result);
-        log('geolocation', result);
-        refreshLog();
+        record('geolocation', result);
       },
       (error) => {
         const result = { error: error.message, code: error.code };
         setGeoResult(result);
-        log('geolocation', result);
-        refreshLog();
+        record('geolocation', result);
       },
       { enableHighAccuracy: true, timeout: 15000 },
     );
@@ -128,8 +130,7 @@ export function ProbePage() {
     // Must be called synchronously from this gesture handler.
     const result = await window.DeviceOrientationEvent.requestPermission();
     setOrientationResult(result);
-    log('orientation-permission', result);
-    refreshLog();
+    record('orientation-permission', result);
   }
 
   async function checkShare() {
@@ -138,20 +139,18 @@ export function ProbePage() {
     });
     if (!canShareFiles(navigator, [file])) {
       setShareResult('canShare() says no for this file/browser');
-      log('share', 'unsupported');
-      refreshLog();
+      record('share', 'unsupported');
       return;
     }
     try {
       await navigator.share({ files: [file], title: 'Survey tool probe' });
       setShareResult('share sheet completed');
-      log('share', 'completed');
+      record('share', 'completed');
     } catch (error) {
       const result = error.name === 'AbortError' ? 'dismissed by user' : `error: ${error.message}`;
       setShareResult(result);
-      log('share', result);
+      record('share', result);
     }
-    refreshLog();
   }
 
   function checkDownload() {
@@ -162,8 +161,7 @@ export function ProbePage() {
     anchor.download = 'probe-test.txt';
     anchor.click();
     setTimeout(() => URL.revokeObjectURL(url), 10_000);
-    log('download-triggered', true);
-    refreshLog();
+    record('download-triggered', true);
   }
 
   // Could an observation carry a voice note? Storage says yes easily — AAC
@@ -184,8 +182,7 @@ export function ProbePage() {
           ? 'MediaRecorder present but supports none of the candidate types'
           : 'no MediaRecorder on this device';
       setMicResult(result);
-      log('microphone', result);
-      refreshLog();
+      record('microphone', result);
       return;
     }
 
@@ -198,8 +195,7 @@ export function ProbePage() {
       // different problems, so they must not collapse into one message.
       const result = `getUserMedia failed: ${error.name} — ${error.message}`;
       setMicResult(result);
-      log('microphone', result);
-      refreshLog();
+      record('microphone', result);
       return;
     }
 
@@ -228,18 +224,17 @@ export function ProbePage() {
       const bytes = chunks.reduce((total, chunk) => total + chunk.size, 0);
       const result = describeRecording({ mimeType, bytes, ms: performance.now() - started });
       setMicResult(`${result} · offered: ${types.join(', ')}`);
-      log('microphone', result);
+      record('microphone', result);
     } catch (error) {
       const result = `recording failed: ${error.name} — ${error.message}`;
       setMicResult(result);
-      log('microphone', result);
+      record('microphone', result);
     } finally {
       // Every track, always. A capture left running keeps the iOS recording
       // indicator lit and is the likeliest cause of the reported "works once,
       // then never again until you restart the phone".
       for (const track of stream.getTracks()) track.stop();
     }
-    refreshLog();
   }
 
   async function runPbkdf2Benchmark() {
@@ -250,8 +245,7 @@ export function ProbePage() {
       iterations: 600_000,
     });
     setPbkdf2Result(result);
-    log('pbkdf2-600k', result);
-    refreshLog();
+    record('pbkdf2-600k', result);
   }
 
   return html`
