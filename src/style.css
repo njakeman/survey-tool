@@ -609,6 +609,105 @@ button {
   z-index: 1;
 }
 
+/* "Mark a distant point" sits beside "Change map" along the bottom of the
+   map, both of them things you do to the map rather than to the observation. */
+.capture-map-pick {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: var(--space-2);
+  z-index: 1;
+}
+
+/* The picking crosshair: fixed at the centre while the map moves under it.
+   Drawn in CSS rather than as a map layer because it belongs to the viewport,
+   not to the ground — it must not pan with the tiles, which is the entire
+   point of the interaction.
+
+   Two arms and a gap, rather than a dot: a filled marker would cover the
+   thing being aimed at, which is the same objection as aiming with a
+   fingertip. pointer-events: none so it never intercepts the drag. */
+.capture-map-crosshair {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 44px;
+  height: 44px;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+  pointer-events: none;
+}
+
+.capture-map-crosshair::before,
+.capture-map-crosshair::after {
+  content: '';
+  position: absolute;
+  background: var(--accent);
+  /* A pale outline, so the arms stay visible over both dark imagery and a
+     pale vector basemap. */
+  outline: 1px solid rgb(255 255 255 / 0.7);
+}
+
+/* Horizontal arms, with a gap in the middle over the target itself. */
+.capture-map-crosshair::before {
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 2px;
+  margin-top: -1px;
+  clip-path: polygon(0 0, 38% 0, 38% 100%, 0 100%, 100% 100%, 100% 0, 62% 0, 62% 100%, 38% 100%);
+}
+
+.capture-map-crosshair::after {
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  margin-left: -1px;
+  clip-path: polygon(0 0, 100% 0, 100% 38%, 0 38%, 0 100%, 100% 100%, 100% 62%, 0 62%);
+}
+
+/* The confirm panel, over the bottom of the map. Above the crosshair's
+   z-index so the controls are always tappable. */
+.capture-map-picking {
+  position: absolute;
+  left: var(--space-2);
+  right: var(--space-2);
+  bottom: var(--space-2);
+  z-index: 3;
+  margin: 0;
+  padding: 10px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.capture-map-picking-copy {
+  margin: 0;
+  font-size: var(--type-fine);
+  color: var(--text-secondary);
+}
+
+/* The line the surveyor checks before committing, so it takes the same
+   monospaced tabular treatment as the live grid reference. */
+.capture-map-picking-readout {
+  margin: 0;
+  font-family: var(--font-label);
+  font-size: var(--type-small);
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.capture-map-picking-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
 /* Region picker. The first list styling in the app — session history is
    still unstyled — so keep it plain and thumb-sized rather than clever. */
 .basemap-picker {

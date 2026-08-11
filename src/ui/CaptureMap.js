@@ -7,6 +7,8 @@ import {
   onUserPan,
   showsRecentre,
 } from '../map/followMode.js';
+import { bearingDeg, distanceM, pickAccuracyM } from '../geo/distance.js';
+import { compassPoint, formatDistance } from '../sensors/format.js';
 
 // The map panel on the capture page. Imports nothing heavy: the renderer
 // arrives as the injected `createMap` factory (main.js loads the adapter
@@ -29,6 +31,9 @@ export function CaptureMap({
   observations,
   featureLayers,
   onFeatureTap,
+  pickedPoint,
+  onPickPoint,
+  gridRef,
   visible,
 }) {
   const containerRef = useRef(null);
@@ -44,6 +49,18 @@ export function CaptureMap({
   const featureTapRef = useRef(onFeatureTap);
   featureTapRef.current = onFeatureTap;
 
+  // Marking a point the surveyor can see but cannot reach. A crosshair fixed
+  // at the centre with the map panned underneath it, rather than a tap: a
+  // gloved fingertip is a 44px target that covers the thing being aimed at,
+  // where the crosshair is one pixel and always visible. Tap is also already
+  // taken by feature layers.
+  const [picking, setPicking] = useState(false);
+  const [crosshair, setCrosshair] = useState(null);
+  // Read inside the adapter's own tap callback, which is created once per
+  // map and would otherwise close over `picking` as it was at construction.
+  const pickingRef = useRef(false);
+  pickingRef.current = picking;
+
   useEffect(() => {
     if (!activeRegionId || !containerRef.current) return undefined;
     let cancelled = false;
@@ -54,7 +71,13 @@ export function CaptureMap({
     createMap({
       container: containerRef.current,
       onUserPan: () => setFollow((current) => onUserPan(current)),
-      onFeatureTap: (result) => featureTapRef.current?.(result),
+      // Suppressed while picking: inspecting a feature and placing a point
+      // are two different intents, and a tap that did both would do neither
+      // predictably.
+      onFeatureTap: (result) => {
+        if (pickingRef.current) return;
+        featureTapRef.current?.(result);
+      },
     })
       .then((adapter) => {
         // The region can change again — or the view be torn down — while the
@@ -135,12 +158,67 @@ export function CaptureMap({
     if (visible) guarded(() => adapterRef.current?.resize());
   }, [visible, adapterReady]);
 
+  useEffect(() => {
+    guarded(() => adapterRef.current?.setPickedPoint(pickedPoint ?? null));
+  }, [pickedPoint, adapterReady]);
+
+  useEffect(() => {
+    const adapter = adapterRef.current;
+    if (!picking || !adapter) return undefined;
+    // Subscribed only while picking. The readout has to be live under a
+    // moving thumb, but a standing subscription would re-render this panel on
+    // every follow-mode recentre, about once a second, for a readout that is
+    // not on screen.
+    const read = () => setCrosshair({ ...adapter.getCentre(), zoom: adapter.getZoom() });
+    read();
+    return adapter.onMove?.(read);
+  }, [picking, adapterReady]);
+
+  function startPicking() {
+    // Follow mode off first. Otherwise the surveyor lines the crosshair up,
+    // a GPS tick lands a second later, and the map jumps back to them — a
+    // bug with no workaround from their side.
+    setFollow((current) => onUserPan(current));
+    setPicking(true);
+  }
+
+  function confirmPick() {
+    if (!crosshair) return;
+    onPickPoint?.({
+      lat: crosshair.lat,
+      lon: crosshair.lon,
+      // Not the surveyor's own fix accuracy: this point was placed by eye,
+      // and its uncertainty is how precisely the map could be aimed.
+      accuracyM: pickAccuracyM(crosshair.lat, crosshair.zoom),
+    });
+    setPicking(false);
+  }
+
   function handleRecentre() {
     setFollow((current) => {
       const { state, centreOn } = onRecentre(current);
       if (centreOn) adapterRef.current?.centreOn(centreOn);
       return state;
     });
+  }
+
+  // "SU 14082 39216 · 240 m NE". Built as one string rather than interpolated
+  // inline: htm trims the whitespace around a line break between expressions,
+  // so a wrapped template silently loses the separators.
+  function describeCrosshair() {
+    if (!crosshair) return 'Reading the map…';
+    const parts = [];
+    const reference = gridRef?.(crosshair.lat, crosshair.lon);
+    if (reference) parts.push(reference);
+    if (position) {
+      const away = distanceM(position, crosshair);
+      const compass = compassPoint(bearingDeg(position, crosshair));
+      parts.push(`${formatDistance(away)} ${compass}`);
+    }
+    // Coordinates only when there is nothing friendlier to show — outside
+    // Great Britain, or before the shift grid has loaded.
+    if (parts.length === 0) parts.push(`${crosshair.lat.toFixed(5)}, ${crosshair.lon.toFixed(5)}`);
+    return parts.join(' · ');
   }
 
   if (!statusKnown) return null;
@@ -194,7 +272,28 @@ export function CaptureMap({
           : null
       }
       ${
-        showsRecentre(follow)
+        picking
+          ? html`
+              <div class="capture-map-crosshair" aria-hidden="true"></div>
+              <div class="capture-map-picking" role="status">
+                <p class="capture-map-picking-copy">Pan the map under the mark</p>
+                <p class="capture-map-picking-readout">${describeCrosshair()}</p>
+                <div class="capture-map-picking-actions">
+                  <button type="button" class="button-primary" onClick=${confirmPick}>
+                    Use this point
+                  </button>
+                  <button type="button" class="button-outline" onClick=${() => setPicking(false)}>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            `
+          : null
+      }
+      ${
+        // Hidden while picking: the crosshair panel already owns the bottom
+        // of the map, and re-centring mid-aim would undo the aiming.
+        showsRecentre(follow) && !picking
           ? html`<button
               type="button"
               class="capture-map-recentre button-surface"
@@ -204,9 +303,20 @@ export function CaptureMap({
             </button>`
           : null
       }
-      <button type="button" class="capture-map-change button-surface" onClick=${onOpenPicker}>
-        Change map
-      </button>
+      ${
+        picking
+          ? null
+          : html`<button
+                type="button"
+                class="capture-map-change button-surface"
+                onClick=${onOpenPicker}
+              >
+                Change map
+              </button>
+              <button type="button" class="capture-map-pick button-surface" onClick=${startPicking}>
+                Mark a distant point
+              </button>`
+      }
       ${error ? html`<p class="capture-map-error" role="alert">${error}</p>` : null}
     </div>
   `;

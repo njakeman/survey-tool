@@ -172,10 +172,12 @@ describe('CapturePage — saving an observation', () => {
         heading: HEADING,
         note: 'gate post',
         photo: null,
-        // Explicitly null rather than omitted, and asserted as part of the
-        // exact object: an observation with no source feature has to say so,
-        // or a stale link from a previous save could slip through unnoticed.
+        // Both explicitly null rather than omitted, and asserted as part of
+        // the exact object: an observation with no source feature and no
+        // marked point has to say so, or a stale one from a previous save
+        // could slip through unnoticed.
         feature: null,
+        pickedPoint: null,
       }),
     );
   });
@@ -707,5 +709,113 @@ describe('CapturePage — recording against a map feature', () => {
 
     expect(await screen.findByRole('heading', { name: 'SU1408 3921' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /record here/i })).not.toBeInTheDocument();
+  });
+});
+
+describe('CapturePage — saving against a point marked on the map', () => {
+  const CENTRE = { lat: 51.6, lon: -0.2 };
+
+  async function armedWithMap() {
+    const service = createFakeService({ openSession: OPEN_SESSION });
+    const { sensors, pushPosition } = createFakeSensors();
+    const adapter = {
+      ready: Promise.resolve(),
+      setPosition: vi.fn(),
+      setObservations: vi.fn(),
+      setFeatureLayers: vi.fn(),
+      setPickedPoint: vi.fn(),
+      getCentre: vi.fn(() => CENTRE),
+      getZoom: vi.fn(() => 17),
+      onMove: vi.fn(() => () => {}),
+      centreOn: vi.fn(),
+      resize: vi.fn(),
+      destroy: vi.fn(),
+    };
+    render(
+      html`<${CapturePage}
+        service=${service}
+        sensors=${sensors}
+        downscale=${vi.fn()}
+        activeRegionId=${'south'}
+        statusKnown=${true}
+        createMap=${vi.fn().mockResolvedValue(adapter)}
+        visible=${true}
+      />`,
+    );
+    await screen.findByText('Ashton Keynes');
+    pushPosition(POSITION);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /save observation/i })).not.toBeDisabled(),
+    );
+    return { service, adapter };
+  }
+
+  async function markAPoint() {
+    const armed = await armedWithMap();
+    fireEvent.click(screen.getByRole('button', { name: /mark a distant point/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /use this point/i }));
+    return armed;
+  }
+
+  test('the marked point shows above Save, so it is visible at the moment it applies', async () => {
+    await markAPoint();
+
+    expect(await screen.findByText(/Marked on the map/)).toBeInTheDocument();
+  });
+
+  test('the marked point reaches saveObservation', async () => {
+    const { service } = await markAPoint();
+
+    fireEvent.click(screen.getByRole('button', { name: /save observation/i }));
+
+    await waitFor(() =>
+      expect(service.saveObservation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          pickedPoint: expect.objectContaining({ lat: CENTRE.lat, lon: CENTRE.lon }),
+        }),
+      ),
+    );
+  });
+
+  test('the mark is cleared after saving, so the next observation is not silently placed there', async () => {
+    const { service } = await markAPoint();
+    fireEvent.click(screen.getByRole('button', { name: /save observation/i }));
+    await waitFor(() => expect(service.saveObservation).toHaveBeenCalled());
+
+    await waitFor(() => expect(screen.queryByText(/Marked on the map/)).not.toBeInTheDocument());
+
+    service.saveObservation.mockClear();
+    fireEvent.click(screen.getByRole('button', { name: /save observation/i }));
+    await waitFor(() =>
+      expect(service.saveObservation).toHaveBeenCalledWith(
+        expect.objectContaining({ pickedPoint: null }),
+      ),
+    );
+  });
+
+  test('"Use my position" drops the mark and reverts to the fix', async () => {
+    const { service } = await markAPoint();
+
+    fireEvent.click(screen.getByRole('button', { name: /use my position/i }));
+
+    expect(screen.queryByText(/Marked on the map/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /save observation/i }));
+    await waitFor(() =>
+      expect(service.saveObservation).toHaveBeenCalledWith(
+        expect.objectContaining({ pickedPoint: null }),
+      ),
+    );
+  });
+
+  test('a note and a photo survive marking a point', async () => {
+    // The mark is a property of the observation being built, not a mode that
+    // discards it — the surveyor may well type the note first.
+    await armedWithMap();
+    fireEvent.input(screen.getByLabelText(/note/i), { target: { value: 'far gate' } });
+
+    fireEvent.click(screen.getByRole('button', { name: /mark a distant point/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /use this point/i }));
+
+    expect(screen.getByLabelText(/note/i)).toHaveValue('far gate');
   });
 });

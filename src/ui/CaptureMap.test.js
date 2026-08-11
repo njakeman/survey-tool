@@ -272,3 +272,146 @@ describe('CaptureMap — a renderer that misbehaves', () => {
     expect(container.querySelector('.capture-map-canvas')).toBeTruthy();
   });
 });
+
+describe('CaptureMap — marking a point you cannot walk to', () => {
+  const CENTRE = { lat: 51.6, lon: -0.2 };
+
+  function pickingAdapter() {
+    const adapter = fakeAdapter();
+    adapter.getCentre = vi.fn(() => CENTRE);
+    adapter.getZoom = vi.fn(() => 17);
+    adapter.setPickedPoint = vi.fn();
+    adapter.onMove = vi.fn(() => () => {});
+    return adapter;
+  }
+
+  async function enterPicking(overrides = {}) {
+    const adapter = pickingAdapter();
+    const createMap = vi.fn().mockResolvedValue(adapter);
+    const rendered = renderMap({ createMap, ...overrides });
+    await waitFor(() => expect(createMap).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('button', { name: /mark a distant point/i }));
+    // Spread last: renderMap returns its props, and one of them could
+    // otherwise shadow the adapter under test.
+    return { ...rendered, adapter };
+  }
+
+  test('offers the control only once there is a map to mark on', () => {
+    renderMap({ activeRegionId: null });
+
+    expect(screen.queryByRole('button', { name: /mark a distant point/i })).not.toBeInTheDocument();
+  });
+
+  test('entering picking shows the crosshair and the confirm controls', async () => {
+    const { container } = await enterPicking();
+
+    expect(container.querySelector('.capture-map-crosshair')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /use this point/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /cancel/i })).toBeInTheDocument();
+  });
+
+  test('reads out the crosshair position, so it can be checked before committing', async () => {
+    await enterPicking({ gridRef: () => 'SU 14082 39216', position: POSITION });
+
+    expect(await screen.findByText(/SU 14082 39216/)).toBeInTheDocument();
+  });
+
+  test('says how far away the point is, which is the sanity check on a distant mark', async () => {
+    // The surveyor knows roughly how far away the thing they are looking at
+    // is. A reading of 12 km when they meant 300 m is the mistake this catches.
+    await enterPicking({ position: POSITION });
+
+    expect(await screen.findByText(/\d+(\.\d+)? (m|km) [NESW]/)).toBeInTheDocument();
+  });
+
+  test('falls back to coordinates where there is no grid reference', async () => {
+    // Outside Great Britain, or before the shift grid has loaded. A blank
+    // readout would give the surveyor nothing to check before committing.
+    await enterPicking({ gridRef: () => null, position: null });
+
+    expect(await screen.findByText(/51\.60000, -0\.20000/)).toBeInTheDocument();
+  });
+
+  test('confirming hands back the point with an accuracy from the zoom', async () => {
+    const onPickPoint = vi.fn();
+    await enterPicking({ onPickPoint });
+
+    fireEvent.click(screen.getByRole('button', { name: /use this point/i }));
+
+    expect(onPickPoint).toHaveBeenCalledWith(
+      expect.objectContaining({ lat: CENTRE.lat, lon: CENTRE.lon, accuracyM: expect.any(Number) }),
+    );
+    // z17 over the UK is around a metre per pixel, so a few metres — not the
+    // surveyor's own fix accuracy, and never zero.
+    const { accuracyM } = onPickPoint.mock.calls[0][0];
+    expect(accuracyM).toBeGreaterThan(0);
+    expect(accuracyM).toBeLessThan(30);
+  });
+
+  test('confirming leaves picking mode', async () => {
+    await enterPicking({ onPickPoint: vi.fn() });
+
+    fireEvent.click(screen.getByRole('button', { name: /use this point/i }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: /use this point/i })).not.toBeInTheDocument(),
+    );
+  });
+
+  test('cancelling marks nothing', async () => {
+    const onPickPoint = vi.fn();
+    await enterPicking({ onPickPoint });
+
+    fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
+
+    expect(onPickPoint).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: /use this point/i })).not.toBeInTheDocument();
+  });
+
+  test('suspends follow mode, or the next fix would drag the map off the target', async () => {
+    // The bug this prevents has no workaround from the surveyor's side: they
+    // line the crosshair up, a GPS tick lands a second later, and the map
+    // jumps back to them.
+    const { adapter, rerender } = await enterPicking({ position: null });
+    adapter.centreOn.mockClear();
+
+    rerender({ position: POSITION });
+
+    await waitFor(() => expect(adapter.setPosition).toHaveBeenCalledWith(POSITION));
+    expect(adapter.centreOn).not.toHaveBeenCalled();
+  });
+
+  test('ignores feature taps while picking, since the two intents are different', async () => {
+    const onFeatureTap = vi.fn();
+    let tap;
+    const adapter = pickingAdapter();
+    const createMap = vi.fn((options) => {
+      tap = options.onFeatureTap;
+      return Promise.resolve(adapter);
+    });
+    renderMap({ createMap, onFeatureTap });
+    await waitFor(() => expect(createMap).toHaveBeenCalled());
+
+    tap({ layerId: 'parcels' });
+    expect(onFeatureTap).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole('button', { name: /mark a distant point/i }));
+    tap({ layerId: 'parcels' });
+
+    expect(onFeatureTap).toHaveBeenCalledTimes(1);
+  });
+
+  test('draws the mark the page hands back, and clears it when it goes', async () => {
+    // The mark comes from the pickedPoint prop, not from the confirm tap:
+    // CapturePage owns it, so it survives a note being typed and a photo
+    // being taken. Driving it any other way here would test a path the app
+    // does not use.
+    const { adapter, rerender } = await enterPicking({ onPickPoint: vi.fn() });
+
+    rerender({ pickedPoint: CENTRE });
+    await waitFor(() => expect(adapter.setPickedPoint).toHaveBeenCalledWith(CENTRE));
+
+    rerender({ pickedPoint: null });
+    await waitFor(() => expect(adapter.setPickedPoint).toHaveBeenLastCalledWith(null));
+  });
+});

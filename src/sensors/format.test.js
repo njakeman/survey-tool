@@ -7,6 +7,7 @@ import {
   compassPoint,
   formatHeading,
   formatAge,
+  formatDistance,
   formatTime,
   formatDate,
 } from './format.js';
@@ -153,5 +154,33 @@ describe('formatDate', () => {
   test('returns an em dash when the timestamp is missing', () => {
     expect(formatDate(null)).toBe('—');
     expect(formatDate(undefined)).toBe('—');
+  });
+});
+
+describe('formatDistance', () => {
+  test.each([
+    [0, '0 m'],
+    [1, '1 m'],
+    [240, '240 m'],
+    [999, '999 m'],
+  ])('%i m reads as %s', (metres, expected) => {
+    expect(formatDistance(metres)).toBe(expected);
+  });
+
+  test('switches to kilometres at a kilometre', () => {
+    expect(formatDistance(1000)).toBe('1.0 km');
+    expect(formatDistance(11_700)).toBe('11.7 km');
+  });
+
+  test('rounds metres rather than showing a fraction of one', () => {
+    // A point marked on a map is good to a few metres at best; 240.37 m
+    // claims a precision the number does not have.
+    expect(formatDistance(240.37)).toBe('240 m');
+  });
+
+  test('has a dash for a distance it cannot work out', () => {
+    // No fix yet, so nothing to measure from.
+    expect(formatDistance(null)).toBe('—');
+    expect(formatDistance(NaN)).toBe('—');
   });
 });

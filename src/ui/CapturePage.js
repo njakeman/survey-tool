@@ -9,6 +9,7 @@ import { SaveButton } from './SaveButton.js';
 import { ObservationsList } from './ObservationsList.js';
 import { CaptureMap } from './CaptureMap.js';
 import { FeatureSheet } from './FeatureSheet.js';
+import { formatLatLon } from '../sensors/format.js';
 import { chooseActive } from '../map/basemapSelection.js';
 
 function todayDateString() {
@@ -56,6 +57,11 @@ export function CapturePage({
   // typing a note, and is cleared only by saving or by unlinking.
   const [tappedFeature, setTappedFeature] = useState(null);
   const [linkedFeature, setLinkedFeature] = useState(null);
+
+  // A point marked on the map because the surveyor could see the thing but
+  // not reach it. Held here rather than in CaptureMap so it survives typing a
+  // note and taking a photo, exactly as the linked feature does.
+  const [pickedPoint, setPickedPoint] = useState(null);
 
   const [saveState, setSaveState] = useState('idle'); // idle | saving
   const [saveError, setSaveError] = useState(null);
@@ -137,6 +143,7 @@ export function CapturePage({
         note,
         photo,
         feature: linkedFeature,
+        pickedPoint,
       });
       setNote('');
       setPhoto(null);
@@ -145,6 +152,10 @@ export function CapturePage({
       // to a feature the surveyor has walked away from.
       setLinkedFeature(null);
       setTappedFeature(null);
+      // Cleared with the note and the photo. A mark left armed would silently
+      // attach the next observation to a place the surveyor has walked away
+      // from — and unlike a stale note, nothing on screen would look wrong.
+      setPickedPoint(null);
       setLastSaved(observation);
       await refreshSession();
     } catch (error) {
@@ -266,6 +277,9 @@ export function CapturePage({
         observations=${observations}
         featureLayers=${featureLayers}
         onFeatureTap=${setTappedFeature}
+        pickedPoint=${pickedPoint}
+        onPickPoint=${setPickedPoint}
+        gridRef=${gridRef}
         visible=${visible}
       />
       <${FeatureSheet}
@@ -309,6 +323,21 @@ export function CapturePage({
       ${
         exportMessage
           ? html`<p class="capture-page-export-message" role="status">${exportMessage}</p>`
+          : null
+      }
+      ${
+        // Above Save with the linked-feature strip, for the same reason: this
+        // is the moment it takes effect, and it has to be reversible without
+        // losing the note and photo already collected.
+        pickedPoint
+          ? html`<p class="linked-feature">
+              <span class="linked-feature-label"
+                >${`Marked on the map · ${gridRef?.(pickedPoint.lat, pickedPoint.lon) ?? formatLatLon(pickedPoint.lat, pickedPoint.lon)}`}</span
+              >
+              <button type="button" class="link" onClick=${() => setPickedPoint(null)}>
+                Use my position
+              </button>
+            </p>`
           : null
       }
       ${

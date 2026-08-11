@@ -339,6 +339,16 @@ export async function createMapAdapter({
     return map.getZoom();
   }
 
+  // Movement, for as long as the caller wants it; returns an unsubscribe.
+  // Subscribed only while the picking crosshair is open, deliberately: the
+  // readout has to be live under a moving thumb, but a standing subscription
+  // would re-render the panel on every follow-mode recentre — about once a
+  // second, for a readout nobody is looking at.
+  function onMove(handler) {
+    map.on('move', handler);
+    return () => map.off('move', handler);
+  }
+
   function centreOn(reading) {
     if (!reading) return;
     map.easeTo({ center: [reading.lon, reading.lat], duration: 300 });
@@ -397,6 +407,7 @@ export async function createMapAdapter({
     setPickedPoint,
     getCentre,
     getZoom,
+    onMove,
     queryFeatureAt,
     centreOn,
     resize,

@@ -61,6 +61,16 @@ export function formatHeading(headingDeg) {
   return `${Math.round(headingDeg)}° ${compassPoint(headingDeg)}`;
 }
 
+// How far away something is, for the picking crosshair. Metres up to a
+// kilometre and then one decimal place, because the useful question at
+// 240 m is "which side of the hedge" and at 2 km it is "which field" —
+// "2400 m" answers neither and takes longer to read.
+export function formatDistance(metres) {
+  if (metres == null || !Number.isFinite(metres)) return '—';
+  if (metres < 1000) return `${Math.round(metres)} m`;
+  return `${(metres / 1000).toFixed(1)} km`;
+}
+
 export function formatTime(isoString) {
   if (isoString == null) return '—';
   return new Date(isoString).toLocaleTimeString('en-GB');
