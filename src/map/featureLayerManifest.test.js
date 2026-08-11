@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
-import { DEFAULT_STYLE, describeFeatureLayer } from './featureLayerManifest.js';
+import { describeFeatureLayer } from './featureLayerManifest.js';
+import { DEFAULT_STYLE } from './featureLayerStyle.js';
 
 function collection(features) {
   return JSON.stringify({ type: 'FeatureCollection', features });

@@ -1,5 +1,4 @@
 import { FONT_STACK } from './glyphs.js';
-import { DEFAULT_STYLE } from './featureLayerManifest.js';
 
 // Turns a loaded feature layer into the MapLibre source and layers that draw
 // it. Pure data, no maplibre import — same rule as style.js and overlays.js,
@@ -16,6 +15,32 @@ import { DEFAULT_STYLE } from './featureLayerManifest.js';
 // The paper colour from the app palette, as a literal: MapLibre paints to a
 // canvas and cannot read CSS custom properties (see overlays.js).
 const HALO = '#f4f0e8';
+
+// Every value a `<id>.style.json` sidecar can declare, and what it means when
+// it doesn't. Lives here rather than in featureLayerManifest.js, which is
+// Node-only: that module reaches manifest.js for its filename helper, which
+// imports node:fs, and importing it from this side dragged the whole build
+// step into the browser bundle.
+//
+// The colour is deliberately not '#c2611f'. That is the live fix and its
+// accuracy ring, and a layer defaulting to it would scatter a dozen things
+// across the map that read as "you are here".
+export const DEFAULT_STYLE = Object.freeze({
+  colour: '#1c5f9e',
+  lineWidth: 2,
+  fillOpacity: 0.15,
+  circleRadius: 5,
+  // Which property identifies a feature, titles it in the sheet, and labels
+  // it on the map. All null by default: guessing at a "name-ish" key gets it
+  // wrong on exactly the datasets that matter.
+  idProperty: null,
+  titleProperty: null,
+  labelProperty: null,
+  // Which attributes to show first in the sheet, and in what order. The rest
+  // follow alphabetically.
+  fieldOrder: [],
+  minZoom: 0,
+});
 
 export function featureLayerSourceId(id) {
   // Namespaced because 'basemap', 'position' and 'observations' are already

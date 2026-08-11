@@ -14,6 +14,35 @@ import { createMapAdapter, registeredArchiveCount } from './mapAdapter.js';
 const containers = [];
 const adapters = [];
 
+// Covers the whole of the vector fixture's coverage (-1..0.5, 51..52), so it
+// is under the viewport centre wherever the archive header puts the map.
+const PARCELS = {
+  id: 'parcels',
+  name: 'Field parcels',
+  style: { colour: '#1c5f9e', lineWidth: 2, fillOpacity: 0.3, titleProperty: 'ref' },
+  geojson: {
+    type: 'FeatureCollection',
+    features: [
+      {
+        type: 'Feature',
+        properties: { ref: 'SU1408 3921', area_ha: 4.2 },
+        geometry: {
+          type: 'Polygon',
+          coordinates: [
+            [
+              [-1, 51],
+              [0.5, 51],
+              [0.5, 52],
+              [-1, 52],
+              [-1, 51],
+            ],
+          ],
+        },
+      },
+    ],
+  },
+};
+
 function mountContainer() {
   const container = document.createElement('div');
   container.style.width = '400px';
@@ -169,6 +198,101 @@ describe('mapAdapter against real MapLibre', () => {
     expect(adapter.container.querySelector('canvas')).toBeTruthy();
     expect(adapter.container.dataset.mapLoaded).toBe('true');
     expect(onError).not.toHaveBeenCalled();
+  });
+
+  test('feature layers draw above the basemap and below the fix and the markers', async () => {
+    // The ordering guarantee. A parcel boundary painted over the position dot
+    // hides the one thing on the map that must never be hidden, and no unit
+    // test can see the composed layer stack.
+    const adapter = await createAdapter();
+    await adapter.ready;
+
+    adapter.setFeatureLayers([PARCELS]);
+    const order = adapter.getLayerOrder();
+
+    const lastFeatureLayer = Math.max(
+      ...order.map((id, index) => (id.startsWith('feature-layer-') ? index : -1)),
+    );
+    expect(lastFeatureLayer).toBeGreaterThan(-1);
+    expect(lastFeatureLayer).toBeLessThan(order.indexOf('position-accuracy'));
+    expect(lastFeatureLayer).toBeLessThan(order.indexOf('observations-markers'));
+    expect(lastFeatureLayer).toBeLessThan(order.indexOf('position-dot'));
+  });
+
+  test('a real MapLibre style accepts the generated layers, filters and all', async () => {
+    // featureLayerStyle.js is node-tested against its own output. Only the
+    // renderer can say whether the expressions in it are actually valid.
+    const onError = vi.fn();
+    const adapter = await createAdapter({ onError });
+    await adapter.ready;
+
+    adapter.setFeatureLayers([{ ...PARCELS, style: { ...PARCELS.style, labelProperty: 'ref' } }]);
+    await adapter.whenIdle();
+
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  test('switching a layer off removes its layers and its source', async () => {
+    const adapter = await createAdapter();
+    await adapter.ready;
+    adapter.setFeatureLayers([PARCELS]);
+
+    adapter.setFeatureLayers([]);
+
+    expect(adapter.getLayerOrder().some((id) => id.startsWith('feature-layer-'))).toBe(false);
+    // The source too — leaving it behind means addSource throws the next time
+    // the same layer is switched back on.
+    expect(adapter.hasSource('feature-layer-parcels')).toBe(false);
+  });
+
+  test('re-enabling a layer after switching it off works, rather than throwing on a stale source', async () => {
+    const onError = vi.fn();
+    const adapter = await createAdapter({ onError });
+    await adapter.ready;
+
+    adapter.setFeatureLayers([PARCELS]);
+    adapter.setFeatureLayers([]);
+    adapter.setFeatureLayers([PARCELS]);
+    await adapter.whenIdle();
+
+    expect(adapter.hasSource('feature-layer-parcels')).toBe(true);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  test('layers set before the style finishes loading are applied, not dropped', async () => {
+    // CaptureMap can hand over the enabled layers the instant the adapter
+    // resolves, which is before MapLibre's load event. Dropping them there
+    // means an empty map until something else happens to re-set them.
+    const adapter = await createAdapter();
+    adapter.setFeatureLayers([PARCELS]);
+
+    await adapter.ready;
+
+    expect(adapter.getLayerOrder().some((id) => id.startsWith('feature-layer-'))).toBe(true);
+  });
+
+  test('a tap over a feature reports it, with a tolerance a gloved thumb can hit', async () => {
+    const adapter = await createAdapter();
+    await adapter.ready;
+    adapter.setFeatureLayers([PARCELS]);
+    await adapter.whenIdle();
+
+    // Deliberately off-centre by more than a pixel: a bare point target is
+    // unusable through a glove, so the query is a box.
+    const result = adapter.queryFeatureAt({ x: 204, y: 154 });
+
+    expect(result).toBeTruthy();
+    expect(result.layerId).toBe('parcels');
+    expect(result.title).toBe('SU1408 3921');
+  });
+
+  test('a tap over nothing reports nothing, which is what dismisses the sheet', async () => {
+    const adapter = await createAdapter();
+    await adapter.ready;
+    adapter.setFeatureLayers([]);
+    await adapter.whenIdle();
+
+    expect(adapter.queryFeatureAt({ x: 200, y: 150 })).toBeNull();
   });
 
   test('destroy tears the map down and empties its container', async () => {

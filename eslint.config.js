@@ -2,6 +2,35 @@ import js from '@eslint/js';
 import globals from 'globals';
 import reactHooks from 'eslint-plugin-react-hooks';
 
+// src/map/manifest.js and featureLayerManifest.js exist for the build scripts
+// and import node:fs. Nothing the app ships may reach them.
+//
+// Enforced because it already happened: featureLayerStyle.js imported a
+// constant from featureLayerManifest.js, which pulled node:fs through three
+// hops into the browser bundle. Vite externalises it rather than failing the
+// build, so the first sign was a browser test that could not import the
+// module — had the constant lived one file further away, the first sign would
+// have been a broken map on a phone.
+// The `./` forms are listed explicitly. A glob of '**/map/manifest.js' does
+// not match a sibling import written './manifest.js' — and a sibling import
+// is exactly how this went wrong the first time, from inside src/map/ itself.
+const NODE_ONLY_MODULES = {
+  group: [
+    '**/map/manifest.js',
+    '**/map/featureLayerManifest.js',
+    './manifest.js',
+    './featureLayerManifest.js',
+  ],
+  message:
+    'Node-only build-script modules (they import node:fs). Shared values belong in a browser-safe module — see featureLayerStyle.js.',
+};
+
+// Spread into every block that sets no-restricted-imports rather than given a
+// block of its own. Flat config merges `rules` by name, last match winning,
+// so a second block matching src/ui/** would silently replace the UI
+// boundaries below instead of adding to them — which it did, and the probe
+// that caught it is worth remembering: an import of storage from src/ui/
+// stopped being an error and nothing else changed.
 export default [
   js.configs.recommended,
   {
@@ -61,9 +90,25 @@ export default [
               message:
                 'Browser-only heavy modules are composed in main.js and injected as props (CLAUDE.md).',
             },
+            NODE_ONLY_MODULES,
           ],
         },
       ],
+    },
+  },
+  {
+    // Everywhere else the app ships from. src/ui/** is excluded because its
+    // own block above already carries NODE_ONLY_MODULES; two blocks matching
+    // the same file would leave only the later rule in force.
+    files: ['src/**'],
+    ignores: [
+      'src/ui/**',
+      'src/**/*.test.js',
+      'src/map/manifest.js',
+      'src/map/featureLayerManifest.js',
+    ],
+    rules: {
+      'no-restricted-imports': ['error', { patterns: [NODE_ONLY_MODULES] }],
     },
   },
   {

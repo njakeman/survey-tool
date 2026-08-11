@@ -12,6 +12,13 @@ import {
   positionPaint,
   accuracyPaint,
 } from './overlays.js';
+import {
+  featureLayerIds,
+  featureLayerLayers,
+  featureLayerSource,
+  featureLayerSourceId,
+} from './featureLayerStyle.js';
+import { describeTappedFeature } from './featureQuery.js';
 import { initialZoomFromHeader, maxBoundsFromHeader, minZoomFromHeader } from './viewport.js';
 
 // The one module that touches MapLibre. Everything above it (style, overlays,
@@ -60,6 +67,14 @@ const EMPTY_COLLECTION = { type: 'FeatureCollection', features: [] };
 // Close enough to read field boundaries and gate posts.
 const SURVEY_ZOOM = 16;
 
+// Feature layers are inserted before this, so nothing the surveyor's own GIS
+// data draws can ever cover the live fix or a saved observation.
+const MARKERS_START_AT = 'position-accuracy';
+
+// A tap is a box, not a point. One pixel of tolerance is unusable through a
+// glove on a wet screen, and a boundary line is two pixels wide.
+const TAP_TOLERANCE_PX = 10;
+
 export async function createMapAdapter({
   container,
   archiveBuffer,
@@ -68,6 +83,7 @@ export async function createMapAdapter({
   tileSize,
   attribution,
   onUserPan,
+  onFeatureTap,
   onError,
 }) {
   ensureProtocol();
@@ -114,6 +130,79 @@ export async function createMapAdapter({
   // not, so follow mode can recentre without cancelling itself.
   if (onUserPan) map.on('dragstart', () => onUserPan());
 
+  // The feature layers currently on the map, as the objects they were set
+  // from. Held because removal needs to know what was added, and because a
+  // tap has to resolve a source id back to the layer's name and style.
+  let featureLayers = [];
+  let styleLoaded = false;
+  // Layers can arrive before MapLibre's load event — CaptureMap hands them
+  // over the instant the adapter resolves. Dropped there, the map would sit
+  // empty until something else happened to set them again.
+  let pendingFeatureLayers = null;
+
+  function addFeatureLayer(layer) {
+    map.addSource(featureLayerSourceId(layer.id), featureLayerSource(layer));
+    for (const definition of featureLayerLayers(layer)) {
+      // beforeId only once the marker layers exist. During the initial load
+      // they do not yet, and MapLibre throws on an unknown beforeId.
+      map.addLayer(definition, map.getLayer(MARKERS_START_AT) ? MARKERS_START_AT : undefined);
+    }
+  }
+
+  function removeFeatureLayer(layer) {
+    const sourceId = featureLayerSourceId(layer.id);
+    // By prefix rather than by recomputing the ids from the layer object: if
+    // the style changed between add and remove (a label property gained or
+    // lost), the recomputed set would not match what is actually on the map
+    // and would strand a layer behind.
+    for (const mapLayer of map.getStyle().layers) {
+      if (mapLayer.id.startsWith(`${sourceId}-`)) map.removeLayer(mapLayer.id);
+    }
+    // The source too: left behind, addSource throws the next time the same
+    // layer is switched back on.
+    if (map.getSource(sourceId)) map.removeSource(sourceId);
+  }
+
+  function applyFeatureLayers(next) {
+    for (const current of featureLayers) {
+      // Rebuilt rather than mutated when the object differs: paint, filters
+      // and the label layer's very existence all come from the style, and
+      // there is no setPaintProperty-shaped way to change whether a layer
+      // exists. Toggling is rare enough that the cost is irrelevant.
+      if (!next.includes(current)) removeFeatureLayer(current);
+    }
+    for (const layer of next) {
+      if (!featureLayers.includes(layer)) addFeatureLayer(layer);
+    }
+    featureLayers = next;
+  }
+
+  function setFeatureLayers(layers) {
+    const next = layers ?? [];
+    if (!styleLoaded) {
+      pendingFeatureLayers = next;
+      return;
+    }
+    applyFeatureLayers(next);
+  }
+
+  // The shared path behind both the click handler and the browser tier's
+  // assertions. All the judgement about *which* feature and *what to show*
+  // lives in featureQuery.js, node-tested; this only widens the target.
+  function queryFeatureAt(point) {
+    const ids = featureLayers.flatMap(featureLayerIds).filter((id) => map.getLayer(id));
+    if (ids.length === 0) return null;
+    const box = [
+      [point.x - TAP_TOLERANCE_PX, point.y - TAP_TOLERANCE_PX],
+      [point.x + TAP_TOLERANCE_PX, point.y + TAP_TOLERANCE_PX],
+    ];
+    return describeTappedFeature(map.queryRenderedFeatures(box, { layers: ids }), featureLayers);
+  }
+
+  // Reports null for a tap that hit nothing, which is what dismisses the
+  // sheet — the surveyor tapping the map to put it away.
+  if (onFeatureTap) map.on('click', (event) => onFeatureTap(queryFeatureAt(event.point)));
+
   const ready = new Promise((resolve) => {
     map.on('load', () => {
       map.addSource('position', { type: 'geojson', data: EMPTY_COLLECTION });
@@ -140,6 +229,12 @@ export async function createMapAdapter({
         source: 'position',
         paint: positionPaint(),
       });
+
+      styleLoaded = true;
+      if (pendingFeatureLayers) {
+        applyFeatureLayers(pendingFeatureLayers);
+        pendingFeatureLayers = null;
+      }
 
       container.dataset.mapLoaded = 'true';
       resolve();
@@ -194,17 +289,37 @@ export async function createMapAdapter({
     return data?.features?.length ?? 0;
   }
 
+  function getLayerOrder() {
+    return map.getStyle().layers.map((layer) => layer.id);
+  }
+
+  function hasSource(sourceId) {
+    return Boolean(map.getSource(sourceId));
+  }
+
+  // Rendering has settled. Only the browser tier needs it: a
+  // queryRenderedFeatures before the first paint finds nothing, however
+  // correct the layers are.
+  function whenIdle() {
+    return new Promise((resolve) => map.once('idle', resolve));
+  }
+
   return {
     container,
     ready,
     setPosition,
     setObservations,
+    setFeatureLayers,
+    queryFeatureAt,
     centreOn,
     resize,
     destroy,
     getMaxBounds,
     isRotationEnabled,
     getSourceFeatureCount,
+    getLayerOrder,
+    hasSource,
+    whenIdle,
     getArchiveKey: () => archiveKey,
   };
 }

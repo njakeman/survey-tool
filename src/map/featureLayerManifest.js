@@ -1,4 +1,5 @@
 import { regionNameFromFilename } from './manifest.js';
+import { DEFAULT_STYLE } from './featureLayerStyle.js';
 
 // Reading a feature layer well enough to publish a manifest entry: the facts
 // that can be measured from the data (size, feature count, bounds, which
@@ -8,26 +9,12 @@ import { regionNameFromFilename } from './manifest.js';
 // Pure — text in, entry out — so the coordinate walk and the validation below
 // are node-testable without touching the filesystem. The generator script
 // does the file reading.
-
-// Chosen against the app palette but deliberately away from '#c2611f': that
-// is the live fix and its accuracy ring, and a layer defaulting to it would
-// scatter a dozen things across the map that read as "you are here".
-export const DEFAULT_STYLE = Object.freeze({
-  colour: '#1c5f9e',
-  lineWidth: 2,
-  fillOpacity: 0.15,
-  circleRadius: 5,
-  // Which property identifies a feature, titles it in the sheet, and labels
-  // it on the map. All null by default: guessing at a "name-ish" key gets it
-  // wrong on exactly the datasets that matter.
-  idProperty: null,
-  titleProperty: null,
-  labelProperty: null,
-  // Which attributes to show first in the sheet, and in what order. The rest
-  // follow alphabetically.
-  fieldOrder: [],
-  minZoom: 0,
-});
+//
+// **Node-only**, like manifest.js next to it, and for the same reason: that
+// module imports node:fs. Nothing the app ships may import this one. The
+// dependency runs this way — manifest → style, never the reverse — because
+// featureLayerStyle.js is browser code and importing it the other way round
+// dragged node:fs into the bundle.
 
 // Longitude/latitude, not eastings/northings. Anything outside this is not a
 // judgement call about accuracy — it is a different coordinate system.

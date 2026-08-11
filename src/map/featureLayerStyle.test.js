@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
-import { DEFAULT_STYLE } from './featureLayerManifest.js';
 import {
+  DEFAULT_STYLE,
   featureLayerSourceId,
   featureLayerSource,
   featureLayerLayers,
