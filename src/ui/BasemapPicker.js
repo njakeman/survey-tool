@@ -104,7 +104,7 @@ export function BasemapPicker({
               </button>
               ${
                 errors[region.id]
-                  ? html`<p class="basemap-picker-error">${errors[region.id]}</p>`
+                  ? html`<p class="basemap-picker-error" role="alert">${errors[region.id]}</p>`
                   : null
               }
               ${

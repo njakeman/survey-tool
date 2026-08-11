@@ -62,7 +62,11 @@ export function SessionHistoryPage({ service, exportSession, onBack }) {
         <button type="button" disabled=${exportState === 'exporting'} onClick=${handleExport}>
           ${exportState === 'exporting' ? 'Exporting…' : 'Export'}
         </button>
-        ${exportMessage ? html`<p class="session-history-export-message">${exportMessage}</p>` : null}
+        ${
+          exportMessage
+            ? html`<p class="session-history-export-message" role="status">${exportMessage}</p>`
+            : null
+        }
       </main>
     `;
   }

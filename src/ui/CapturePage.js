@@ -189,6 +189,10 @@ export function CapturePage({
 
   return html`
     <main class="capture-page">
+      <!-- The app's only h1. Visually hidden: the session bar already names
+           the session on screen, but a document with no h1 leaves screen
+           readers with nothing to orient by. -->
+      <h1 class="visually-hidden">Field survey capture</h1>
       <${SessionBar}
         session=${session}
         defaultName=${todayDateString()}
@@ -233,7 +237,11 @@ export function CapturePage({
         saving=${saveState === 'saving'}
         onClick=${handleSave}
       />
-      ${saveError ? html`<p class="save-error">${saveError}</p>` : null}
+      ${
+        // role="alert" rather than a plain paragraph: a save that failed is
+        // the one thing the surveyor must not walk away from unaware.
+        saveError ? html`<p class="save-error" role="alert">${saveError}</p>` : null
+      }
       ${
         lastSaved
           ? html`<p class="last-saved">
@@ -248,13 +256,19 @@ export function CapturePage({
               <button type="button" disabled=${exportState === 'exporting'} onClick=${handleExport}>
                 ${exportState === 'exporting' ? 'Exporting…' : 'Export'}
               </button>
-              ${exportMessage ? html`<p class="capture-page-export-message">${exportMessage}</p>` : null}
+              ${
+                exportMessage
+                  ? html`<p class="capture-page-export-message" role="status">${exportMessage}</p>`
+                  : null
+              }
             `
           : null
       }
       ${
         offlineStatus && offlineStatus.precachedCount === 0
-          ? html`<p class="offline-status-warning">
+          ? // Appears with no user action, once the offline check settles
+            // after first paint — silent means never noticed.
+            html`<p class="offline-status-warning" role="status">
               No offline cache — this build will not work offline
             </p>`
           : null

@@ -114,7 +114,8 @@ export function CaptureMap({
       <div class="capture-map-canvas" ref=${containerRef}></div>
       ${
         suggestion
-          ? html`<p class="capture-map-suggestion">
+          ? // Appears from a GPS tick alone, with no user action.
+            html`<p class="capture-map-suggestion" role="status">
               You appear to be in ${suggestion.name}.
               <button type="button" onClick=${() => onSwitchRegion(suggestion.id)}>
                 Switch to it
@@ -133,7 +134,7 @@ export function CaptureMap({
           : null
       }
       <button type="button" class="capture-map-change" onClick=${onOpenPicker}>Change map</button>
-      ${error ? html`<p class="capture-map-error">${error}</p>` : null}
+      ${error ? html`<p class="capture-map-error" role="alert">${error}</p>` : null}
     </div>
   `;
 }

@@ -321,6 +321,29 @@ button {
   overflow-wrap: anywhere;
 }
 
+/* Available to assistive tech, absent from the visual layout. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* The full note text is always in the DOM — a title tooltip was the only way
+   to read a long one, and touch has no hover. CSS does the clipping, so
+   assistive tech and copy/paste still get the whole thing. */
+.observations-note-clipped {
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .session-bar input,
 .capture-page textarea {
   font-size: 1.1rem;

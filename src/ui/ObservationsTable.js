@@ -3,10 +3,8 @@ import { formatLatLon, formatAccuracy, formatHeading, formatTime } from '../sens
 
 const NOTE_PREVIEW_LENGTH = 40;
 
-function truncateNote(note) {
-  if (!note) return '';
-  if (note.length <= NOTE_PREVIEW_LENGTH) return note;
-  return `${note.slice(0, NOTE_PREVIEW_LENGTH)}…`;
+function isTruncated(note) {
+  return Boolean(note) && note.length > NOTE_PREVIEW_LENGTH;
 }
 
 // Read-only, live-updating record of what's been saved this session — a
@@ -23,12 +21,12 @@ export function ObservationsTable({ observations }) {
       <table class="observations-table">
         <thead>
           <tr>
-            <th>Time</th>
-            <th>Position</th>
-            <th>Accuracy</th>
-            <th>Heading</th>
-            <th>Note</th>
-            <th>Photo</th>
+            <th scope="col">Time</th>
+            <th scope="col">Position</th>
+            <th scope="col">Accuracy</th>
+            <th scope="col">Heading</th>
+            <th scope="col">Note</th>
+            <th scope="col">Photo</th>
           </tr>
         </thead>
         <tbody>
@@ -39,8 +37,15 @@ export function ObservationsTable({ observations }) {
                 <td>${formatLatLon(obs.lat, obs.lon)}</td>
                 <td>${formatAccuracy(obs.gpsAccuracyM)}</td>
                 <td>${obs.headingDeg == null ? '—' : formatHeading(obs.headingDeg)}</td>
-                <td title=${obs.note || undefined}>${truncateNote(obs.note)}</td>
-                <td>${obs.photoId ? '📷' : ''}</td>
+                ${
+                  // A title attribute was the only way to read a long note,
+                  // and touch has no hover — so the full text is always in
+                  // the document, with CSS doing the truncating.
+                  html`<td class=${isTruncated(obs.note) ? 'observations-note-clipped' : null}>
+                    ${obs.note}
+                  </td>`
+                }
+                <td>${obs.photoId ? html`<span aria-hidden="true">📷</span> Photo` : ''}</td>
               </tr>
             `,
           )}

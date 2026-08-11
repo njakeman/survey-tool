@@ -48,10 +48,15 @@ describe('ObservationsTable', () => {
     expect(within(row).getByText('—')).toBeInTheDocument();
   });
 
-  test('truncates a long note rather than growing the row indefinitely', () => {
+  test('clips a long note visually while keeping the full text readable', () => {
+    // The full note used to live only in a title tooltip, which touch has no
+    // way to show — so it is always in the DOM now, and CSS does the
+    // clipping. Keeps it available to assistive tech and to copy/paste.
     render(html`<${ObservationsTable} observations=${[OBS_NO_PHOTO]} />`);
-    const cell = screen.getByTitle(OBS_NO_PHOTO.note); // full text kept as a tooltip
-    expect(cell.textContent.length).toBeLessThan(OBS_NO_PHOTO.note.length + 3); // + ellipsis
+
+    const cell = screen.getByText(OBS_NO_PHOTO.note);
+    expect(cell).toHaveClass('observations-note-clipped');
+    expect(cell).not.toHaveAttribute('title');
   });
 
   test('shows a photo indicator only for observations with a photo', () => {
