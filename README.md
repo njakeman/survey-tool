@@ -15,6 +15,12 @@ import**, the offline basemap, [feature layers](#feature-layers),
 [OS grid references](#grid-references) and
 [marking points you cannot reach](#marking-a-point-you-cannot-reach) are built.
 
+**Voice notes** ride on observations: record on the capture page (webm/opus at ~0.4 MB/min —
+about half a photo per minute, measured on the device), hear it back before saving, play it from
+the observations list afterwards. They store beside photos, travel in the export zip under
+`audio/`, and import back like everything else. iOS keyboard dictation into the note field
+remains the zero-code alternative for text.
+
 **There is no sync and there will be none.** GitHub sync (and with it the encrypted personal
 access token, the passphrase prompt and the Git Data API commit flow) was planned as Phase 5 and
 deliberately dropped (2026-08-11): export to the device covers the need, with none of the token

@@ -335,6 +335,20 @@ amount of missing signal may break the map.**
 - [ ] Marking a distant point over imagery: the crosshair readout and saved grid reference match
       the feature you aimed at (imagery is often the sharper basemap to aim on)
 
+## Voice notes
+
+Built on the probe result above. The probe proved the microphone; these prove the feature.
+
+- [ ] Record a note with the phone-in-hand grip you actually use — are Record and Stop hittable
+      with gloves?
+- [ ] The player appears on stop; it plays back audibly (note whether through earpiece or
+      speaker) and Remove discards it
+- [ ] Save, then play the note from the observations list — and again after a force-quit relaunch
+- [ ] The orange recording indicator goes **out** on Stop, on Cancel-by-leaving, and on Save
+- [ ] Deny the mic permission once: the field shows the denial, Save still works
+- [ ] Export a session with a voice note, import it back: the note plays on the copy
+- [ ] Undo after saving a note: the recording is gone with the observation (no orphaned audio)
+
 ## Later phases (fill in as each lands)
 
 - [ ] Phase 6 — app storage surviving 2+ weeks of non-use (requires waiting, or trusting

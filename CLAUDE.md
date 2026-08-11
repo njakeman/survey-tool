@@ -13,7 +13,10 @@ to device covers the need) and replaced by **session import**: Session history �
 exported zip (or bare session.geojson) back in, always as a copy under fresh ids, and the
 Pending/Synced badge became the **Exported** badge (`src/ui/ExportBadge.js`), derived from
 `lastExportedAt`/`lastExportCount` which a completed export stamps on the session. Do not propose
-or build sync, token storage, or the crypto envelope. The mobile
+or build sync, token storage, or the crypto envelope. **Voice notes** are built on the back of the
+2026-08-11 device probe (mic works in standalone: webm/opus, ~0.4 MB/min): record on the capture
+page, stored beside photos, in the export zip as `audio/<id>.webm|.m4a`, played back from the
+observations list. The mobile
 design pass is implemented — `docs/styling.md` describes what was built and the constraints any
 change has to keep, `docs/design/` holds the handoff and mockups it came from. **Feature layers**
 (the surveyor's own GeoJSON drawn over the basemap, toggled in "Maps and layers", tappable for
@@ -106,6 +109,21 @@ for a `*.browser.test.js` file).
   metres, never a tick).
 - `src/photo/` — `dimensions.js` (pure aspect-ratio math, node-testable) and `encode.js` (real
   Canvas/Image decode+encode, browser-only — never import it outside `main.js`).
+- `src/audio/` — voice notes. `recordingTypes.js` (the candidate mime list, shared with the probe
+  so they can never test different lists), `record.js` (`startRecording` with
+  `mediaDevices`/`MediaRecorder` injected like the sensor adapters — node-tested lifecycle:
+  tracks stopped on every exit path, 5-min cap behaves like a Stop, denial propagates by name;
+  main.js binds the real globals and is its only importer). `domain/audio.js` maps contentType ↔
+  file extension for the export/import round trip. Recordings live in the `audio` store
+  (`storage/audioStore.js`, ArrayBuffer + contentType exactly like photos), ride in the save and
+  undo transactions (`captureWrite.js`/`captureDelete.js`), and `ui/VoiceNoteField.js` /
+  the observations list's lazy player are the two UI ends. A failed or denied recording lands on
+  the field and never blocks Save — same degradation rule as the compass.
+- `src/import/` — the inverse of export. `zipReader.js` (central-directory zip reader over
+  DecompressionStream — client-zip streams with data descriptors, so local headers lie about
+  sizes; no new dependency), `parseSessionExport.js` (pure inverse of `domain/geojson.js`,
+  validating every feature back through `createObservation`), `importSession.js` (copy semantics:
+  fresh ids for everything, one transaction, arrives closed, `lastExportedAt: null`).
 - `src/app/captureService.js` — the orchestration seam between UI and storage: session lifecycle +
   observation save + read-only `listSessions()` for the history view, over an injected
   `db`/`newId`/`nowIso`. Stateless — every call re-reads IndexedDB, which is what makes it correct
