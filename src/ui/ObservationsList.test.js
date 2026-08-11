@@ -142,3 +142,36 @@ describe('ObservationsList — grid references', () => {
     expect(screen.getByText(/51\.500000, -0\.140000/)).toBeInTheDocument();
   });
 });
+
+describe('ObservationsList — how the position was obtained', () => {
+  const base = {
+    id: 'obs-1',
+    fixAt: '2026-08-06T10:00:00.000Z',
+    lat: 51.5,
+    lon: -0.14,
+    gpsAccuracyM: 12,
+    headingDeg: null,
+    note: '',
+    photoId: null,
+  };
+
+  test('says when a point was marked on the map rather than measured', () => {
+    // The accuracy figure reads the same either way. Without this line, a
+    // point eyeballed from 300 m away is indistinguishable from a fix.
+    render(html`<${ObservationsList} observations=${[{ ...base, positionSource: 'map' }]} />`);
+
+    expect(screen.getByText(/marked on the map/i)).toBeInTheDocument();
+  });
+
+  test('says nothing extra for an ordinary GPS observation', () => {
+    render(html`<${ObservationsList} observations=${[{ ...base, positionSource: 'gps' }]} />`);
+
+    expect(screen.queryByText(/marked on the map/i)).not.toBeInTheDocument();
+  });
+
+  test('treats an observation saved before the field existed as a GPS fix', () => {
+    render(html`<${ObservationsList} observations=${[base]} />`);
+
+    expect(screen.queryByText(/marked on the map/i)).not.toBeInTheDocument();
+  });
+});

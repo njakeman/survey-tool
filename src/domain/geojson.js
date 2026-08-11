@@ -37,6 +37,10 @@ function observationToFeature(obs, session, appVersion, gridRef) {
       // and null if the shift grid never loaded — an export must not fail
       // over a convenience column.
       os_grid_ref: gridRef?.(obs.lat, obs.lon) ?? null,
+      // Whether the coordinates were measured or placed on a map. Defaulted
+      // rather than read straight through: records saved before this field
+      // existed were all GPS fixes, and 'gps' is the honest value for them.
+      position_source: obs.positionSource ?? 'gps',
       session_name: session.name,
       app_version: appVersion,
     },

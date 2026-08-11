@@ -7,6 +7,10 @@
 // (when the position was actually measured) are deliberately distinct — a
 // surveyor can stand at a point, type a note for 40 seconds, then save.
 
+export const POSITION_SOURCE_GPS = 'gps';
+export const POSITION_SOURCE_MAP = 'map';
+const POSITION_SOURCES = new Set([POSITION_SOURCE_GPS, POSITION_SOURCE_MAP]);
+
 export function createObservation({
   id,
   sessionId,
@@ -27,6 +31,14 @@ export function createObservation({
   featureLayerId = null,
   featureId = null,
   featureLabel = null,
+  // 'gps' when lat/lon came from a fix, 'map' when the surveyor placed the
+  // point under the crosshair because they could see the thing but not reach
+  // it. Everything else about the record is identical either way, which is
+  // exactly why this has to be here: gpsAccuracyM carries the map precision
+  // for a picked point, an honest uncertainty that says nothing about where
+  // the number came from. Without this, an eyeballed point and a satellite
+  // fix are indistinguishable downstream.
+  positionSource = POSITION_SOURCE_GPS,
 }) {
   if (!id) throw new Error('createObservation: id is required');
   if (!sessionId) throw new Error('createObservation: sessionId is required');
@@ -46,6 +58,11 @@ export function createObservation({
     );
   }
 
+  if (!POSITION_SOURCES.has(positionSource)) {
+    throw new Error(
+      `createObservation: positionSource must be one of ${[...POSITION_SOURCES].join(', ')} (got ${positionSource})`,
+    );
+  }
   // Both halves or neither. A feature id without its layer cannot be joined
   // back to any dataset; a layer without a feature says only "somewhere in
   // there". Either half on its own is worse than nothing, because it looks
@@ -76,6 +93,7 @@ export function createObservation({
     featureLayerId,
     featureId,
     featureLabel: linked ? featureLabel : null,
+    positionSource,
     synced: false,
     syncedAt: null,
   };

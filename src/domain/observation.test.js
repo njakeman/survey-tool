@@ -31,9 +31,27 @@ describe('createObservation', () => {
       featureLayerId: null,
       featureId: null,
       featureLabel: null,
+      positionSource: 'gps',
       synced: false,
       syncedAt: null,
     });
+  });
+
+  test('records that a position was picked off the map rather than measured', () => {
+    // gpsAccuracyM holds the map precision for a picked point, which is an
+    // honest uncertainty but says nothing about where the number came from.
+    // Without this field an eyeballed point and a satellite fix are
+    // indistinguishable in the exported data.
+    const obs = createObservation({ ...baseFields, positionSource: 'map' });
+
+    expect(obs.positionSource).toBe('map');
+  });
+
+  test('rejects a position source it does not know', () => {
+    // A typo here would silently claim GPS provenance for something else.
+    expect(() => createObservation({ ...baseFields, positionSource: 'gsp' })).toThrow(
+      /positionSource/,
+    );
   });
 
   test('records the feature layer, feature and label an observation was started from', () => {

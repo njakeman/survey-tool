@@ -459,3 +459,78 @@ describe('deleteObservation', () => {
     expect(opened).toEqual([['observations', 'photos']]);
   });
 });
+
+describe('saveObservation — a point picked off the map', () => {
+  const PICKED = { lat: 51.51, lon: -0.12, accuracyM: 12 };
+  // Deliberately carries an altitude, unlike READING: a picked point must
+  // drop it, and a fixture with none could not tell the difference.
+  const READING_WITH_ALTITUDE = { ...READING, altitudeM: 45.2, altitudeAccuracyM: 3 };
+
+  async function pickedSave(dbName, overrides = {}) {
+    const service = await makeService(dbName);
+    await service.startSession('Ashton Keynes');
+    return service.saveObservation({
+      reading: READING_WITH_ALTITUDE,
+      heading: null,
+      note: '',
+      photo: null,
+      pickedPoint: PICKED,
+      ...overrides,
+    });
+  }
+
+  test('records the picked coordinates, not the surveyor own fix', async () => {
+    const observation = await pickedSave('capture-picked-coords');
+
+    expect(observation.lat).toBe(PICKED.lat);
+    expect(observation.lon).toBe(PICKED.lon);
+  });
+
+  test('takes its accuracy from the pick, which is a map precision not a fix', async () => {
+    const observation = await pickedSave('capture-picked-accuracy');
+
+    expect(observation.gpsAccuracyM).toBe(12);
+  });
+
+  test('marks the position as coming from the map', async () => {
+    const observation = await pickedSave('capture-picked-source');
+
+    expect(observation.positionSource).toBe('map');
+  });
+
+  test('drops altitude rather than claiming the surveyor own height', async () => {
+    // The far side of a valley is not at the height you are standing at, and
+    // an altitude carried across would be the one number nobody would think
+    // to doubt.
+    const observation = await pickedSave('capture-picked-altitude');
+
+    expect(observation.altitudeM).toBeNull();
+    expect(observation.altitudeAccuracyM).toBeNull();
+  });
+
+  test('keeps fixAt and the heading, because the sighting was made from the fix', async () => {
+    const observation = await pickedSave('capture-picked-provenance', { heading: HEADING });
+
+    expect(observation.fixAt).toBe(READING.fixAt);
+    expect(observation.headingDeg).toBe(HEADING.headingDeg);
+  });
+
+  test('still refuses to save without a fix', async () => {
+    // Picking a point does not make the surveyor position irrelevant: an
+    // observation with no fixAt has no provenance at all.
+    const service = await makeService('capture-picked-no-fix');
+    await service.startSession('Ashton Keynes');
+
+    await expect(
+      service.saveObservation({ reading: null, heading: null, note: '', pickedPoint: PICKED }),
+    ).rejects.toThrow(/no position fix/i);
+  });
+
+  test('an ordinary save keeps the fix and is marked as GPS', async () => {
+    const observation = await pickedSave('capture-picked-none', { pickedPoint: null });
+
+    expect(observation.positionSource).toBe('gps');
+    expect(observation.lat).toBe(READING.lat);
+    expect(observation.altitudeM).toBe(45.2);
+  });
+});

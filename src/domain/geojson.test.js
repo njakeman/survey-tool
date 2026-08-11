@@ -54,6 +54,7 @@ describe('sessionToFeatureCollection', () => {
           feature_id: null,
           feature_label: null,
           os_grid_ref: null,
+          position_source: 'gps',
           session_name: 'Ashton Keynes',
           app_version: '0.1.0',
         },
@@ -193,6 +194,29 @@ describe('sessionToFeatureCollection', () => {
     expect(properties.feature_layer).toBeNull();
     expect(properties.feature_id).toBeNull();
     expect(properties.feature_label).toBeNull();
+    // Every observation that predates the field really was a GPS fix, so
+    // 'gps' is the honest value rather than a guess.
+    expect(properties.position_source).toBe('gps');
+  });
+
+  test('says when a position was placed on the map rather than measured', () => {
+    const picked = createObservation({
+      id: 'obs-1',
+      sessionId: 'sess-1',
+      recordedAt: '2026-08-06T10:00:00.000Z',
+      fixAt: '2026-08-06T09:59:20.000Z',
+      lat: 51.5,
+      lon: -0.14,
+      // The map precision at the zoom it was picked at, not a fix accuracy.
+      gpsAccuracyM: 12,
+      positionSource: 'map',
+    });
+
+    const { properties } = sessionToFeatureCollection(session, [picked], { appVersion: '0.1.0' })
+      .features[0];
+
+    expect(properties.position_source).toBe('map');
+    expect(properties.gps_accuracy_m).toBe(12);
   });
 
   test('carries fix_at separately from recorded_at when the surveyor saved later than the fix', () => {

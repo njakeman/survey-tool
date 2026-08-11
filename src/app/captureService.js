@@ -44,7 +44,20 @@ export function createCaptureService({ db, newId, nowIso }) {
   // since canvas.toBlob() already sets it correctly.
   // `feature` is the map feature the surveyor tapped Record here on, or null
   // — { layerId, featureId, title } as featureQuery.js describes it.
-  async function saveObservation({ reading, heading, note, photo, feature = null }) {
+  //
+  // `pickedPoint` is a location the surveyor placed under the map crosshair
+  // because they could see the thing but not reach it — { lat, lon,
+  // accuracyM }. When present it replaces the fix's coordinates, but the fix
+  // itself is still required and still supplies fixAt and the heading: the
+  // observation was made from somewhere, at a time, and that is worth keeping.
+  async function saveObservation({
+    reading,
+    heading,
+    note,
+    photo,
+    feature = null,
+    pickedPoint = null,
+  }) {
     const session = await getOpenSession();
     if (!session) throw new Error('saveObservation: no open session');
     if (!reading) throw new Error('saveObservation: no position fix yet');
@@ -55,11 +68,14 @@ export function createCaptureService({ db, newId, nowIso }) {
       sessionId: session.id,
       recordedAt: nowIso(),
       fixAt: reading.fixAt,
-      lat: reading.lat,
-      lon: reading.lon,
-      gpsAccuracyM: reading.accuracyM,
-      altitudeM: reading.altitudeM,
-      altitudeAccuracyM: reading.altitudeAccuracyM,
+      lat: pickedPoint ? pickedPoint.lat : reading.lat,
+      lon: pickedPoint ? pickedPoint.lon : reading.lon,
+      gpsAccuracyM: pickedPoint ? pickedPoint.accuracyM : reading.accuracyM,
+      // Altitude belongs to the fix, and a point on a map has none. Carrying
+      // the surveyor's own altitude across would assert the far side of the
+      // valley is at the height they are standing at.
+      altitudeM: pickedPoint ? null : reading.altitudeM,
+      altitudeAccuracyM: pickedPoint ? null : reading.altitudeAccuracyM,
       headingDeg: heading?.headingDeg ?? null,
       headingAccuracyDeg: heading?.headingAccuracyDeg ?? null,
       note: (note ?? '').trim(),
@@ -70,6 +86,7 @@ export function createCaptureService({ db, newId, nowIso }) {
       featureLayerId: feature?.featureId ? feature.layerId : null,
       featureId: feature?.featureId ?? null,
       featureLabel: feature?.featureId ? (feature.title ?? null) : null,
+      positionSource: pickedPoint ? 'map' : 'gps',
     });
 
     await saveObservationWithPhoto(db, {

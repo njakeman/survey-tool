@@ -61,6 +61,15 @@ export function ObservationsList({ observations, gridRef }) {
               // the one thing worth walking back and re-taking.
               poor ? html`<p class="observations-poor warns">Accuracy poor</p>` : null
             }
+            ${
+              // The accuracy shown above is a map precision for these, not a
+              // satellite fix. Saying so on the card is the difference
+              // between "±12 m, measured" and "±12 m, eyeballed from 300 m
+              // away" — the same number meaning two very different things.
+              obs.positionSource === 'map'
+                ? html`<p class="observations-picked">Marked on the map, not measured</p>`
+                : null
+            }
           </li>
         `;
       })}

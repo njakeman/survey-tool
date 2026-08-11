@@ -1306,6 +1306,16 @@ button {
   margin-left: auto;
 }
 
+/* Provenance, not a warning: a marked point is a legitimate observation, so
+   this is muted and italic rather than taking the accent-and-triangle
+   treatment that .warns gives a poor fix. */
+.observations-picked {
+  margin: 4px 0 0;
+  font-size: var(--type-small);
+  font-style: italic;
+  color: var(--text-muted);
+}
+
 /* Same treatment as the live readout's, one step down: a saved row is being
    scanned rather than read out, but it is still the value that gets copied. */
 .observations-gridref {
