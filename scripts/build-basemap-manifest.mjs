@@ -33,19 +33,35 @@ async function listArchives() {
 
 const archives = await listArchives();
 const entries = [];
+const skipped = [];
 for (const file of archives) {
-  entries.push(await describeArchive(`${BASEMAPS_DIR}${file}`));
+  try {
+    entries.push(await describeArchive(`${BASEMAPS_DIR}${file}`));
+  } catch (error) {
+    // Never fatal. This runs as a prebuild step, so throwing here takes down
+    // the build, the e2e webServer and the deploy — which is exactly what one
+    // unreadable archive once did. A bad file costs one missing region.
+    skipped.push({ file, reason: error.message });
+  }
 }
 
 await mkdir(BASEMAPS_DIR, { recursive: true });
 await writeFile(MANIFEST_PATH, `${JSON.stringify(entries, null, 2)}\n`);
 
+for (const entry of entries) {
+  const mb = (entry.sizeBytes / 1_000_000).toFixed(1);
+  console.log(
+    `${entry.id.padEnd(24)} ${mb.padStart(7)} MB  z${entry.minZoom}-${entry.maxZoom}  ${entry.tileType}${
+      entry.tileSize ? ` ${entry.tileSize}px` : ''
+    }`,
+  );
+}
+for (const { file, reason } of skipped) {
+  console.warn(`SKIPPED ${file} — ${reason}`);
+}
+
 if (entries.length === 0) {
-  console.log(`no .pmtiles archives in public/basemaps/ — wrote an empty manifest`);
+  console.log('no usable .pmtiles archives in public/basemaps/ — wrote an empty manifest');
 } else {
-  for (const entry of entries) {
-    const mb = (entry.sizeBytes / 1_000_000).toFixed(1);
-    console.log(`${entry.id.padEnd(24)} ${mb.padStart(7)} MB  z${entry.minZoom}-${entry.maxZoom}`);
-  }
   console.log(`wrote ${MANIFEST_PATH} (${entries.length} regions)`);
 }

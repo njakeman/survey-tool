@@ -1,1 +1,18 @@
-[]
+[
+  {
+    "id": "cissbury",
+    "name": "Cissbury",
+    "url": "basemaps/cissbury.pmtiles",
+    "sizeBytes": 4634648,
+    "bounds": [
+      -0.4045869,
+      50.8396,
+      -0.352472,
+      50.8726
+    ],
+    "minZoom": 12,
+    "maxZoom": 17,
+    "tileType": "raster",
+    "tileSize": 256
+  }
+]
