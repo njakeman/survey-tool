@@ -16,6 +16,13 @@ import { getSetting, putSetting } from '../storage/settingsStore.js';
 // is a matter of dropping in a file and redeploying. The manifest is precached
 // by the service worker, so it normally resolves offline too — but losing it
 // must never hide archives the surveyor already has, hence the fallback.
+//
+// That fallback earned its keep: the manifest was described as precached for
+// a whole phase before it actually was. The injectManifest glob carried no
+// `json`, so every offline launch took the fallback path and nobody noticed,
+// because the fallback is correct. Fixed in vite.config.js — the comment is
+// left here because "the fallback is never exercised" would be the wrong
+// lesson to draw from it.
 
 const SELECTED_KEY = 'selectedBasemapId';
 

@@ -7,7 +7,8 @@
   "scripts": {
     "dev": "vite",
     "basemaps:manifest": "node scripts/build-basemap-manifest.mjs",
-    "prebuild": "node scripts/build-basemap-manifest.mjs",
+    "layers:manifest": "node scripts/build-feature-layer-manifest.mjs",
+    "prebuild": "node scripts/build-basemap-manifest.mjs && node scripts/build-feature-layer-manifest.mjs",
     "build": "vite build",
     "preview": "vite preview",
     "preview:mobile": "cross-env MOBILE_HTTPS=true vite preview --host",

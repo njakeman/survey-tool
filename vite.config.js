@@ -64,6 +64,17 @@ export default defineConfig(async ({ command, isPreview }) => {
         // fetches those lazily at render time, so unprecached they'd leave
         // an unlabelled map offline, with no error the surveyor would see.
         //
+        // json covers the two generated manifests — public/basemaps/ and
+        // public/feature-layers/ — which are what keep region and layer
+        // names, bounds and styles listable with no network. They were
+        // *documented* as precached long before they actually were; the glob
+        // had no json in it, and only the settings-backed metadata fallback
+        // in basemapService/featureLayerService hid the gap.
+        //
+        // .geojson deliberately does not match `*.json`, which is exactly
+        // right: the layer data belongs in IndexedDB, fetched on enable, not
+        // in the precache.
+        //
         // pmtiles deliberately excluded: Workbox's 2 MiB
         // maximumFileSizeToCacheInBytes default would silently drop any real
         // regional extract from the manifest (green build, map broken
@@ -71,7 +82,7 @@ export default defineConfig(async ({ command, isPreview }) => {
         // requests the pmtiles client reads archives with. The archive lives
         // in IndexedDB as an ArrayBuffer instead (CLAUDE.md, Platform
         // constraints; storage/basemapStore.js).
-        globPatterns: ['**/*.{js,css,html,svg,png,woff2,pbf}'],
+        globPatterns: ['**/*.{js,css,html,svg,png,woff2,pbf,json}'],
       },
       manifest: {
         name: 'Field Survey',

@@ -1,7 +1,7 @@
 import { openDB } from 'idb';
 
 export const DB_NAME = 'survey-tool';
-export const DB_VERSION = 3;
+export const DB_VERSION = 4;
 
 // `name` is overridable so tests can open an isolated database per test
 // instead of sharing state through the default name.
@@ -32,6 +32,14 @@ export function openDatabase(name = DB_NAME) {
         // hold multi-megabyte buffers, and updating a selection flag would
         // mean reading and rewriting one.
         db.createObjectStore('settings', { keyPath: 'key' });
+      }
+      if (oldVersion < 4) {
+        // The surveyor's own GIS data, drawn over the basemap: one record per
+        // layer, GeoJSON held as a string (featureLayerStore.js). Separate
+        // from `basemap` because these are kilobytes fetched in one shot, not
+        // megabytes read through Range requests, and several are enabled at
+        // once rather than one being selected.
+        db.createObjectStore('featureLayers', { keyPath: 'id' });
       }
     },
   });
