@@ -206,7 +206,9 @@ describe('CapturePage — saving an observation', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /save observation/i }));
 
-    expect(await screen.findByRole('row', { name: /51\.500000, -0\.140000/ })).toBeInTheDocument();
+    // A card list now, not a table. A listitem has no accessible name from
+    // its contents the way a table row does, so match the text itself.
+    expect(await screen.findByText(/51\.500000, -0\.140000/)).toBeInTheDocument();
   });
 
   test('after a failed save, the note and photo are retained and an error is shown', async () => {

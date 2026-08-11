@@ -6,7 +6,7 @@ import { SessionBar } from './SessionBar.js';
 import { ReadingsPanel } from './ReadingsPanel.js';
 import { PhotoField } from './PhotoField.js';
 import { SaveButton } from './SaveButton.js';
-import { ObservationsTable } from './ObservationsTable.js';
+import { ObservationsList } from './ObservationsList.js';
 import { CaptureMap } from './CaptureMap.js';
 import { chooseActive } from '../map/basemapSelection.js';
 
@@ -184,12 +184,12 @@ export function CapturePage({
     : null;
 
   // The GPS watch re-renders this component about once a second, and the
-  // table re-formats every saved row each time — a per-row Date and
+  // list re-formats every saved row each time — a per-row Date and
   // toLocaleTimeString, growing with the session, on the weakest CPU in the
   // system while the radio is busy. The rows only change on save, so hold the
   // vnode still between saves and Preact skips the subtree entirely.
-  const observationsTable = useMemo(
-    () => html`<${ObservationsTable} observations=${observations} />`,
+  const observationsList = useMemo(
+    () => html`<${ObservationsList} observations=${observations} />`,
     [observations],
   );
 
@@ -297,7 +297,7 @@ export function CapturePage({
             </div>`
           : null
       }
-      ${observationsTable}
+      ${observationsList}
       ${
         offlineStatus && offlineStatus.precachedCount === 0
           ? // Appears with no user action, once the offline check settles

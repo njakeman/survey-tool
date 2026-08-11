@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/preact';
 import { html } from 'htm/preact';
 import { CapturePage } from './CapturePage.js';
 import { SaveButton } from './SaveButton.js';
-import { ObservationsTable } from './ObservationsTable.js';
+import { ObservationsList } from './ObservationsList.js';
 
 // Nothing in this app is announced today: there is not one role= or
 // aria-live= outside a single aria-current. Everything that appears without
@@ -114,7 +114,7 @@ describe('SaveButton', () => {
   });
 });
 
-describe('ObservationsTable', () => {
+describe('ObservationsList', () => {
   const observation = {
     id: 'obs-1',
     recordedAt: '2026-08-06T10:00:00.000Z',
@@ -126,24 +126,25 @@ describe('ObservationsTable', () => {
     photoId: 'obs-1',
   };
 
-  test('marks its header cells as column headers', () => {
-    render(html`<${ObservationsTable} observations=${[observation]} />`);
+  // These three assertions were written against the six-column table. The
+  // table is gone, but what each was protecting is not, so they are rewritten
+  // against the card list rather than deleted with it.
 
-    for (const header of screen.getAllByRole('columnheader')) {
-      expect(header).toHaveAttribute('scope', 'col');
-    }
+  test('exposes one list item per observation, so it can be navigated as a list', () => {
+    render(html`<${ObservationsList} observations=${[observation]} />`);
+
+    expect(screen.getAllByRole('listitem')).toHaveLength(1);
   });
 
-  test('the photo cell says it has a photo rather than relying on a bare emoji', () => {
-    render(html`<${ObservationsTable} observations=${[observation]} />`);
+  test('the photo indicator says it has a photo rather than relying on a bare glyph', () => {
+    render(html`<${ObservationsList} observations=${[observation]} />`);
 
-    // The column header is also "Photo", so assert on the body cell.
-    const cells = screen.getAllByRole('cell');
-    expect(cells.at(-1)).toHaveTextContent(/photo/i);
+    // The camera is aria-hidden CSS, so the word has to carry the meaning.
+    expect(screen.getByText(/photo/i)).toBeInTheDocument();
   });
 
   test('the full note is reachable without a hover tooltip, which touch has no way to show', () => {
-    render(html`<${ObservationsTable} observations=${[observation]} />`);
+    render(html`<${ObservationsList} observations=${[observation]} />`);
 
     // The full text must be in the document, not only in a title attribute.
     expect(screen.getByText(observation.note)).toBeInTheDocument();

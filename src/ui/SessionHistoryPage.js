@@ -1,7 +1,7 @@
 import { html } from 'htm/preact';
 import { useEffect, useState } from 'preact/hooks';
 import { formatDate } from '../sensors/format.js';
-import { ObservationsTable } from './ObservationsTable.js';
+import { ObservationsList } from './ObservationsList.js';
 
 // Read-only view of past (non-open) sessions, so ended-but-unsynced sessions
 // stay visible and inspectable instead of vanishing once you tap End —
@@ -68,7 +68,7 @@ export function SessionHistoryPage({ service, exportSession, onBack }) {
       <main class="session-history">
         <button type="button" onClick=${() => setSelected(null)}>Back to sessions</button>
         <h2>${selected.session.name}</h2>
-        <${ObservationsTable} observations=${selected.observations} />
+        <${ObservationsList} observations=${selected.observations} />
         <button type="button" disabled=${exportState === 'exporting'} onClick=${handleExport}>
           ${exportState === 'exporting' ? 'Exporting…' : 'Export'}
         </button>
