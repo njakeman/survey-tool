@@ -11,6 +11,7 @@ import {
   observationPaint,
   positionPaint,
   accuracyPaint,
+  pickedPointPaint,
 } from './overlays.js';
 import {
   featureLayerIds,
@@ -152,6 +153,7 @@ export async function createMapAdapter({
   let pendingFeatureLayers = null;
   let pendingPosition;
   let pendingObservations;
+  let pendingPickedPoint;
 
   function addFeatureLayer(layer) {
     map.addSource(featureLayerSourceId(layer.id), featureLayerSource(layer));
@@ -220,6 +222,7 @@ export async function createMapAdapter({
     map.on('load', () => {
       map.addSource('position', { type: 'geojson', data: EMPTY_COLLECTION });
       map.addSource('observations', { type: 'geojson', data: EMPTY_COLLECTION });
+      map.addSource('picked', { type: 'geojson', data: EMPTY_COLLECTION });
 
       // The paint lives in overlays.js with the rest of the pure marker
       // logic, so the pending/synced distinction is node-testable rather
@@ -235,6 +238,14 @@ export async function createMapAdapter({
         type: 'circle',
         source: 'observations',
         paint: observationPaint(),
+      });
+      // Above the saved observations so a fresh mark is not lost among them,
+      // but below the live fix, which must never be hidden by anything.
+      map.addLayer({
+        id: 'picked-point',
+        type: 'circle',
+        source: 'picked',
+        paint: pickedPointPaint(),
       });
       map.addLayer({
         id: 'position-dot',
@@ -252,6 +263,10 @@ export async function createMapAdapter({
       if (pendingObservations !== undefined) {
         setObservations(pendingObservations);
         pendingObservations = undefined;
+      }
+      if (pendingPickedPoint !== undefined) {
+        setPickedPoint(pendingPickedPoint);
+        pendingPickedPoint = undefined;
       }
       // Last, so the accuracy ring's paint is applied over a layer stack that
       // is already complete.
@@ -288,6 +303,40 @@ export async function createMapAdapter({
       return;
     }
     map.getSource('observations')?.setData(observationsFeatureCollection(observations));
+  }
+
+  // The provisional mark. Same stash-until-loaded discipline as the others.
+  function setPickedPoint(point) {
+    if (!styleLoaded) {
+      pendingPickedPoint = point;
+      return;
+    }
+    map.getSource('picked')?.setData(
+      point
+        ? {
+            type: 'FeatureCollection',
+            features: [
+              {
+                type: 'Feature',
+                geometry: { type: 'Point', coordinates: [point.lon, point.lat] },
+                properties: {},
+              },
+            ],
+          }
+        : EMPTY_COLLECTION,
+    );
+  }
+
+  // Where the picking crosshair is pointing, and how precisely it can point
+  // there. Read on demand rather than pushed, because the map moves under the
+  // surveyor's thumb far faster than any state update should follow.
+  function getCentre() {
+    const { lat, lng } = map.getCenter();
+    return { lat, lon: lng };
+  }
+
+  function getZoom() {
+    return map.getZoom();
   }
 
   function centreOn(reading) {
@@ -345,6 +394,9 @@ export async function createMapAdapter({
     setPosition,
     setObservations,
     setFeatureLayers,
+    setPickedPoint,
+    getCentre,
+    getZoom,
     queryFeatureAt,
     centreOn,
     resize,

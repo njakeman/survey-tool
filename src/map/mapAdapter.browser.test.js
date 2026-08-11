@@ -339,6 +339,78 @@ describe('mapAdapter against real MapLibre', () => {
     expect(adapter.queryFeatureAt({ x: 200, y: 150 })).toBeNull();
   });
 
+  test('reports the centre, which is where the picking crosshair sits', async () => {
+    const adapter = await createAdapter();
+    await adapter.ready;
+
+    const centre = adapter.getCentre();
+
+    // The fixture archive covers -1..0.5, 51..52, and the map opens on the
+    // header's centre — so this is a real reading, not a default.
+    expect(centre.lat).toBeGreaterThan(51);
+    expect(centre.lat).toBeLessThan(52);
+    expect(centre.lon).toBeGreaterThan(-1);
+    expect(centre.lon).toBeLessThan(0.5);
+  });
+
+  test('the centre follows the map, which is the whole picking interaction', async () => {
+    const adapter = await createAdapter();
+    await adapter.ready;
+    const before = adapter.getCentre();
+
+    // Latitude only, and a small step. maxBounds clamps panning to the
+    // archive's coverage, and the fixture is 1.5° wide against a 400px
+    // viewport — so east-west is pinned outright and a longitude assertion
+    // here would be testing the clamp, not getCentre.
+    const target = { lat: before.lat + 0.05, lon: before.lon };
+    adapter.centreOn(target);
+    await adapter.whenIdle();
+
+    const after = adapter.getCentre();
+    expect(after.lat).toBeCloseTo(target.lat, 3);
+    expect(after.lat).not.toBeCloseTo(before.lat, 3);
+  });
+
+  test('reports the zoom, which is what makes a picked point an honest accuracy', async () => {
+    const adapter = await createAdapter();
+    await adapter.ready;
+
+    expect(adapter.getZoom()).toBeGreaterThan(0);
+  });
+
+  test('a marked point draws below the live fix, which must never be hidden', async () => {
+    const adapter = await createAdapter();
+    await adapter.ready;
+
+    adapter.setPickedPoint({ lat: 51.5, lon: -0.14 });
+    const order = adapter.getLayerOrder();
+
+    expect(order).toContain('picked-point');
+    expect(order.indexOf('picked-point')).toBeLessThan(order.indexOf('position-dot'));
+  });
+
+  test('clearing the marked point removes it', async () => {
+    const adapter = await createAdapter();
+    await adapter.ready;
+    adapter.setPickedPoint({ lat: 51.5, lon: -0.14 });
+    expect(await adapter.getSourceFeatureCount('picked')).toBe(1);
+
+    adapter.setPickedPoint(null);
+
+    expect(await adapter.getSourceFeatureCount('picked')).toBe(0);
+  });
+
+  test('a marked point set before the style loads is applied, not thrown away', async () => {
+    const onError = vi.fn();
+    const adapter = await createAdapter({ onError });
+
+    adapter.setPickedPoint({ lat: 51.5, lon: -0.14 });
+
+    await adapter.ready;
+    expect(await adapter.getSourceFeatureCount('picked')).toBe(1);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
   test('destroy tears the map down and empties its container', async () => {
     const adapter = await createAdapter();
     await adapter.ready;

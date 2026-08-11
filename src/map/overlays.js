@@ -93,6 +93,19 @@ export function accuracyPaint() {
   };
 }
 
+// A point the surveyor has marked on the map but not yet saved. Hollow with a
+// thick accent ring rather than a filled dot: it is provisional, and it must
+// not be mistaken at a glance for either the live fix or a saved observation
+// — the two things on this map that are actually measured.
+export function pickedPointPaint() {
+  return {
+    'circle-radius': 9,
+    'circle-color': 'transparent',
+    'circle-stroke-width': 3,
+    'circle-stroke-color': '#c2611f',
+  };
+}
+
 export function observationsFeatureCollection(observations) {
   return {
     type: 'FeatureCollection',

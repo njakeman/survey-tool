@@ -5,6 +5,8 @@ import {
   observationsFeatureCollection,
   metresToPixels,
   observationPaint,
+  positionPaint,
+  pickedPointPaint,
 } from './overlays.js';
 
 describe('positionFeature', () => {
@@ -128,5 +130,24 @@ describe('observationPaint', () => {
     // If both branches were opaque colours, the only difference would be
     // hue — exactly the defect this replaced.
     expect([whenSynced, whenPending]).toContain('transparent');
+  });
+});
+
+describe('pickedPointPaint', () => {
+  test('is hollow, so a provisional mark is not mistaken for a measured point', () => {
+    // The two filled treatments on this map — the accent position dot and a
+    // synced observation — are both things that were actually measured. A
+    // point someone eyeballed must not join them.
+    const paint = pickedPointPaint();
+
+    expect(paint['circle-color']).toBe('transparent');
+    expect(paint['circle-stroke-width']).toBeGreaterThan(0);
+  });
+
+  test('is larger than the fix and the observation markers, being the active thing', () => {
+    expect(pickedPointPaint()['circle-radius']).toBeGreaterThan(
+      observationPaint()['circle-radius'],
+    );
+    expect(pickedPointPaint()['circle-radius']).toBeGreaterThan(positionPaint()['circle-radius']);
   });
 });
