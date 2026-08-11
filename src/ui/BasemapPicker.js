@@ -1,6 +1,7 @@
 import { html } from 'htm/preact';
 import { useState } from 'preact/hooks';
 import { FeatureLayerPanel } from './FeatureLayerPanel.js';
+import { formatSize } from './format.js';
 
 // The map settings view: which offline region the map panel shows, and which
 // feature layers are drawn over it. A full view rather than a control inside
@@ -16,11 +17,6 @@ import { FeatureLayerPanel } from './FeatureLayerPanel.js';
 // times over — aria-current, a filled glyph, a left border and the word
 // itself. That redundancy is deliberate, not belt-and-braces.
 
-function formatMegabytes(bytes) {
-  if (!bytes) return null;
-  return `${Math.round(bytes / 1_000_000)} MB`;
-}
-
 // "24 MB · vector · z5–15". Every part is optional: offline, listAvailable()
 // falls back to what is on the device, and an older download may have no
 // recorded type or zoom range. Blanks are omitted rather than printed.
@@ -29,13 +25,13 @@ function describeRegion(region) {
     region.minZoom != null && region.maxZoom != null
       ? `z${region.minZoom}–${region.maxZoom}`
       : null;
-  return [formatMegabytes(region.sizeBytes), region.tileType, zooms].filter(Boolean).join(' · ');
+  return [formatSize(region.sizeBytes), region.tileType, zooms].filter(Boolean).join(' · ');
 }
 
 function describeProgress(progress) {
   if (!progress) return 'Downloading…';
   const { receivedBytes, totalBytes } = progress;
-  if (!totalBytes) return `Downloading — ${formatMegabytes(receivedBytes) ?? '0 MB'}`;
+  if (!totalBytes) return `Downloading — ${formatSize(receivedBytes) ?? '0 MB'}`;
   return `Downloading — ${Math.round((receivedBytes / totalBytes) * 100)}%`;
 }
 
