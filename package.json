@@ -29,6 +29,7 @@
     "@vitest/browser-playwright": "^4.1.10",
     "cross-env": "^10.1.0",
     "eslint": "^10.8.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "fake-indexeddb": "^6.2.5",
     "globals": "^17.9.0",
     "happy-dom": "^20.11.1",

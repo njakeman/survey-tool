@@ -69,6 +69,8 @@ export function ProbePage() {
     // tap, since "is this build actually offline-capable" is the question
     // device-testing kept getting wrong answers to by inference.
     checkOfflineStatus(standaloneNow);
+    // Mount only: a diagnostic snapshot, re-run on demand by Recheck.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function checkPersist() {

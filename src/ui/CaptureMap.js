@@ -67,6 +67,10 @@ export function CaptureMap({
       adapterRef.current = null;
       setAdapterReady(false);
     };
+    // Keyed on the archive alone: createMap is a fresh closure on every
+    // parent render, so depending on it would tear down and rebuild the map
+    // continuously.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeRegionId]);
 
   useEffect(() => {

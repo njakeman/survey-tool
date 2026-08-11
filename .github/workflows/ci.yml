@@ -5,18 +5,16 @@ on:
     branches: [main]
   pull_request:
 
+# Only the deploy job needs Pages rights. Granting them here would hand
+# them to the job that runs npm ci and third-party browser code as well.
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
-# cancel-in-progress: true so a rapid second push cleanly cancels an
-# in-flight deploy rather than leaving it to time out — an older deployment
-# left running to completion after being superseded was seen wedging the
-# Pages environment (subsequent deploys for its exact commit SHA were
-# immediately cancelled by GitHub until a new commit/SHA came along).
+# Per ref, so two pull requests don't cancel each other and a pull request
+# never cancels an in-flight deploy of main. The deploy job holds the `pages`
+# group separately — see its own concurrency block.
 concurrency:
-  group: pages
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -36,6 +34,19 @@ jobs:
         run: npx playwright install --with-deps chromium webkit
       - run: npm run test:browser
       - run: npm run test:e2e
+      # playwright.config.js records a trace on first retry, which was then
+      # thrown away with the runner — leaving a flaky CI failure with nothing
+      # to debug but console text.
+      - name: Upload Playwright artifacts
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-results
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 7
+          if-no-files-found: ignore
       - run: npm run build
       - uses: actions/upload-pages-artifact@v3
         if: github.ref == 'refs/heads/main'
@@ -46,6 +57,19 @@ jobs:
     if: github.ref == 'refs/heads/main'
     needs: test
     runs-on: ubuntu-latest
+    # Pages rights live here, on the only job that deploys.
+    permissions:
+      pages: write
+      id-token: write
+    # cancel-in-progress so a rapid second push cleanly cancels an in-flight
+    # deploy rather than leaving it to time out — an older deployment left
+    # running after being superseded was seen wedging the Pages environment
+    # (subsequent deploys for its exact commit SHA were immediately cancelled
+    # by GitHub until a new commit came along). Scoped to deploys only, so it
+    # cannot cancel anyone's test run.
+    concurrency:
+      group: pages
+      cancel-in-progress: true
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

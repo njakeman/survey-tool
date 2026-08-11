@@ -10,21 +10,28 @@ import { playwright } from '@vitest/browser-playwright';
 //             contract tests that must catch divergence from WebKit's real behaviour.
 export default defineConfig({
   test: {
-    passWithNoTests: true,
+    // Deliberately NOT passWithNoTests: a project whose include glob stops
+    // matching — a renamed suffix, a moved directory — would otherwise run
+    // zero tests and report success. The browser tier is most at risk, being
+    // the slowest and least often run locally.
     projects: [
       {
         test: {
           name: 'node',
           environment: 'node',
           include: ['src/**/*.test.js'],
-          exclude: ['src/ui/**', 'src/**/*.browser.test.js'],
+          // Component tests need a DOM, wherever they live. Excluding
+          // src/probe/*Page* alongside src/ui keeps ProbePage testable —
+          // without it, a ProbePage test would land here and die on
+          // `document` rather than run.
+          exclude: ['src/ui/**', 'src/probe/*Page.test.js', 'src/**/*.browser.test.js'],
         },
       },
       {
         test: {
           name: 'happy-dom',
           environment: 'happy-dom',
-          include: ['src/ui/**/*.test.js'],
+          include: ['src/ui/**/*.test.js', 'src/probe/*Page.test.js'],
           setupFiles: ['./test/setup-happy-dom.js'],
         },
       },

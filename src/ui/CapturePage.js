@@ -71,6 +71,9 @@ export function CapturePage({
 
   useEffect(() => {
     refreshSession();
+    // Mount only: re-reading whenever the closure changes would refetch the
+    // session on every GPS tick.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function handleStart(name) {

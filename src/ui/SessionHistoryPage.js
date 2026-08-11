@@ -37,6 +37,8 @@ export function SessionHistoryPage({ service, exportSession, onBack }) {
     return () => {
       cancelled = true;
     };
+    // Mount only: the list is a snapshot taken when the view opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function openSession(session) {
