@@ -6,7 +6,7 @@ import {
   formatTime,
   accuracyQuality,
 } from '../sensors/format.js';
-import { SyncBadge } from './SyncBadge.js';
+import { ExportBadge } from './ExportBadge.js';
 
 // Read-only, live-updating record of what's been saved this session — a
 // visual indicator of accumulated observations, not a review/edit screen
@@ -44,7 +44,7 @@ export function ObservationsList({ observations, gridRef }) {
           <li key=${obs.id} class="observations-row">
             <p class="observations-row-head">
               <span class="observations-time">${formatTime(obs.fixAt)}</span>
-              <${SyncBadge} synced=${obs.synced} />
+              <${ExportBadge} exported=${obs.exported} />
             </p>
             ${gridReference ? html`<p class="observations-gridref">${gridReference}</p>` : null}
             <p class="observations-meta">${meta}</p>

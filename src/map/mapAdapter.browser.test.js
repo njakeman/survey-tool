@@ -112,8 +112,8 @@ describe('mapAdapter against real MapLibre', () => {
 
     adapter.setPosition({ lat: 51.5, lon: -0.14, accuracyM: 8 });
     adapter.setObservations([
-      { id: 'obs-1', lat: 51.5, lon: -0.14, synced: false },
-      { id: 'obs-2', lat: 51.51, lon: -0.15, synced: true },
+      { id: 'obs-1', lat: 51.5, lon: -0.14, exported: false },
+      { id: 'obs-2', lat: 51.51, lon: -0.15, exported: true },
     ]);
 
     // A missing source or malformed expression surfaces as a maplibre error
@@ -226,8 +226,8 @@ describe('mapAdapter against real MapLibre', () => {
     const adapter = await createAdapter();
 
     adapter.setObservations([
-      { id: 'obs-1', lat: 51.5, lon: -0.14, synced: false },
-      { id: 'obs-2', lat: 51.51, lon: -0.15, synced: true },
+      { id: 'obs-1', lat: 51.5, lon: -0.14, exported: false },
+      { id: 'obs-2', lat: 51.51, lon: -0.15, exported: true },
     ]);
 
     await adapter.ready;
@@ -487,7 +487,7 @@ describe('an online imagery region whose server is unreachable', () => {
     await adapter.ready;
 
     adapter.setPosition({ lat: 51.5, lon: -0.25, accuracyM: 8 });
-    adapter.setObservations([{ id: 'obs-1', lat: 51.5, lon: -0.25, synced: false }]);
+    adapter.setObservations([{ id: 'obs-1', lat: 51.5, lon: -0.25, exported: false }]);
     adapter.setFeatureLayers([PARCELS]);
 
     expect(await adapter.getSourceFeatureCount('position')).toBe(1);

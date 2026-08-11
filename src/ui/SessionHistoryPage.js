@@ -1,8 +1,9 @@
 import { html } from 'htm/preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { formatDate } from '../sensors/format.js';
+import { isExported, countUnexported } from '../domain/session.js';
 import { ObservationsList } from './ObservationsList.js';
-import { SyncBadge } from './SyncBadge.js';
+import { ExportBadge } from './ExportBadge.js';
 
 // Read-only view of past (non-open) sessions, so ended-but-unexported
 // sessions stay visible and inspectable instead of vanishing once you tap
@@ -73,7 +74,10 @@ export function SessionHistoryPage({ service, exportSession, importSession, grid
 
   async function openSession(session) {
     const observations = await service.listObservations(session.id);
-    setSelected({ session, observations });
+    setSelected({
+      session,
+      observations: observations.map((obs) => ({ ...obs, exported: isExported(session, obs) })),
+    });
     setExportState('idle');
     setExportMessage('');
   }
@@ -87,6 +91,27 @@ export function SessionHistoryPage({ service, exportSession, importSession, grid
       setExportMessage(
         result.cancelled ? 'Share dismissed' : result.method === 'share' ? 'Shared' : 'Downloaded',
       );
+      // A completed export stamped the session; carry the stamp into what is
+      // on screen so every badge flips while the surveyor is looking, and
+      // re-take the list snapshot for when they go back.
+      if (result.exportedAt) {
+        setSelected((current) => {
+          if (!current) return current;
+          const session = {
+            ...current.session,
+            lastExportedAt: result.exportedAt,
+            lastExportCount: result.observationCount,
+          };
+          return {
+            session,
+            observations: current.observations.map((obs) => ({
+              ...obs,
+              exported: isExported(session, obs),
+            })),
+          };
+        });
+        setReloadKey((key) => key + 1);
+      }
     } catch (error) {
       setExportState('error');
       setExportMessage(error.message || 'Could not export that session');
@@ -106,7 +131,12 @@ export function SessionHistoryPage({ service, exportSession, importSession, grid
           <span
             >${`${formatDate(selected.session.startedAt)} · ${selected.observations.length} saved`}</span
           >
-          <${SyncBadge} synced=${false} />
+          <${ExportBadge}
+            exported=${
+              countUnexported(selected.session, selected.observations.length) === 0 &&
+              Boolean(selected.session.lastExportedAt)
+            }
+          />
         </p>
         <p class="field-label">Observations</p>
         <${ObservationsList} observations=${selected.observations} gridRef=${gridRef} />
@@ -130,9 +160,9 @@ export function SessionHistoryPage({ service, exportSession, importSession, grid
   }
 
   const visible = (sessions ?? []).filter((s) => s.id !== openSessionId);
-  // Sync is unbuilt, so everything saved is still pending — the total is what
-  // a surveyor wants before driving out of signal, not a per-session hunt.
-  const unsynced = visible.reduce((total, s) => total + (counts[s.id] ?? 0), 0);
+  // What has never left the device, totalled — the number a surveyor wants
+  // before putting the phone away, not a per-session hunt.
+  const unexported = visible.reduce((total, s) => total + countUnexported(s, counts[s.id] ?? 0), 0);
 
   return html`
     <main class="session-history">
@@ -141,9 +171,9 @@ export function SessionHistoryPage({ service, exportSession, importSession, grid
         <h2>Past sessions</h2>
       </div>
       ${
-        unsynced > 0
+        unexported > 0
           ? html`<p class="session-history-unsynced">
-              <${SyncBadge} synced=${false} /> ${unsynced} observations not yet synced
+              <${ExportBadge} exported=${false} /> ${unexported} observations not yet exported
             </p>`
           : null
       }
@@ -171,7 +201,12 @@ export function SessionHistoryPage({ service, exportSession, importSession, grid
                             <span class="session-history-name">${session.name}</span>
                             <span class="session-history-date">${meta}</span>
                           </span>
-                          <${SyncBadge} synced=${false} />
+                          <${ExportBadge}
+                            exported=${
+                              countUnexported(session, counts[session.id] ?? 0) === 0 &&
+                              Boolean(session.lastExportedAt)
+                            }
+                          />
                           <span class="session-history-chevron" aria-hidden="true">›</span>
                         </button>
                       </li>

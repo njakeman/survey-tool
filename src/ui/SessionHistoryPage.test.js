@@ -84,7 +84,7 @@ describe('SessionHistoryPage — list', () => {
     expect(screen.getByText('2026-08-05 · 2 saved')).toBeInTheDocument();
   });
 
-  test('totals what is still unsynced, which is the thing worth knowing before leaving signal', async () => {
+  test('totals what has never been exported, the number worth knowing before putting the phone away', async () => {
     const service = createFakeService({
       sessions: [CLOSED_A, CLOSED_B],
       observationsBySession: { 'sess-a': [OBS, OBS], 'sess-b': [OBS] },
@@ -93,17 +93,17 @@ describe('SessionHistoryPage — list', () => {
       html`<${SessionHistoryPage} service=${service} exportSession=${vi.fn()} onBack=${vi.fn()} />`,
     );
 
-    expect(await screen.findByText(/3 observations not yet synced/i)).toBeInTheDocument();
+    expect(await screen.findByText(/3 observations not yet exported/i)).toBeInTheDocument();
   });
 
-  test('no unsynced summary when there is nothing pending', async () => {
+  test('no unexported summary when everything has left the device', async () => {
     const service = createFakeService({ sessions: [CLOSED_A] });
     render(
       html`<${SessionHistoryPage} service=${service} exportSession=${vi.fn()} onBack=${vi.fn()} />`,
     );
 
     await screen.findByText('Site A');
-    expect(screen.queryByText(/not yet synced/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/not yet exported/i)).not.toBeInTheDocument();
   });
 
   test('lists multiple past sessions newest first', async () => {

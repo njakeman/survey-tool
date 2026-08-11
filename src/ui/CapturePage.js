@@ -11,6 +11,7 @@ import { CaptureMap } from './CaptureMap.js';
 import { FeatureSheet } from './FeatureSheet.js';
 import { formatLatLon } from '../sensors/format.js';
 import { chooseActive } from '../map/basemapSelection.js';
+import { isExported } from '../domain/session.js';
 
 function todayDateString() {
   return new Date().toISOString().slice(0, 10);
@@ -198,6 +199,9 @@ export function CapturePage({
       setExportMessage(
         result.cancelled ? 'Share dismissed' : result.method === 'share' ? 'Shared' : 'Downloaded',
       );
+      // A completed export stamps lastExportedAt on the session; re-read so
+      // the badges flip to Exported while the surveyor is looking at them.
+      if (!result.cancelled) await refreshSession();
     } catch (error) {
       setExportState('error');
       setExportMessage(error.message || 'Could not export that session');
@@ -220,14 +224,22 @@ export function CapturePage({
     ? { id: suggestedRegion.id, name: suggestedRegion.name }
     : null;
 
+  // Exported-or-not is derived here, once per change, and travels with each
+  // observation to both the list and the map markers — neither consumer has
+  // to know how it is worked out.
+  const decoratedObservations = useMemo(
+    () => observations.map((obs) => ({ ...obs, exported: isExported(session, obs) })),
+    [observations, session],
+  );
+
   // The GPS watch re-renders this component about once a second, and the
   // list re-formats every saved row each time — a per-row Date and
   // toLocaleTimeString, growing with the session, on the weakest CPU in the
   // system while the radio is busy. The rows only change on save, so hold the
   // vnode still between saves and Preact skips the subtree entirely.
   const observationsList = useMemo(
-    () => html`<${ObservationsList} observations=${observations} gridRef=${gridRef} />`,
-    [observations, gridRef],
+    () => html`<${ObservationsList} observations=${decoratedObservations} gridRef=${gridRef} />`,
+    [decoratedObservations, gridRef],
   );
 
   const disabledReason = !session
@@ -274,7 +286,7 @@ export function CapturePage({
         onDismissSuggestion=${onDismissSuggestion}
         onOpenPicker=${onOpenPicker}
         position=${position}
-        observations=${observations}
+        observations=${decoratedObservations}
         featureLayers=${featureLayers}
         onFeatureTap=${setTappedFeature}
         pickedPoint=${pickedPoint}

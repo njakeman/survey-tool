@@ -1,5 +1,11 @@
 import { describe, expect, test } from 'vitest';
-import { createSession, closeSession, findOpenSession } from './session.js';
+import {
+  createSession,
+  closeSession,
+  findOpenSession,
+  isExported,
+  countUnexported,
+} from './session.js';
 
 describe('createSession', () => {
   test('creates an open session with the given id, name and start time', () => {
@@ -110,5 +116,37 @@ describe('findOpenSession', () => {
       startedAt: '2026-08-06T10:00:00.000Z',
     });
     expect(findOpenSession([newer, older])).toEqual(newer);
+  });
+});
+
+describe('isExported / countUnexported', () => {
+  const exportedSession = {
+    id: 'sess-1',
+    lastExportedAt: '2026-08-06T12:00:00.000Z',
+    lastExportCount: 2,
+  };
+
+  test('an observation recorded before the last export has left the device', () => {
+    expect(isExported(exportedSession, { recordedAt: '2026-08-06T11:00:00.000Z' })).toBe(true);
+    expect(isExported(exportedSession, { recordedAt: '2026-08-06T12:00:00.000Z' })).toBe(true);
+  });
+
+  test('an observation recorded after the last export has not', () => {
+    expect(isExported(exportedSession, { recordedAt: '2026-08-06T12:00:01.000Z' })).toBe(false);
+  });
+
+  test('nothing is exported from a session never exported (or absent)', () => {
+    expect(isExported({ id: 's' }, { recordedAt: '2026-08-06T11:00:00.000Z' })).toBe(false);
+    expect(isExported(null, { recordedAt: '2026-08-06T11:00:00.000Z' })).toBe(false);
+  });
+
+  test('countUnexported is the whole count before any export, the difference after', () => {
+    expect(countUnexported({ id: 's' }, 5)).toBe(5);
+    expect(countUnexported(exportedSession, 2)).toBe(0);
+    expect(countUnexported(exportedSession, 5)).toBe(3);
+  });
+
+  test('never goes negative when an undo shrank the session after an export', () => {
+    expect(countUnexported(exportedSession, 1)).toBe(0);
   });
 });

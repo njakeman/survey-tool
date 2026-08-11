@@ -69,7 +69,7 @@ describe('observationsFeatureCollection', () => {
     lon: -0.14,
     note: 'gate post',
     photoId: 'obs-1',
-    synced: false,
+    exported: false,
   };
 
   test('maps each observation to a Point feature carrying its id', () => {
@@ -81,13 +81,13 @@ describe('observationsFeatureCollection', () => {
     expect(collection.features[0].properties.obs_id).toBe('obs-1');
   });
 
-  test('carries synced state so the marker can show it, per the pending/synced rule', () => {
+  test('carries exported state so the marker can show it, per the exported-visible rule', () => {
     const collection = observationsFeatureCollection([
       observation,
-      { ...observation, id: 'obs-2', synced: true },
+      { ...observation, id: 'obs-2', exported: true },
     ]);
 
-    expect(collection.features.map((f) => f.properties.synced)).toEqual([false, true]);
+    expect(collection.features.map((f) => f.properties.exported)).toEqual([false, true]);
   });
 
   test('an empty session is still a valid empty FeatureCollection', () => {
@@ -100,24 +100,24 @@ describe('observationsFeatureCollection', () => {
 });
 
 describe('observationPaint', () => {
-  // The markers were '#00703c' when synced and '#d4351c' otherwise: green
+  // The markers were '#00703c' when exported and '#d4351c' otherwise: green
   // versus red, distinguishable by hue alone. That fails in greyscale, in
   // sunlight, and for the ~8% of men with red-green colour blindness — and
   // it was the one live accessibility defect the design pass named.
-  test('distinguishes pending from synced by fill, not only by colour', () => {
+  test('distinguishes exported from not by fill, not only by colour', () => {
     const paint = observationPaint();
 
-    // A 'case' expression on `synced`, whose two branches differ.
-    const [operator, condition, whenSynced, whenPending] = paint['circle-color'];
+    // A 'case' expression on `exported`, whose two branches differ.
+    const [operator, condition, whenExported, whenUnexported] = paint['circle-color'];
     expect(operator).toBe('case');
-    expect(condition).toEqual(['get', 'synced']);
-    // Synced is filled; pending is hollow. The shapes differ before the
+    expect(condition).toEqual(['get', 'exported']);
+    // Exported is filled; unexported is hollow. The shapes differ before the
     // colours do.
-    expect(whenSynced).not.toBe('transparent');
-    expect(whenPending).toBe('transparent');
+    expect(whenExported).not.toBe('transparent');
+    expect(whenUnexported).toBe('transparent');
   });
 
-  test('gives a pending marker a stroke, so a hollow marker is still visible', () => {
+  test('gives an unexported marker a stroke, so a hollow marker is still visible', () => {
     const paint = observationPaint();
 
     expect(paint['circle-stroke-width']).toBeGreaterThanOrEqual(2);
@@ -125,11 +125,11 @@ describe('observationPaint', () => {
 
   test('the two states never differ by hue alone', () => {
     const paint = observationPaint();
-    const [, , whenSynced, whenPending] = paint['circle-color'];
+    const [, , whenExported, whenUnexported] = paint['circle-color'];
 
     // If both branches were opaque colours, the only difference would be
     // hue — exactly the defect this replaced.
-    expect([whenSynced, whenPending]).toContain('transparent');
+    expect([whenExported, whenUnexported]).toContain('transparent');
   });
 });
 

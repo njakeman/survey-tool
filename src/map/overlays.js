@@ -52,7 +52,7 @@ export function accuracyRadiusExpression(reading) {
 const MARKER_INK = '#1e2433';
 const MARKER_OUTLINE = '#f4f0e8';
 
-// Pending versus synced, at map scale. The pair this replaced was '#00703c'
+// Exported versus not, at map scale. The pair this replaced was '#00703c'
 // and '#d4351c' — green and red, telling the two apart by hue alone, which
 // fails in greyscale and for red-green colour blindness. Fill against hollow
 // survives both.
@@ -65,9 +65,9 @@ const MARKER_OUTLINE = '#f4f0e8';
 export function observationPaint() {
   return {
     'circle-radius': 7,
-    'circle-color': ['case', ['get', 'synced'], MARKER_INK, 'transparent'],
+    'circle-color': ['case', ['get', 'exported'], MARKER_INK, 'transparent'],
     'circle-stroke-width': 2,
-    'circle-stroke-color': ['case', ['get', 'synced'], MARKER_OUTLINE, MARKER_INK],
+    'circle-stroke-color': ['case', ['get', 'exported'], MARKER_OUTLINE, MARKER_INK],
   };
 }
 
@@ -114,9 +114,11 @@ export function observationsFeatureCollection(observations) {
       geometry: { type: 'Point', coordinates: [observation.lon, observation.lat] },
       properties: {
         obs_id: observation.id,
-        // Pending vs synced has to stay visible wherever observations are
-        // shown (CLAUDE.md), markers included.
-        synced: Boolean(observation.synced),
+        // Exported-or-not has to stay visible wherever observations are
+        // shown (CLAUDE.md), markers included. The caller decorates each
+        // observation (domain/session.js isExported) — this module keeps no
+        // opinion about what "exported" means.
+        exported: Boolean(observation.exported),
       },
     })),
   };

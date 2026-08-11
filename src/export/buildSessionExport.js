@@ -57,5 +57,7 @@ export async function buildSessionExport(db, { sessionId, appVersion, gridRef })
   const dateStr = session.startedAt.slice(0, 10); // YYYY-MM-DD
   const filename = `${slugify(session.name)}-${dateStr}.zip`;
 
-  return { filename, entries };
+  // observationCount rides along so the caller can record what the export
+  // carried (sessionStore.markSessionExported) without re-counting.
+  return { filename, entries, observationCount: observations.length };
 }

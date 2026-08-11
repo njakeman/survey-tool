@@ -429,7 +429,7 @@ describe('CapturePage — session history link and export', () => {
 
 describe('CapturePage — map panel', () => {
   test('feeds the live fix and saved observations to the map', async () => {
-    const observations = [{ id: 'obs-1', lat: 51.5, lon: -0.14, synced: false }];
+    const observations = [{ id: 'obs-1', lat: 51.5, lon: -0.14 }];
     const adapter = {
       ready: Promise.resolve(),
       setPosition: vi.fn(),
@@ -458,7 +458,13 @@ describe('CapturePage — map panel', () => {
     pushPosition(POSITION);
 
     await waitFor(() => expect(adapter.setPosition).toHaveBeenCalledWith(POSITION));
-    await waitFor(() => expect(adapter.setObservations).toHaveBeenCalledWith(observations));
+    await waitFor(() =>
+      // Decorated on the way through: exported-or-not travels with each
+      // observation to the markers.
+      expect(adapter.setObservations).toHaveBeenCalledWith([
+        { id: 'obs-1', lat: 51.5, lon: -0.14, exported: false },
+      ]),
+    );
   });
 
   test('offers the region covering the current fix when a different one is in use', async () => {

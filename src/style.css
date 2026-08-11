@@ -1453,14 +1453,14 @@ button {
   color: var(--accent-deep);
 }
 
-/* Pending is an outline, synced is a fill — the shapes differ, so the state
-   reads without colour. */
-.badge-pending {
+/* Not-exported is an outline, exported is a fill — the shapes differ, so the
+   state reads without colour. */
+.badge-not-exported {
   border-style: dashed;
   color: var(--text-secondary);
 }
 
-.badge-synced {
+.badge-exported {
   background: var(--ink);
   color: var(--paper);
   border-color: var(--ink);

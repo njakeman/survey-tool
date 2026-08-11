@@ -4,6 +4,7 @@ import { registerSW } from 'virtual:pwa-register';
 import { App } from './ui/App.js';
 import { formatError } from './error-display.js';
 import { openDatabase } from './storage/db.js';
+import { markSessionExported } from './storage/sessionStore.js';
 import { createCaptureService } from './app/captureService.js';
 import { newId, nowIso } from './domain/id.js';
 import { watchPosition } from './sensors/position.js';
@@ -71,14 +72,21 @@ async function main() {
   const gridRef = (lat, lon) => (osgbGrid ? toGridRef(lat, lon, osgbGrid) : null);
 
   async function exportSession(sessionId) {
-    const { filename, entries } = await buildSessionExport(db, {
+    const { filename, entries, observationCount } = await buildSessionExport(db, {
       sessionId,
       appVersion: __APP_VERSION__,
       gridRef,
     });
     const zipBlob = await zipEntries(entries);
     const file = new File([zipBlob], filename, { type: 'application/zip' });
-    return shareOrDownload(file, { title: filename });
+    const result = await shareOrDownload(file, { title: filename });
+    // The one write export makes: stamp what left and when, which is all the
+    // Exported badges derive from. A dismissed share sheet stamps nothing —
+    // the data went nowhere.
+    if (result.cancelled) return result;
+    const exportedAt = nowIso();
+    await markSessionExported(db, sessionId, { exportedAt, observationCount });
+    return { ...result, exportedAt, observationCount };
   }
 
   // The reverse trip: a previously exported zip (or bare session.geojson)

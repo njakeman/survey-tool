@@ -78,21 +78,21 @@ describe('ObservationsList', () => {
     expect(within(poor).getByText(/accuracy poor/i)).toBeInTheDocument();
   });
 
-  test('every observation states whether it has been synced', () => {
-    // Sync is unbuilt, so everything is genuinely pending — the badge says so
-    // rather than saying nothing.
+  test('every observation states whether it has been exported', () => {
+    // A fresh save has left the device in no way — the badge says so rather
+    // than saying nothing.
     render(html`<${ObservationsList} observations=${[OBS_NO_PHOTO]} />`);
 
     const [row] = screen.getAllByRole('listitem');
-    expect(within(row).getByText(/pending/i)).toBeInTheDocument();
+    expect(within(row).getByText(/not exported/i)).toBeInTheDocument();
   });
 
-  test('a synced observation is marked by more than its colour', () => {
-    render(html`<${ObservationsList} observations=${[{ ...OBS_NO_PHOTO, synced: true }]} />`);
+  test('an exported observation is marked by more than its colour', () => {
+    render(html`<${ObservationsList} observations=${[{ ...OBS_NO_PHOTO, exported: true }]} />`);
 
     const [row] = screen.getAllByRole('listitem');
-    expect(within(row).getByText(/synced/i)).toBeInTheDocument();
-    expect(within(row).queryByText(/pending/i)).not.toBeInTheDocument();
+    expect(within(row).getByText(/^Exported$/)).toBeInTheDocument();
+    expect(within(row).queryByText(/not exported/i)).not.toBeInTheDocument();
   });
 
   test('lists multiple observations in the given order', () => {
