@@ -1,7 +1,12 @@
 import { html } from 'htm/preact';
 import { useEffect, useState } from 'preact/hooks';
-import { isStandalone, canRequestOrientationPermission, canShareFiles } from './capabilities.js';
-import { formatBytes, formatDuration } from './format.js';
+import {
+  isStandalone,
+  canRequestOrientationPermission,
+  canShareFiles,
+  supportedRecordingTypes,
+} from './capabilities.js';
+import { formatBytes, formatDuration, describeRecording } from './format.js';
 import { appendLogEntry, readLog, clearLog } from './log.js';
 import { benchmarkPbkdf2 } from './pbkdf2-benchmark.js';
 import { readOfflineStatus } from '../app/offlineStatus.js';
@@ -10,6 +15,16 @@ import { readOfflineStatus } from '../app/offlineStatus.js';
 // that decide whether this app's architecture is viable on the maintainer's
 // actual phone before any real feature is built on top of the assumption.
 // Delete once every check has a confirmed answer recorded in the plan.
+
+// Ordered by preference: Opus is far more efficient for speech, mp4/AAC is
+// what Safari has always supported. Whichever the device accepts first wins.
+const RECORDING_CANDIDATES = [
+  'audio/webm;codecs=opus',
+  'audio/mp4;codecs=opus',
+  'audio/mp4',
+  'audio/webm',
+];
+const RECORDING_MS = 3000;
 
 function log(check, result) {
   appendLogEntry(localStorage, { at: new Date().toISOString(), check, result });
@@ -30,6 +45,7 @@ export function ProbePage() {
   const [orientationResult, setOrientationResult] = useState(null);
   const [shareResult, setShareResult] = useState(null);
   const [pbkdf2Result, setPbkdf2Result] = useState(null);
+  const [micResult, setMicResult] = useState(null);
   const [offlineStatusResult, setOfflineStatusResult] = useState(null);
   const [entries, setEntries] = useState(() => readLog(localStorage));
 
@@ -150,6 +166,82 @@ export function ProbePage() {
     refreshLog();
   }
 
+  // Could an observation carry a voice note? Storage says yes easily — AAC
+  // mono at 24 kbps is about half a photo per minute. The doubt is entirely
+  // about whether an *installed, standalone* iOS PWA can get a microphone at
+  // all: WebKit bug 185448 says apps added to the home screen see no device,
+  // Apple's forums carry reports of recording working once and then failing
+  // until the phone is restarted, and iOS 26.1 was reported to break audio
+  // input outright. So this is measured on the device before anything is
+  // built on it — the same reason geolocation and compass were probed first.
+  //
+  // Press it twice. Working once and then not is the specific failure.
+  async function checkMicrophone() {
+    const types = supportedRecordingTypes(window.MediaRecorder, RECORDING_CANDIDATES);
+    if (types.length === 0) {
+      const result =
+        typeof window.MediaRecorder === 'function'
+          ? 'MediaRecorder present but supports none of the candidate types'
+          : 'no MediaRecorder on this device';
+      setMicResult(result);
+      log('microphone', result);
+      refreshLog();
+      return;
+    }
+
+    setMicResult('recording…');
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (error) {
+      // Denied and "resolved but gave me nothing" point at completely
+      // different problems, so they must not collapse into one message.
+      const result = `getUserMedia failed: ${error.name} — ${error.message}`;
+      setMicResult(result);
+      log('microphone', result);
+      refreshLog();
+      return;
+    }
+
+    try {
+      const mimeType = types[0];
+      const recorder = new window.MediaRecorder(stream, {
+        mimeType,
+        // Voice, not music. If the encoder honours it, a minute is tens of
+        // kilobytes; the measured figure below says whether it did.
+        audioBitsPerSecond: 24_000,
+      });
+      const chunks = [];
+      recorder.ondataavailable = (event) => {
+        if (event.data?.size) chunks.push(event.data);
+      };
+
+      const started = performance.now();
+      const stopped = new Promise((resolve) => {
+        recorder.onstop = resolve;
+      });
+      recorder.start();
+      await new Promise((resolve) => setTimeout(resolve, RECORDING_MS));
+      recorder.stop();
+      await stopped;
+
+      const bytes = chunks.reduce((total, chunk) => total + chunk.size, 0);
+      const result = describeRecording({ mimeType, bytes, ms: performance.now() - started });
+      setMicResult(`${result} · offered: ${types.join(', ')}`);
+      log('microphone', result);
+    } catch (error) {
+      const result = `recording failed: ${error.name} — ${error.message}`;
+      setMicResult(result);
+      log('microphone', result);
+    } finally {
+      // Every track, always. A capture left running keeps the iOS recording
+      // indicator lit and is the likeliest cause of the reported "works once,
+      // then never again until you restart the phone".
+      for (const track of stream.getTracks()) track.stop();
+    }
+    refreshLog();
+  }
+
   async function runPbkdf2Benchmark() {
     setPbkdf2Result('running…');
     const result = await benchmarkPbkdf2({
@@ -238,6 +330,11 @@ export function ProbePage() {
               ? ' running…'
               : ''
         }
+      <//>
+
+      <${ResultRow} label="Microphone (voice notes)">
+        <button onClick=${checkMicrophone}>Record 3 s</button>
+        ${micResult ? ` ${micResult}` : ' run it twice — working once then failing is the bug'}
       <//>
 
       <h2>Log (survives relaunch)</h2>

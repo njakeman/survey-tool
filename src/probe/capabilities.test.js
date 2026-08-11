@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'vitest';
-import { isStandalone, canRequestOrientationPermission, canShareFiles } from './capabilities.js';
+import {
+  isStandalone,
+  canRequestOrientationPermission,
+  canShareFiles,
+  supportedRecordingTypes,
+} from './capabilities.js';
 
 describe('isStandalone', () => {
   test('true when navigator.standalone is true (iOS Safari legacy flag)', () => {
@@ -49,5 +54,34 @@ describe('canShareFiles', () => {
 
   test('false when navigator has no canShare (Web Share API unsupported)', () => {
     expect(canShareFiles({}, [])).toBe(false);
+  });
+});
+
+describe('supportedRecordingTypes', () => {
+  // Which container and codec a voice note could actually use. The constructor
+  // is injected for the same reason DeviceOrientationEvent is: node has no
+  // MediaRecorder, and the interesting cases are the ones a laptop cannot
+  // produce anyway.
+  function fakeRecorder(supported) {
+    return { isTypeSupported: (type) => supported.includes(type) };
+  }
+
+  test('returns only the candidates the device accepts, in the order offered', () => {
+    const recorder = fakeRecorder(['audio/mp4', 'audio/webm;codecs=opus']);
+
+    expect(
+      supportedRecordingTypes(recorder, ['audio/webm;codecs=opus', 'audio/mp4', 'audio/ogg']),
+    ).toEqual(['audio/webm;codecs=opus', 'audio/mp4']);
+  });
+
+  test('is empty when the device accepts none of them', () => {
+    expect(supportedRecordingTypes(fakeRecorder([]), ['audio/mp4'])).toEqual([]);
+  });
+
+  test('is empty when there is no MediaRecorder at all, rather than throwing', () => {
+    // An older WebView, or a browser where the API is simply absent. The probe
+    // has to report that as a finding, not fall over.
+    expect(supportedRecordingTypes(undefined, ['audio/mp4'])).toEqual([]);
+    expect(supportedRecordingTypes({}, ['audio/mp4'])).toEqual([]);
   });
 });
