@@ -10,10 +10,17 @@ See [`field-survey-pwa-prompt.md`](./field-survey-pwa-prompt.md) for the origina
 
 ## Status
 
-Field-usable offline. Capture (GPS/compass/photo/save), session history, zip export, the offline
-basemap, [feature layers](#feature-layers), [OS grid references](#grid-references) and
-[marking points you cannot reach](#marking-a-point-you-cannot-reach) are built; sync to GitHub is
-not yet.
+Field-usable offline. Capture (GPS/compass/photo/save), session history, zip export **and
+import**, the offline basemap, [feature layers](#feature-layers),
+[OS grid references](#grid-references) and
+[marking points you cannot reach](#marking-a-point-you-cannot-reach) are built.
+
+**There is no sync and there will be none.** GitHub sync (and with it the encrypted personal
+access token, the passphrase prompt and the Git Data API commit flow) was planned as Phase 5 and
+deliberately dropped (2026-08-11): export to the device covers the need, with none of the token
+handling. Data leaves the phone through the share sheet and comes back through
+[Import](#import-a-session); the Exported badge on every observation says whether it has left
+yet.
 
 To see a map you must first produce basemap archives for your survey areas — see
 [Offline basemap](#offline-basemap) below. Without any, the app works exactly as before and the
@@ -289,7 +296,18 @@ Playwright's WebKit is not Safari and not iOS. Before signing off any phase, run
 Pushing to `main` builds and deploys to GitHub Pages via Actions (`.github/workflows/ci.yml`).
 First-time setup: in the repo's Settings → Pages, set the source to "GitHub Actions".
 
+## Import a session
+
+Session history → **Import session** reads a previously exported zip (or a bare
+`session.geojson`) back onto the device. It always creates a **copy** under fresh ids — importing
+never overwrites or merges, importing twice yields two visible copies, and a session exported
+mid-way arrives closed: it is an archive copy, not a continuation. A malformed file fails on the
+Import tap with a named reason and writes nothing (one transaction). Since the export format
+carries the session itself (`survey_session`, a GeoJSON foreign member), the copy keeps its name
+and times; older zips without it are reconstructed from the features.
+
 ## Data
 
-Synced sessions land in a separate private repo (`njakeman/survey-data`), not this one — so a
-compromised sync token can never rewrite the app that's deployed from here.
+Sessions live on the device and leave it only through export — there is no server, no token, and
+nothing to sync. The exported zip (GeoJSON + photos) is the canonical interchange format, and
+identical data always exports byte-identically, so exports are diffable and dedupable.

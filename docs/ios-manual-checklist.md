@@ -283,6 +283,11 @@ millimetre, so the arithmetic is not in doubt. What is in doubt is everything a 
 
 ## Microphone — deciding whether voice notes are possible
 
+**ANSWERED 2026-08-11, on device, in standalone: the microphone works.** Five consecutive
+recordings, `audio/webm;codecs=opus`, ~18.5 KB per 3 s ≈ **0.4 MB/min** — no works-once failure,
+no empty recordings. Voice notes were green-lit on the back of this. The checks below stay for
+re-verification after iOS updates.
+
 **Must be run from the home-screen icon, in standalone.** That is the whole question: WebKit bug
 185448 is "getUserMedia not working in apps added to home screen that run in standalone mode", and
 Safari-the-browser working tells us nothing. Probe page → Microphone → "Record 3 s".
@@ -332,7 +337,19 @@ amount of missing signal may break the map.**
 
 ## Later phases (fill in as each lands)
 
-- [ ] Phase 5 — sync completes on a real connection; killing the app mid-sync and reopening
-      resumes without duplicating or losing observations
-- [ ] Phase 6 — export via Web Share works for both a synced and an unsynced session; app storage
-      surviving 2+ weeks of non-use (requires waiting, or trusting `persist()` above)
+- [ ] Phase 6 — app storage surviving 2+ weeks of non-use (requires waiting, or trusting
+      `persist()` above)
+
+## Import a session
+
+Session history → Import session. GitHub sync was dropped (2026-08-11); export + import is the
+whole transport, so this round trip is what stands between a broken phone and lost data.
+
+- [ ] Export a real session (photos included), save the zip to Files, then Import it back:
+      the copy appears with the same name, observations and photos, badged **Not exported**
+- [ ] The badge flips: after exporting a session, its rows read **✓ Exported** and the map
+      markers fill in; save one more observation and it alone reads Not exported
+- [ ] Dismissing the share sheet does **not** flip anything — the data went nowhere
+- [ ] Import the same zip twice: two copies listed, nothing merged or overwritten
+- [ ] Import garbage (rename a photo .zip): a named failure on the Import tap, nothing listed
+- [ ] Works offline end to end — export to Files and import from Files, airplane mode on

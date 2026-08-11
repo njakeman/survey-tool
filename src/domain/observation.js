@@ -1,7 +1,10 @@
 // A single GPS/compass/photo reading within a session. Pure record
 // construction and validation; storage and GeoJSON conversion live
-// elsewhere. `synced`/`syncedAt` start false/null and are only ever flipped
-// by the sync layer (Phase 5) — never set here.
+// elsewhere. `synced`/`syncedAt` are vestigial (GitHub sync was dropped,
+// 2026-08-11, before anything ever flipped them): they stay in the record
+// shape so stored data keeps one shape, and stay false/null forever —
+// exported-or-not is derived from the session instead (isExported below in
+// session.js).
 //
 // `recordedAt` (when the surveyor asserted the observation) and `fixAt`
 // (when the position was actually measured) are deliberately distinct — a

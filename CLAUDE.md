@@ -8,7 +8,12 @@ Phases 1–4 are complete: device capability probe verified on iOS 26, storage/d
 capture (GPS/compass readings, photo, save), session history + zip export, and the offline vector
 basemap — the app is field-usable offline as of Phase 3. Phase 4 needs a `public/basemap.pmtiles`
 the user produces themselves (README → Offline basemap) and has **not yet been signed off on
-device**: run the Phase 4 section of `docs/ios-manual-checklist.md`. Phase 5 is sync. The mobile
+device**: run the Phase 4 section of `docs/ios-manual-checklist.md`. Phase 5 was to be GitHub sync; it was **dropped entirely on 2026-08-11** (user decision — export
+to device covers the need) and replaced by **session import**: Session history → Import reads an
+exported zip (or bare session.geojson) back in, always as a copy under fresh ids, and the
+Pending/Synced badge became the **Exported** badge (`src/ui/ExportBadge.js`), derived from
+`lastExportedAt`/`lastExportCount` which a completed export stamps on the session. Do not propose
+or build sync, token storage, or the crypto envelope. The mobile
 design pass is implemented — `docs/styling.md` describes what was built and the constraints any
 change has to keep, `docs/design/` holds the handoff and mockups it came from. **Feature layers**
 (the surveyor's own GeoJSON drawn over the basemap, toggled in "Maps and layers", tappable for
@@ -87,8 +92,8 @@ for a `*.browser.test.js` file).
 - `src/domain/` — framework-free ES modules, no DOM/IndexedDB imports: `session.js` and
   `observation.js` (pure record construction + validation), `geojson.js` (session + observations →
   one FeatureCollection), `canonical-json.js` (deterministic serialisation — sorted keys, fixed
-  indent, trailing newline; sync's idempotency depends on identical content always producing
-  identical bytes), `id.js` (ULID via `monotonicFactory`, not bare `ulid()`, so ids stay strictly
+  indent, trailing newline; identical content always produces identical bytes, so exports are
+  reproducible and diffable), `id.js` (ULID via `monotonicFactory`, not bare `ulid()`, so ids stay strictly
   ordered within the same millisecond).
 - `src/storage/` — `idb` wrapper over IndexedDB. Each store module (`sessionStore.js`,
   `observationStore.js`, `photoStore.js`) takes an opened `db` as its first argument rather than a
@@ -251,34 +256,37 @@ standalone })`, browser globals injected same as `probe/capabilities.js`, so it'
 
 ## Security constraints (non-negotiable)
 
-- The GitHub personal access token is never stored in plaintext. Envelope encryption: a
-  passphrase-derived key (PBKDF2-SHA256, 600,000 iterations — current OWASP figure, confirmed
-  ~128ms on a real iPhone) wraps a random DEK via AES-GCM; the DEK wraps the PAT via AES-GCM.
-  Random salt and IV stored alongside each ciphertext. Only ciphertext goes to IndexedDB. This
-  structure exists so a future WebAuthn/PRF (Face ID) unlock can wrap the same DEK additively,
-  without re-encrypting anything — designed for in the data model, not built in v1.
-- The decrypted token lives in memory only for the duration of a sync (plan: up to 5 minutes,
-  cleared on timer/background/tab-hide) and is discarded afterward. It must never touch
-  localStorage, a global variable, or a log line.
-- The passphrase is requested at sync time only — never at launch. Taking readings and saving
-  observations must never require it.
+- **The app holds no secrets, by design — keep it that way.** GitHub sync was dropped (2026-08-11)
+  before any token code was built, so there is no PAT, no passphrase, no crypto envelope, and no
+  network write path anywhere in the app. Data leaves the device only through the user-invoked
+  share sheet. Any future feature that would require storing a credential must re-open this
+  section deliberately, not slip one in — the envelope-encryption design it replaced is in git
+  history (and the PBKDF2 probe result, ~120 ms for 600k iterations on the real phone, still
+  stands) if that day comes.
+- Never log, export, or transmit anything beyond what the surveyor explicitly shares.
 
 ## Design boundaries to preserve
 
 - Keep the map layer behind a thin abstraction. MapLibre GL JS + PMTiles from the start (not
   Leaflet + raster — raster tile providers with offline-friendly terms don't really exist; vector +
   PMTiles is where the legally-clean offline basemap ecosystem lives).
-- Sync writes one commit per session via the GitHub Git Data API (create blobs → build tree with
-  `base_tree` set → create commit with **deterministic author/committer dates** → update ref with
-  `force: false`), and must be resumable and idempotent — retrying after a mid-sync failure must not
-  duplicate or lose observations. Blobs/trees are naturally content-addressed; commits are only
-  idempotent if their dates are pinned rather than left to default to "now".
-- Once synced, observations stay on the device but are marked synced (`synced`/`syncedAt` on the
-  observation record, only ever flipped by the sync layer); the pending/synced distinction must stay
-  visible in the UI.
+- Import (`src/import/`) is the inverse of export and always writes a **copy**: fresh ids for
+  session, observations and photos, one transaction (nothing half-written), a mid-session export
+  arrives closed, and every feature is validated back through `createObservation` so a malformed
+  file fails on the tap with a named reason. It never overwrites, merges, or deletes.
+- The exported-or-not distinction must stay visible wherever observations are shown (list rows,
+  history, map markers — filled vs hollow). It derives entirely from `lastExportedAt` +
+  `lastExportCount` on the session, stamped by a completed export (`markSessionExported`) — never
+  from per-observation writes. A dismissed share sheet stamps nothing. The observation
+  `synced`/`syncedAt` fields still exist in stored records, unused — leave them.
+- `domain/geojson.js` emits the session itself as a `survey_session` foreign member (RFC 7946) —
+  it is what makes exports importable with fidelity. No exported-at timestamp goes **inside** the
+  file: identical data must keep producing identical bytes.
 - Export (zip of GeoJSON + photos) uses the Web Share API as the **primary** route, with a Blob
-  download as a secondary/fallback only — not the reverse. Must work on any session, synced or not,
-  and must never mutate or clear local data as a side effect.
+  download as a secondary/fallback only — not the reverse. Must work on any session at any time,
+  and must never touch observations or photos as a side effect — its one permitted write is
+  stamping `lastExportedAt`/`lastExportCount` on the exported session, after a completed (not
+  dismissed) share.
 - If compass permission is denied or the sensor is unavailable, degrade to position-only
   observations rather than failing.
 - Downscale photos on-device before storing them (plan: 1600px long edge, JPEG q0.8).
@@ -296,7 +304,7 @@ standalone })`, browser globals injected same as `probe/capabilities.js`, so it'
   takes its columns from the features it sees, so omitting them would make the column set depend on
   which rows happened to be linked. Read with `?? null`, because records predating the fields would
   otherwise export `undefined`, which `canonicalStringify` drops. Note this changed the exported
-  bytes of existing sessions — free before sync exists, not after.
+  bytes of existing sessions — free while nothing diffs old exports against new ones.
 - **A position can be marked on the map instead of measured**, for a thing the surveyor can see
   but not reach. It produces an ordinary observation — the data model gains exactly one field,
   `positionSource` (`'gps' | 'map'`) — but `gpsAccuracyM` then holds the **map precision at the

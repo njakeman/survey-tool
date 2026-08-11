@@ -1,7 +1,7 @@
 // A survey session: an explicit, named span of time observations attach to.
-// This is the sync commit boundary and the export unit (plan decision:
-// explicit start/end, named). Pure record construction — id/timestamp
-// generation and persistence live elsewhere (domain/id.js, storage/).
+// This is the export and import unit (plan decision: explicit start/end,
+// named). Pure record construction — id/timestamp generation and persistence
+// live elsewhere (domain/id.js, storage/).
 
 export function createSession({ id, name, startedAt }) {
   if (!id) throw new Error('createSession: id is required');

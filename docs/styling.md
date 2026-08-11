@@ -42,7 +42,7 @@ happened — and each is still binding on anything added later.
    regions carry error and status text; `aria-describedby` ties the save button to its blocked
    reason. Restyling must not replace them with class-only equivalents.
 6. **Colour is never the only signal.** Every state carries a word and a shape as well as a hue:
-   pending is a dashed outline against synced's solid fill, the blocked save button is dashed,
+   not-exported is a dashed outline against exported's solid fill, the blocked save button is dashed,
    warnings are led by a triangle, the in-use region is filled and bordered and labelled. This was
    a live defect before the design pass — see _Map markers_ below.
 7. **The map is a panel, not a screen.** 300px inside a scrolling page, full-bleed to the screen
@@ -74,7 +74,7 @@ palette to maintain.
 | ------------------ | -------------------- | ----------------------- | ------------------------------------------- |
 | `--paper`          | `#f4f0e8`            | `#16171c`               | page ground                                 |
 | `--surface`        | `#fbf9f4`            | `#1e2027`               | inputs, overlay buttons, confirmation strip |
-| `--ink`            | `#1e2433`            | `#ece7dd`               | body text, synced markers and badges        |
+| `--ink`            | `#1e2433`            | `#ece7dd`               | body text, exported markers and badges      |
 | `--accent`         | `#c2611f`            | `#e07b33`               | save fill, active region, focus ring        |
 | `--accent-ink`     | `#a8511a`            | `#e07b33`               | accent as text (links, Undo), accent border |
 | `--accent-deep`    | `#8a4a12`            | `#f2a05a`               | warnings, the saving state's fill           |
@@ -170,7 +170,7 @@ rendered case.
 | Photo           | `.photo-field` + `-button`, `-preview`, `-error`, `-busy`; row is `.capture-actions`                                                                                        | The "button" is a `<label>` wrapping a visually-hidden file input. Do not flatten it.                                                                                                                                                                                                         |
 | Save            | `.save-button` + `-ready`, `-blocked`, `-saving`, `-reason`; `.save-confirmation` + `-tick`, `-text`                                                                        | Five states, each with a word and a shape.                                                                                                                                                                                                                                                    |
 | Observations    | `.observations-list` + `-row`, `-row-head`, `-time`, `-meta`, `-note`, `-photo`, `-poor`, `.observations-empty`                                                             | A card list. Replaced a six-column table that scrolled sideways.                                                                                                                                                                                                                              |
-| Sync state      | `.chip.badge-pending` / `.chip.badge-synced` (`src/ui/SyncBadge.js`)                                                                                                        | Dashed outline versus solid fill with a tick.                                                                                                                                                                                                                                                 |
+| Export state    | `.chip.badge-not-exported` / `.chip.badge-exported` (`src/ui/ExportBadge.js`)                                                                                               | Dashed outline versus solid fill with a tick.                                                                                                                                                                                                                                                 |
 | Session history | `.session-history` + `-list`, `-row`, `-body`, `-name`, `-date`, `-chevron`, `-unsynced`, `-empty`, `-export`, `-export-message`; detail is `.session-detail-title`/`-meta` | Read-only list of past sessions.                                                                                                                                                                                                                                                              |
 | Basemap picker  | `.basemap-picker` + `-list`, `-row`, `-glyph`, `-body`, `-name`, `-size`, `-progress`, `-state`, `-remove`, `-error`, `-note`, `-empty`                                     | `aria-current` marks the region in use, alongside four other signals.                                                                                                                                                                                                                         |
 | Feature layers  | `.feature-layer-panel` + `-list`, `-row`, `-swatch`, `-body`, `-name`, `-meta`, `-state`                                                                                    | Second section of the picker view. `aria-pressed`, not `aria-current`: independent toggles, not one choice.                                                                                                                                                                                   |
@@ -189,7 +189,7 @@ when synced and `#d4351c` otherwise — green and red, distinguishable by hue al
 greyscale, fails in sunlight where saturation collapses, and fails outright for red-green colour
 blindness.
 
-They are now **filled for synced, hollow with a 2px stroke for pending**, built in
+They are now **filled for exported, hollow with a 2px stroke for not-exported**, built in
 `src/map/overlays.js` (`observationPaint()`) so the distinction is asserted by a node test rather
 than only visible on a real archive. The colours are literals keyed to the map's own light
 flavour: MapLibre paints on a canvas and cannot read CSS custom properties, and the basemap style
