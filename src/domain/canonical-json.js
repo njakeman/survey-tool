@@ -1,8 +1,11 @@
 // Deterministic JSON serialisation: object keys sorted (recursively), fixed
-// indentation, single trailing newline. Sync (Phase 5) relies on identical
-// logical content always producing identical bytes — Git blobs are content-
-// addressed by SHA, so a retry only avoids duplicate work if the same session
-// serialises the same way every time, independent of property insertion order.
+// indentation, single trailing newline. Identical logical content must always
+// produce identical bytes so exports are reproducible and diffable: the same
+// session exported twice yields the same file, byte for byte, independent of
+// property insertion order. (This originally served the planned GitHub sync's
+// idempotency; sync was dropped in favour of export/import, but the guarantee
+// is worth keeping — a re-export that differs only in key order would read as
+// changed data to any diff or dedupe.)
 //
 // Array order is left untouched: unlike object keys, array order is
 // meaningful (feature order in a FeatureCollection) and is the caller's

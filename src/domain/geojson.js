@@ -63,5 +63,21 @@ export function sessionToFeatureCollection(session, observations, { appVersion, 
     .sort(compareObservations)
     .map((obs) => observationToFeature(obs, session, appVersion, gridRef));
 
-  return { type: 'FeatureCollection', features };
+  return {
+    type: 'FeatureCollection',
+    // A foreign member (RFC 7946 §6.1): valid GeoJSON that GIS consumers
+    // ignore, and the thing that makes an exported session importable with
+    // fidelity — the feature properties carry everything about each
+    // observation, but nothing else carries the session's own id and times.
+    // Deliberately no exported-at timestamp: identical data must keep
+    // producing identical bytes (canonical-json.js), so exports stay
+    // reproducible and diffable.
+    survey_session: {
+      id: session.id,
+      name: session.name,
+      started_at: session.startedAt,
+      ended_at: session.endedAt ?? null,
+    },
+    features,
+  };
 }

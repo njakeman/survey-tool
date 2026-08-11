@@ -13,7 +13,29 @@ describe('sessionToFeatureCollection', () => {
   test('produces a valid empty FeatureCollection for a session with no observations', () => {
     expect(sessionToFeatureCollection(session, [], { appVersion: '0.1.0' })).toEqual({
       type: 'FeatureCollection',
+      survey_session: {
+        id: 'sess-1',
+        name: 'Ashton Keynes',
+        started_at: '2026-08-06T09:00:00.000Z',
+        ended_at: null,
+      },
       features: [],
+    });
+  });
+
+  test('carries the session itself as a foreign member, so an export can be imported', () => {
+    // RFC 7946 §6.1 — foreign members are valid GeoJSON and GIS consumers
+    // ignore them. Without this the file names the session on every feature
+    // but never carries its id or times, and import could only approximate.
+    const closed = { ...session, endedAt: '2026-08-06T17:30:00.000Z' };
+
+    const fc = sessionToFeatureCollection(closed, [], { appVersion: '0.1.0' });
+
+    expect(fc.survey_session).toEqual({
+      id: 'sess-1',
+      name: 'Ashton Keynes',
+      started_at: '2026-08-06T09:00:00.000Z',
+      ended_at: '2026-08-06T17:30:00.000Z',
     });
   });
 
