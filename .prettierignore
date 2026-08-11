@@ -19,3 +19,4 @@ public/fonts/
 # generated runtime from the tool that authored them. Reformatting it would
 # make it no longer the thing that was handed over.
 docs/design/
+*.geojson
