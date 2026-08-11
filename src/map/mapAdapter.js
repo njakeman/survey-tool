@@ -79,6 +79,7 @@ const TAP_TOLERANCE_PX = 10;
 export async function createMapAdapter({
   container,
   archiveBuffer,
+  online,
   glyphsUrl,
   tileType = 'vector',
   tileSize,
@@ -87,33 +88,63 @@ export async function createMapAdapter({
   onFeatureTap,
   onError,
 }) {
-  ensureProtocol();
+  // `online` (an onlineImagery.js region) is the alternative to
+  // `archiveBuffer`: a tile URL template instead of an archive, so there is
+  // no protocol registration, no header, and nothing to release on destroy.
+  // Construction touches no network either way — for the online map only the
+  // tile fetches themselves can fail, which MapLibre reports as error events
+  // (routed to onError below, never a throw) over a map that keeps working.
+  // Everything from the load handler down is identical: overlays, feature
+  // layers and picking neither know nor care where the basemap pixels come
+  // from.
+  let archiveKey = null;
+  let header = null;
+  if (!online) {
+    ensureProtocol();
+    archiveCounter += 1;
+    archiveKey = `basemap-${archiveCounter}`;
+    const archive = new PMTiles(new ArrayBufferSource(archiveBuffer, archiveKey));
+    protocol.add(archive);
+    header = await archive.getHeader();
+  }
 
-  archiveCounter += 1;
-  const archiveKey = `basemap-${archiveCounter}`;
-  const archive = new PMTiles(new ArrayBufferSource(archiveBuffer, archiveKey));
-  protocol.add(archive);
-  const header = await archive.getHeader();
+  const viewport = online
+    ? // No bounds and no zoom floor: the imagery covers the world, and a
+      // whole-world maxBounds is exactly what MapLibre cannot accept
+      // (viewport.js). Opens at survey zoom over the provider's fixed centre
+      // — the same open-at-a-centre-then-follow behaviour an archive has —
+      // and the first fix centres it on the surveyor.
+      { center: [online.centre.lon, online.centre.lat], zoom: SURVEY_ZOOM }
+    : {
+        center: [header.centerLon, header.centerLat],
+        zoom: initialZoomFromHeader(header, SURVEY_ZOOM),
+        // A floor only where the archive has one: below its lowest tile zoom
+        // there is nothing to draw. maxZoom stays unset so overzoom past the
+        // deepest tile still works — blurry beats blank; clamping the map to
+        // the archive's tile zooms would stop the surveyor zooming in, and a
+        // degenerate range (min === max) breaks MapLibre's viewport maths
+        // outright.
+        ...(minZoomFromHeader(header) === null ? {} : { minZoom: minZoomFromHeader(header) }),
+        // Panning is clamped to what the archive covers — beyond it there
+        // are no tiles, and a blank grey void reads as a broken app. null
+        // for a world-covering archive, which MapLibre cannot accept
+        // (viewport.js).
+        maxBounds: maxBoundsFromHeader(header) ?? undefined,
+      };
 
   const map = new MapLibreMap({
     container,
-    style: buildStyle({ glyphsUrl, archiveKey, tileType, tileSize, attribution }),
-    center: [header.centerLon, header.centerLat],
-    zoom: initialZoomFromHeader(header, SURVEY_ZOOM),
-    // A floor only where the archive has one: below its lowest tile zoom
-    // there is nothing to draw. maxZoom stays unset so overzoom past the
-    // deepest tile still works — blurry beats blank.
-    ...(minZoomFromHeader(header) === null ? {} : { minZoom: minZoomFromHeader(header) }),
-    // Deliberately no min/maxZoom: those are the archive's *tile* zooms,
-    // carried by the vector source itself. Clamping the map to them would
-    // stop the surveyor zooming in past the deepest tile, which MapLibre
-    // handles fine by overzooming, and a degenerate range (min === max)
-    // makes its viewport constraint maths fall over outright.
-    //
-    // Panning is clamped to what the archive covers — beyond it there are no
-    // tiles, and a blank grey void reads as a broken app. null for a
-    // world-covering archive, which MapLibre cannot accept (viewport.js).
-    maxBounds: maxBoundsFromHeader(header) ?? undefined,
+    style: online
+      ? buildStyle({
+          glyphsUrl,
+          tileType: 'online-raster',
+          tiles: online.tiles,
+          tileSize: online.tileSize,
+          maxzoom: online.maxzoom,
+          attribution: online.attribution,
+        })
+      : buildStyle({ glyphsUrl, archiveKey, tileType, tileSize, attribution }),
+    ...viewport,
     // A survey map that spins under a gloved hand is worse than useless.
     dragRotate: false,
     pitchWithRotate: false,
@@ -370,8 +401,9 @@ export async function createMapAdapter({
   function destroy() {
     map.remove();
     // Releases this archive's PMTiles and its buffer; without it, switching
-    // regions accumulates them for the life of the page.
-    protocol.tiles.delete(archiveKey);
+    // regions accumulates them for the life of the page. An online map
+    // registered nothing.
+    if (archiveKey) protocol.tiles.delete(archiveKey);
     delete container.dataset.mapLoaded;
   }
 

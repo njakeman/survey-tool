@@ -446,3 +446,82 @@ describe('mapAdapter against real MapLibre', () => {
     adapters.length = 0; // already destroyed
   });
 });
+
+describe('an online imagery region whose server is unreachable', () => {
+  // The constraint the whole feature hangs on: an external imagery source
+  // that cannot be reached must never stop the map loading or functioning.
+  // The tile template points at a path this origin will 404, which is
+  // exactly what airplane mode looks like to MapLibre.
+  const UNREACHABLE_IMAGERY = {
+    id: 'online-imagery',
+    name: 'Aerial imagery (online)',
+    online: true,
+    tiles: `${location.origin}/no-such-imagery/{z}/{y}/{x}`,
+    tileSize: 256,
+    maxzoom: 19,
+    attribution: 'Esri, Maxar, Earthstar Geographics, and the GIS User Community',
+    centre: { lat: 54.5, lon: -2.5 },
+  };
+
+  async function createOnlineAdapter(overrides = {}) {
+    const adapter = await createMapAdapter({
+      container: mountContainer(),
+      online: UNREACHABLE_IMAGERY,
+      glyphsUrl: '/fonts/{fontstack}/{range}.pbf',
+      ...overrides,
+    });
+    adapters.push(adapter);
+    return adapter;
+  }
+
+  test('still fires load and renders a canvas — failed tiles are events, not a failed map', async () => {
+    const adapter = await createOnlineAdapter({ onError: () => {} });
+    await adapter.ready;
+
+    expect(adapter.container.dataset.mapLoaded).toBe('true');
+    expect(adapter.container.querySelector('canvas')).toBeTruthy();
+  });
+
+  test('overlays and feature layers still work over the missing imagery', async () => {
+    const adapter = await createOnlineAdapter({ onError: () => {} });
+    await adapter.ready;
+
+    adapter.setPosition({ lat: 51.5, lon: -0.25, accuracyM: 8 });
+    adapter.setObservations([{ id: 'obs-1', lat: 51.5, lon: -0.25, synced: false }]);
+    adapter.setFeatureLayers([PARCELS]);
+
+    expect(await adapter.getSourceFeatureCount('position')).toBe(1);
+    expect(await adapter.getSourceFeatureCount('observations')).toBe(1);
+    expect(adapter.hasSource('feature-layer-parcels')).toBe(true);
+
+    // The ordering guarantee holds here too: the surveyor's data below the
+    // live fix, whatever the basemap is doing.
+    const order = adapter.getLayerOrder();
+    const lastFeatureLayer = Math.max(
+      ...order.map((id, index) => (id.startsWith('feature-layer-') ? index : -1)),
+    );
+    expect(lastFeatureLayer).toBeGreaterThan(-1);
+    expect(lastFeatureLayer).toBeLessThan(order.indexOf('position-accuracy'));
+  });
+
+  test('clamps nothing: world imagery has no maxBounds and no zoom floor', async () => {
+    const adapter = await createOnlineAdapter({ onError: () => {} });
+    await adapter.ready;
+
+    expect(adapter.getMaxBounds()).toBeNull();
+  });
+
+  test('registers no archive in the pmtiles protocol, so destroy releases nothing', async () => {
+    const before = registeredArchiveCount();
+
+    const adapter = await createOnlineAdapter({ onError: () => {} });
+    await adapter.ready;
+
+    expect(adapter.getArchiveKey()).toBe(null);
+    expect(registeredArchiveCount()).toBe(before);
+
+    adapter.destroy();
+    expect(registeredArchiveCount()).toBe(before);
+    adapters.length = 0; // already destroyed
+  });
+});
