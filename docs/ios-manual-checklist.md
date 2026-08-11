@@ -314,6 +314,22 @@ If that is good enough, voice notes may never be needed: dictation lands searcha
 `note` field, which exports and syncs, where an audio file is something a human has to sit and
 replay.
 
+## Online aerial imagery
+
+"Aerial imagery (online)" in Maps and layers is Esri World Imagery streamed live — nothing stored,
+so it only shows pictures while there is signal. The property that must hold is the inverse: **no
+amount of missing signal may break the map.**
+
+- [ ] With signal: select it from Maps and layers; imagery renders, the Esri attribution shows,
+      and the position dot, observations and any enabled feature layers draw over it
+- [ ] Zoom to z19 and beyond — past the deepest tile it should go blurry, never blank or clamped
+- [ ] **Airplane mode with imagery active, then relaunch:** the app opens, the map panel appears
+      (grey tiles are fine), overlays and picking still work, and there is **no error banner**
+- [ ] Still in airplane mode: switch to a downloaded region — it renders fully, no network needed
+- [ ] In airplane mode the imagery row in Maps and layers is disabled, like an undownloaded region
+- [ ] Marking a distant point over imagery: the crosshair readout and saved grid reference match
+      the feature you aimed at (imagery is often the sharper basemap to aim on)
+
 ## Later phases (fill in as each lands)
 
 - [ ] Phase 5 — sync completes on a real connection; killing the app mid-sync and reopening

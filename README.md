@@ -49,6 +49,15 @@ The archives are **not** part of the build: you pre-bake one per region, commit 
 lists them so the surveyor can download the ones they need. Downloaded regions live in IndexedDB
 and work with no network at all — several can be held at once and switched between in the field.
 
+**One online region rides alongside the archives:** "Aerial imagery (online)" streams
+[Esri World Imagery](https://www.arcgis.com/home/item.html?id=10df2279f9684e4a9f6a7f08febac2a9)
+tile by tile when there is signal (Bing was considered first, but its free tier was retired in
+June 2025). Nothing is downloaded or cached — it goes grey with no connection, which is why it is
+never suggested, never a default, and disabled in the picker while offline. The map itself keeps
+working regardless: overlays, feature layers and point-marking are identical over it, and an
+unreachable imagery server can never take the app down. Do not bulk-fetch or cache its tiles for
+offline use — same rule as OSM. Offline imagery is a raster archive you produce (below).
+
 **Vector and raster archives both work.** A vector archive gives you styled roads, water and
 labels; a raster archive (PNG or JPEG tiles — aerial imagery, a scanned map, a site survey) is
 drawn as-is, with no labels beyond whatever is baked into the pictures. The type is detected from

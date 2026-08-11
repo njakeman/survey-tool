@@ -12,10 +12,11 @@ device**: run the Phase 4 section of `docs/ios-manual-checklist.md`. Phase 5 is 
 design pass is implemented — `docs/styling.md` describes what was built and the constraints any
 change has to keep, `docs/design/` holds the handoff and mockups it came from. **Feature layers**
 (the surveyor's own GeoJSON drawn over the basemap, toggled in "Maps and layers", tappable for
-attributes and "Record here"), **OS grid references** (OSTN15, offline) and **marking a point the
+attributes and "Record here"), **OS grid references** (OSTN15, offline), **marking a point the
 surveyor cannot reach** (a crosshair on the map, recorded as an ordinary observation with
-`positionSource: 'map'`) are implemented and, like everything since Phase 3, **unverified on a
-device** — see the Feature layers and Grid references sections of `docs/ios-manual-checklist.md`. **The stylesheet is
+`positionSource: 'map'`) and **online aerial imagery** (Esri World Imagery as one more region in
+the picker — streamed, never stored, never suggested) are implemented and, like everything since
+Phase 3, **unverified on a device** — see the Feature layers and Grid references sections of `docs/ios-manual-checklist.md`. **The stylesheet is
 no longer a placeholder**; do not restyle from scratch without reading `docs/styling.md` first.
 See `field-survey-pwa-prompt.md` for the original brief. The approved
 architecture corrected several of the brief's technical choices (raster tiles → PMTiles/MapLibre,
@@ -182,6 +183,13 @@ standalone })`, browser globals injected same as `probe/capabilities.js`, so it'
   browsing sessions (real Safari Private Browsing included, not just a test-harness artifact) —
   ArrayBuffer sidesteps the restriction entirely and works identically everywhere. This will matter
   again in Phase 4 (PMTiles archive stored in IndexedDB).
+- **One online basemap exists**: `map/onlineImagery.js` (Esri World Imagery — Bing's free tier
+  was retired June 2025). It is a pseudo-region appended in `main.js`, honoured by
+  `basemapSelection.js` only as a remembered _choice_ — never the default, never suggested (no
+  bounds, deliberately). Its tiles are **never precached, runtime-cached, or stored in
+  IndexedDB**, and the map must keep loading and functioning with the imagery server unreachable
+  — asserted in the browser tier against an unreachable tile URL. Tile scheme is ArcGIS
+  `/tile/{z}/{y}/{x}` (row before column); a z/x/y template renders the wrong ground.
 - Basemap tiles: never bulk-fetch from `tile.openstreetmap.org` (OSMF policy explicitly bans
   pre-seeding areas for offline use) or from OpenFreeMap's CDN (planet-only downloads, no PMTiles,
   ToS silent-to-hostile on automated collection). Use `pmtiles extract` against Protomaps' public
