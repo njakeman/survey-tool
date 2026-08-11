@@ -17,7 +17,7 @@ function slugify(name) {
   return slug || 'session';
 }
 
-export async function buildSessionExport(db, { sessionId, appVersion }) {
+export async function buildSessionExport(db, { sessionId, appVersion, gridRef }) {
   const session = await getSession(db, sessionId);
   if (!session) {
     throw new Error(`buildSessionExport: no session with id ${sessionId}`);
@@ -49,7 +49,7 @@ export async function buildSessionExport(db, { sessionId, appVersion }) {
     obs.photoId && !presentPhotoIds.has(obs.photoId) ? { ...obs, photoId: null } : obs,
   );
   const geojsonText = canonicalStringify(
-    sessionToFeatureCollection(session, exportObservations, { appVersion }),
+    sessionToFeatureCollection(session, exportObservations, { appVersion, gridRef }),
   );
 
   const entries = [{ name: 'session.geojson', input: geojsonText }, ...photoEntries];

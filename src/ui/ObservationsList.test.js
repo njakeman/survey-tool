@@ -100,3 +100,45 @@ describe('ObservationsList', () => {
     expect(screen.getAllByRole('listitem')).toHaveLength(2);
   });
 });
+
+describe('ObservationsList — grid references', () => {
+  const observation = {
+    id: 'obs-1',
+    fixAt: '2026-08-06T10:00:00.000Z',
+    lat: 51.5,
+    lon: -0.14,
+    gpsAccuracyM: 8,
+    headingDeg: null,
+    note: '',
+    photoId: null,
+  };
+
+  test('shows the grid reference on its own line, not buried in the metadata', () => {
+    // It is the value a surveyor reads out or pastes into a report. Making it
+    // the fourth item on a dot-separated run means hunting for it.
+    render(
+      html`<${ObservationsList} observations=${[observation]} gridRef=${() => 'SU 14082 39216'} />`,
+    );
+
+    const ref = screen.getByText('SU 14082 39216');
+    expect(ref).toBeInTheDocument();
+    expect(ref).not.toHaveClass('observations-meta');
+  });
+
+  test('renders nothing extra when there is no grid reference', () => {
+    // Outside Great Britain, or before the shift grid has loaded. An empty
+    // row would be a permanent question rather than an occasional absence.
+    const { container } = render(
+      html`<${ObservationsList} observations=${[observation]} gridRef=${() => null} />`,
+    );
+
+    expect(container.querySelector('.observations-gridref')).toBeNull();
+  });
+
+  test('works with no gridRef function at all', () => {
+    const { container } = render(html`<${ObservationsList} observations=${[observation]} />`);
+
+    expect(container.querySelector('.observations-gridref')).toBeNull();
+    expect(screen.getByText(/51\.500000, -0\.140000/)).toBeInTheDocument();
+  });
+});

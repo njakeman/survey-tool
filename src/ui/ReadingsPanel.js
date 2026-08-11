@@ -27,10 +27,14 @@ const POSITION_ERROR_MESSAGES = {
 // spelling out four capitals.
 const QUALITY_WORDS = { good: 'Good', fair: 'Fair', poor: 'Poor' };
 
-function PositionReadout({ position, positionError, now }) {
+function PositionReadout({ position, positionError, gridRef, now }) {
   const message = positionError ? POSITION_ERROR_MESSAGES[positionError.code] : null;
 
   if (position) {
+    // Null outside Great Britain, and null until the shift grid has loaded.
+    // Rendered only when there is one: an empty row labelled "grid" would be
+    // a permanent question rather than an occasional absence.
+    const gridReference = gridRef?.(position.lat, position.lon) ?? null;
     const ageMs = now() - position.fixAtMs;
     const stale = Number.isFinite(ageMs) && ageMs >= STALE_AFTER_MS;
     // Shown as a chip beside the metre figure. The number alone asks the
@@ -39,6 +43,7 @@ function PositionReadout({ position, positionError, now }) {
     const quality = QUALITY_WORDS[accuracyQuality(position.accuracyM)];
     return html`
       <p class="readings-coords">${formatLatLon(position.lat, position.lon)}</p>
+      ${gridReference ? html`<p class="readings-gridref">${gridReference}</p>` : null}
       <p class="readings-accuracy">
         <span class="readings-accuracy-value">${formatAccuracy(position.accuracyM)}</span>
         <span class="readings-accuracy-word">accuracy</span>
@@ -104,12 +109,18 @@ export function ReadingsPanel({
   headingStatus,
   onEnableCompass,
   onRetryCompass,
+  gridRef,
   now = Date.now,
 }) {
   return html`
     <div class="readings-panel">
       <p class="field-label">Position</p>
-      <${PositionReadout} position=${position} positionError=${positionError} now=${now} />
+      <${PositionReadout}
+        position=${position}
+        positionError=${positionError}
+        gridRef=${gridRef}
+        now=${now}
+      />
       <div class="readings-heading">
         <p class="field-label">Heading</p>
         <${CompassReadout}

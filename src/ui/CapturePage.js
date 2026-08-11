@@ -32,6 +32,7 @@ export function CapturePage({
   dismissedSuggestionId,
   createMap,
   featureLayers,
+  gridRef,
   onSwitchRegion,
   onDismissSuggestion,
   onOpenPicker,
@@ -214,8 +215,8 @@ export function CapturePage({
   // system while the radio is busy. The rows only change on save, so hold the
   // vnode still between saves and Preact skips the subtree entirely.
   const observationsList = useMemo(
-    () => html`<${ObservationsList} observations=${observations} />`,
-    [observations],
+    () => html`<${ObservationsList} observations=${observations} gridRef=${gridRef} />`,
+    [observations, gridRef],
   );
 
   const disabledReason = !session
@@ -250,6 +251,7 @@ export function CapturePage({
              same call — and it comes from a tap, which is what iOS needs. */
         }
         onRetryCompass=${enableCompass}
+        gridRef=${gridRef}
       />
       <${CaptureMap}
         activeRegionId=${activeRegionId}
@@ -366,6 +368,13 @@ export function CapturePage({
       }
       <button type="button" class="link" onClick=${onOpenHistory}>Session history</button>
       <button type="button" class="link" onClick=${onOpenProbe}>Device probe</button>
+      ${
+        // Grid references come from Ordnance Survey's OSTN15 transformation,
+        // which is OS data and wants acknowledging where it is used. One
+        // muted line on the screen that shows them, rather than buried in a
+        // README nobody reads on a phone.
+        html`<p class="attribution">Contains OS data © Crown copyright and database right 2026</p>`
+      }
     </main>
   `;
 }

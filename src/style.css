@@ -423,6 +423,29 @@ button {
   line-height: 1.1;
 }
 
+/* Data acknowledgement, at the very bottom of the capture page. Small and
+   muted deliberately — it has to be present, and it must not compete with
+   anything a surveyor is actually reading in a field. */
+.attribution {
+  margin: var(--space-3) 0 0;
+  font-size: var(--type-badge);
+  color: var(--text-muted);
+}
+
+/* The OS grid reference, directly under the coordinates. Monospaced and
+   letter-spaced because this is the line that gets read aloud over a radio or
+   copied into a report a digit at a time — the two failure modes are
+   mistaking 8 for B and losing your place in a five-digit run. Smaller than
+   the coordinates: it restates them, it does not replace them. */
+.readings-gridref {
+  margin: 3px 0 0;
+  font-family: var(--font-label);
+  font-size: var(--type-control);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+}
+
 .readings-accuracy {
   display: flex;
   align-items: baseline;
@@ -1281,6 +1304,17 @@ button {
 
 .observations-row-head .chip {
   margin-left: auto;
+}
+
+/* Same treatment as the live readout's, one step down: a saved row is being
+   scanned rather than read out, but it is still the value that gets copied. */
+.observations-gridref {
+  margin: 4px 0 0;
+  font-family: var(--font-label);
+  font-size: var(--type-small);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
 }
 
 .observations-meta {

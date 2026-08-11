@@ -35,6 +35,7 @@ export function App({
   onEnableLayer,
   onDisableLayer,
   onRemoveLayer,
+  gridRef,
 }) {
   const [view, setView] = useState('capture');
 
@@ -56,6 +57,7 @@ export function App({
       <${SessionHistoryPage}
         service=${service}
         exportSession=${exportSession}
+        gridRef=${gridRef}
         onBack=${() => setView('capture')}
       />
     `;
@@ -104,6 +106,7 @@ export function App({
           dismissedSuggestionId=${dismissedSuggestionId}
           createMap=${createMap}
           featureLayers=${featureLayers}
+          gridRef=${gridRef}
           onSwitchRegion=${onSelectRegion}
           onDismissSuggestion=${onDismissSuggestion}
           onOpenPicker=${() => setView('basemaps')}

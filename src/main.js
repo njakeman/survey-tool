@@ -18,6 +18,7 @@ import { createFeatureLayerService } from './app/featureLayerService.js';
 import { deleteLegacyBasemap } from './storage/basemapStore.js';
 import { chooseActive } from './map/basemapSelection.js';
 import { glyphsUrl } from './map/glyphs.js';
+import { toGridRef } from './geo/osgb.js';
 import './style.css';
 
 // A blank screen with no console access (no Mac nearby for Web Inspector) is
@@ -60,10 +61,18 @@ async function main() {
 
   const downscale = (file) => downscaleImageBlob(file);
 
+  // The OSTN15 shift grid, 34 kB from the precache. Held here rather than
+  // imported into geo/osgb.js so that module stays pure, and read through a
+  // function so every consumer gets whatever has arrived — a grid reference
+  // is a convenience, and nothing waits for it or fails without it.
+  let osgbGrid = null;
+  const gridRef = (lat, lon) => (osgbGrid ? toGridRef(lat, lon, osgbGrid) : null);
+
   async function exportSession(sessionId) {
     const { filename, entries } = await buildSessionExport(db, {
       sessionId,
       appVersion: __APP_VERSION__,
+      gridRef,
     });
     const zipBlob = await zipEntries(entries);
     const file = new File([zipBlob], filename, { type: 'application/zip' });
@@ -280,6 +289,7 @@ async function main() {
         onEnableLayer=${enableLayer}
         onDisableLayer=${disableLayer}
         onRemoveLayer=${removeLayer}
+        gridRef=${gridRef}
       />`,
       container,
     );
@@ -320,6 +330,18 @@ async function main() {
 
   refreshBasemapState();
   refreshFeatureLayers();
+
+  // Precached, so this normally resolves offline and instantly. Failing is
+  // survivable by design: no grid references, everything else unaffected —
+  // which is why it is fetched rather than bundled into the startup chunk.
+  fetch(`${import.meta.env.BASE_URL}geodesy/ostn15-lite.json`)
+    .then((response) => (response.ok ? response.json() : null))
+    .then((grid) => {
+      if (!grid) return;
+      osgbGrid = grid;
+      renderApp();
+    })
+    .catch(() => {});
 
   for (const event of ['online', 'offline']) {
     window.addEventListener(event, () => {

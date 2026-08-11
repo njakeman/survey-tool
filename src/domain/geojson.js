@@ -4,7 +4,7 @@
 // Combine with canonical-json.js's canonicalStringify for the actual bytes
 // written to disk/sync.
 
-function observationToFeature(obs, session, appVersion) {
+function observationToFeature(obs, session, appVersion, gridRef) {
   return {
     type: 'Feature',
     geometry: { type: 'Point', coordinates: [obs.lon, obs.lat] },
@@ -31,6 +31,12 @@ function observationToFeature(obs, session, appVersion) {
       feature_layer: obs.featureLayerId ?? null,
       feature_id: obs.featureId ?? null,
       feature_label: obs.featureLabel ?? null,
+      // Derived from lat/lon at export time rather than stored on the
+      // observation: it is a restatement of the coordinates, and a stored
+      // copy could only ever drift from them. Null outside Great Britain,
+      // and null if the shift grid never loaded — an export must not fail
+      // over a convenience column.
+      os_grid_ref: gridRef?.(obs.lat, obs.lon) ?? null,
       session_name: session.name,
       app_version: appVersion,
     },
@@ -47,11 +53,11 @@ function compareObservations(a, b) {
   return 0;
 }
 
-export function sessionToFeatureCollection(session, observations, { appVersion }) {
+export function sessionToFeatureCollection(session, observations, { appVersion, gridRef }) {
   const features = observations
     .slice()
     .sort(compareObservations)
-    .map((obs) => observationToFeature(obs, session, appVersion));
+    .map((obs) => observationToFeature(obs, session, appVersion, gridRef));
 
   return { type: 'FeatureCollection', features };
 }

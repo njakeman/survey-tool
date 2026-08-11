@@ -8,7 +8,7 @@ import { SyncBadge } from './SyncBadge.js';
 // stay visible and inspectable instead of vanishing once you tap End —
 // per-row edit/delete stays a Phase 6 review-screen concern, this is
 // display + export only.
-export function SessionHistoryPage({ service, exportSession, onBack }) {
+export function SessionHistoryPage({ service, exportSession, gridRef, onBack }) {
   const [sessions, setSessions] = useState(null); // null = still loading
   const [openSessionId, setOpenSessionId] = useState(null);
   const [counts, setCounts] = useState({});
@@ -80,7 +80,7 @@ export function SessionHistoryPage({ service, exportSession, onBack }) {
           <${SyncBadge} synced=${false} />
         </p>
         <p class="field-label">Observations</p>
-        <${ObservationsList} observations=${selected.observations} />
+        <${ObservationsList} observations=${selected.observations} gridRef=${gridRef} />
         <button
           type="button"
           class="button-primary session-history-export"

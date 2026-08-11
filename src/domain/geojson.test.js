@@ -53,11 +53,73 @@ describe('sessionToFeatureCollection', () => {
           feature_layer: null,
           feature_id: null,
           feature_label: null,
+          os_grid_ref: null,
           session_name: 'Ashton Keynes',
           app_version: '0.1.0',
         },
       },
     ]);
+  });
+
+  test('carries the OS grid reference when one can be worked out', () => {
+    const obs = createObservation({
+      id: 'obs-1',
+      sessionId: 'sess-1',
+      recordedAt: '2026-08-06T10:00:00.000Z',
+      fixAt: '2026-08-06T09:59:20.000Z',
+      lat: 51.5,
+      lon: -0.14,
+      gpsAccuracyM: 8.2,
+    });
+    const gridRef = (lat, lon) => `GRID ${lat},${lon}`;
+
+    const { properties } = sessionToFeatureCollection(session, [obs], {
+      appVersion: '0.1.0',
+      gridRef,
+    }).features[0];
+
+    expect(properties.os_grid_ref).toBe('GRID 51.5,-0.14');
+  });
+
+  test('is null outside Great Britain rather than omitted', () => {
+    // Same reasoning as the feature columns: a GIS consumer takes its schema
+    // from the rows it sees, so the column has to exist even when the survey
+    // wandered off the National Grid.
+    const obs = createObservation({
+      id: 'obs-1',
+      sessionId: 'sess-1',
+      recordedAt: '2026-08-06T10:00:00.000Z',
+      fixAt: '2026-08-06T09:59:20.000Z',
+      lat: 48.8566,
+      lon: 2.3522,
+      gpsAccuracyM: 8.2,
+    });
+
+    const { properties } = sessionToFeatureCollection(session, [obs], {
+      appVersion: '0.1.0',
+      gridRef: () => null,
+    }).features[0];
+
+    expect(properties).toHaveProperty('os_grid_ref', null);
+  });
+
+  test('exports without a grid reference function at all', () => {
+    // The grid is fetched at runtime and may not have arrived. An export must
+    // never fail because of a derived convenience column.
+    const obs = createObservation({
+      id: 'obs-1',
+      sessionId: 'sess-1',
+      recordedAt: '2026-08-06T10:00:00.000Z',
+      fixAt: '2026-08-06T09:59:20.000Z',
+      lat: 51.5,
+      lon: -0.14,
+      gpsAccuracyM: 8.2,
+    });
+
+    const { properties } = sessionToFeatureCollection(session, [obs], { appVersion: '0.1.0' })
+      .features[0];
+
+    expect(properties.os_grid_ref).toBeNull();
   });
 
   test('carries the source feature, so an export can be joined back to the dataset', () => {

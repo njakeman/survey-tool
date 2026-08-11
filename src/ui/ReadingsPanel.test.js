@@ -152,3 +152,55 @@ describe('compass', () => {
     expect(screen.queryByRole('button', { name: /retry|try again/i })).not.toBeInTheDocument();
   });
 });
+
+describe('ReadingsPanel — grid reference', () => {
+  const POSITION_UK = {
+    lat: 51.5,
+    lon: -0.14,
+    accuracyM: 8,
+    altitudeM: null,
+    altitudeAccuracyM: null,
+    fixAt: '2026-08-06T10:00:00.000Z',
+    fixAtMs: Date.now(),
+  };
+
+  test('shows the grid reference under the coordinates', () => {
+    render(
+      html`<${ReadingsPanel}
+        position=${POSITION_UK}
+        headingStatus="idle"
+        gridRef=${() => 'SU 14082 39216'}
+      />`,
+    );
+
+    expect(screen.getByText('SU 14082 39216')).toBeInTheDocument();
+  });
+
+  test('is derived from the live fix, so it follows the surveyor', () => {
+    const gridRef = vi.fn(() => 'SU 14082 39216');
+    render(
+      html`<${ReadingsPanel} position=${POSITION_UK} headingStatus="idle" gridRef=${gridRef} />`,
+    );
+
+    expect(gridRef).toHaveBeenCalledWith(POSITION_UK.lat, POSITION_UK.lon);
+  });
+
+  test('shows nothing rather than an empty row outside Great Britain', () => {
+    const { container } = render(
+      html`<${ReadingsPanel} position=${POSITION_UK} headingStatus="idle" gridRef=${() => null} />`,
+    );
+
+    expect(container.querySelector('.readings-gridref')).toBeNull();
+    // The coordinates themselves are unaffected — the grid reference is an
+    // extra, never a replacement.
+    expect(screen.getByText('51.500000, -0.140000')).toBeInTheDocument();
+  });
+
+  test('works before the shift grid has loaded', () => {
+    const { container } = render(
+      html`<${ReadingsPanel} position=${POSITION_UK} headingStatus="idle" />`,
+    );
+
+    expect(container.querySelector('.readings-gridref')).toBeNull();
+  });
+});

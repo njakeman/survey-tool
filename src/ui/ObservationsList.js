@@ -19,7 +19,7 @@ import { SyncBadge } from './SyncBadge.js';
 // furthest apart. The card also has room for the whole note, which retires
 // the clip-to-40-characters-and-hope-for-a-tooltip workaround: touch has no
 // hover, so that text was effectively unreachable.
-export function ObservationsList({ observations }) {
+export function ObservationsList({ observations, gridRef }) {
   if (observations.length === 0) {
     return html`<p class="observations-empty">No observations saved yet</p>`;
   }
@@ -36,12 +36,17 @@ export function ObservationsList({ observations }) {
           formatAccuracy(obs.gpsAccuracyM),
           obs.headingDeg == null ? '—' : formatHeading(obs.headingDeg),
         ].join(' · ');
+        // Its own line rather than a fourth item on the metadata run: the
+        // grid reference is the part a surveyor reads out or copies into a
+        // report, and it should not need picking out of a list.
+        const gridReference = gridRef?.(obs.lat, obs.lon) ?? null;
         return html`
           <li key=${obs.id} class="observations-row">
             <p class="observations-row-head">
               <span class="observations-time">${formatTime(obs.fixAt)}</span>
               <${SyncBadge} synced=${obs.synced} />
             </p>
+            ${gridReference ? html`<p class="observations-gridref">${gridReference}</p>` : null}
             <p class="observations-meta">${meta}</p>
             ${obs.note ? html`<p class="observations-note">${obs.note}</p>` : null}
             ${
