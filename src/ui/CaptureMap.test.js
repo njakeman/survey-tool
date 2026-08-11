@@ -221,3 +221,54 @@ describe('CaptureMap — region suggestion', () => {
     expect(screen.queryByRole('button', { name: /^switch/i })).not.toBeInTheDocument();
   });
 });
+
+describe('CaptureMap — a renderer that misbehaves', () => {
+  // main.js's window.onerror handler puts the fatal-error banner over the
+  // whole page. An in-progress observation — note and photo — lives only in
+  // CapturePage's state until Save, so losing the page to a map problem is
+  // the wrong trade. This is the net that was missing when "Style is not done
+  // loading" reached a phone.
+
+  test('a throw from setPosition is shown in the map panel, not raised to the page', async () => {
+    const adapter = fakeAdapter();
+    adapter.setPosition = vi.fn(() => {
+      throw new Error('Style is not done loading.');
+    });
+    const createMap = vi.fn().mockResolvedValue(adapter);
+    const { rerender } = renderMap({ createMap });
+    await waitFor(() => expect(createMap).toHaveBeenCalled());
+
+    rerender({ position: POSITION });
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Style is not done loading/);
+  });
+
+  test('a throw from setFeatureLayers is contained the same way', async () => {
+    const adapter = fakeAdapter();
+    adapter.setFeatureLayers = vi.fn(() => {
+      throw new Error('layer went wrong');
+    });
+    const createMap = vi.fn().mockResolvedValue(adapter);
+    const { rerender } = renderMap({ createMap });
+    await waitFor(() => expect(createMap).toHaveBeenCalled());
+
+    rerender({ featureLayers: [{ id: 'parcels', name: 'Parcels', style: {}, geojson: {} }] });
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/layer went wrong/);
+  });
+
+  test('the map panel itself survives — the canvas is still there to recover into', async () => {
+    const adapter = fakeAdapter();
+    adapter.setObservations = vi.fn(() => {
+      throw new Error('boom');
+    });
+    const createMap = vi.fn().mockResolvedValue(adapter);
+    const { rerender, container } = renderMap({ createMap });
+    await waitFor(() => expect(createMap).toHaveBeenCalled());
+
+    rerender({ observations: [{ id: 'obs-1', lat: 51.5, lon: -0.14 }] });
+
+    await screen.findByRole('alert');
+    expect(container.querySelector('.capture-map-canvas')).toBeTruthy();
+  });
+});

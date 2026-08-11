@@ -135,10 +135,23 @@ export async function createMapAdapter({
   // tap has to resolve a source id back to the layer's name and style.
   let featureLayers = [];
   let styleLoaded = false;
-  // Layers can arrive before MapLibre's load event — CaptureMap hands them
-  // over the instant the adapter resolves. Dropped there, the map would sit
-  // empty until something else happened to set them again.
+
+  // Everything below arrives before MapLibre's load event at least sometimes,
+  // and the position routinely: createMapAdapter resolves as soon as the
+  // archive header is read, CaptureMap wires its effects up on that, and a
+  // ~1Hz GPS watch lands a fix in the gap. Until `load`, the sources and
+  // layers added there do not exist, and the two ways of touching them fail
+  // differently — getSource() returns undefined, so setData quietly does
+  // nothing, while setPaintProperty throws "Style is not done loading" and,
+  // being called straight from an effect, reaches window.onerror and puts the
+  // fatal-error banner over a working app.
+  //
+  // So each setter stashes rather than acting, and the load handler replays
+  // the latest value. Only the latest: these are all last-write-wins, and
+  // replaying a queue of superseded GPS fixes would be worse than useless.
   let pendingFeatureLayers = null;
+  let pendingPosition;
+  let pendingObservations;
 
   function addFeatureLayer(layer) {
     map.addSource(featureLayerSourceId(layer.id), featureLayerSource(layer));
@@ -230,10 +243,21 @@ export async function createMapAdapter({
         paint: positionPaint(),
       });
 
+      // Set before the replays below, so each setter takes its normal path.
       styleLoaded = true;
       if (pendingFeatureLayers) {
         applyFeatureLayers(pendingFeatureLayers);
         pendingFeatureLayers = null;
+      }
+      if (pendingObservations !== undefined) {
+        setObservations(pendingObservations);
+        pendingObservations = undefined;
+      }
+      // Last, so the accuracy ring's paint is applied over a layer stack that
+      // is already complete.
+      if (pendingPosition !== undefined) {
+        setPosition(pendingPosition);
+        pendingPosition = undefined;
       }
 
       container.dataset.mapLoaded = 'true';
@@ -242,6 +266,13 @@ export async function createMapAdapter({
   });
 
   function setPosition(reading) {
+    // Stashed as the reading, not as the feature: `undefined` means "nothing
+    // set yet" and null means "explicitly cleared", and a fix that arrived
+    // and was then cleared before load must stay cleared.
+    if (!styleLoaded) {
+      pendingPosition = reading;
+      return;
+    }
     const feature = positionFeature(reading);
     map
       .getSource('position')
@@ -252,6 +283,10 @@ export async function createMapAdapter({
   }
 
   function setObservations(observations) {
+    if (!styleLoaded) {
+      pendingObservations = observations;
+      return;
+    }
     map.getSource('observations')?.setData(observationsFeatureCollection(observations));
   }
 

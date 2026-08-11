@@ -84,33 +84,55 @@ export function CaptureMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeRegionId]);
 
+  // A renderer call that throws must never reach window.onerror. main.js's
+  // handler puts the fatal-error banner over the whole page, and an
+  // in-progress observation — note and photo — lives only in CapturePage's
+  // state until Save. Losing that to a map problem is the wrong trade every
+  // time, so map failures are reported in the map panel, where the existing
+  // error line already is. Same rule as the adapter's onError, which already
+  // routes maplibre's own error events away from the banner; this covers the
+  // other path, a synchronous throw out of an effect.
+  //
+  // Not a substitute for the adapter being safe to call. It is the net under
+  // the next one of these, found the hard way after "Style is not done
+  // loading" reached a phone.
+  function guarded(work) {
+    try {
+      work();
+    } catch (mapError) {
+      setError(mapError.message || 'The map failed');
+    }
+  }
+
   useEffect(() => {
     const adapter = adapterRef.current;
     if (!adapter) return;
-    adapter.setPosition(position);
-    if (!position) return;
-    setFollow((current) => {
-      const { state, centreOn } = onFix(current, position);
-      if (centreOn) adapter.centreOn(centreOn);
-      return state;
+    guarded(() => {
+      adapter.setPosition(position);
+      if (!position) return;
+      setFollow((current) => {
+        const { state, centreOn } = onFix(current, position);
+        if (centreOn) adapter.centreOn(centreOn);
+        return state;
+      });
     });
   }, [position, adapterReady]);
 
   useEffect(() => {
-    adapterRef.current?.setObservations(observations ?? []);
+    guarded(() => adapterRef.current?.setObservations(observations ?? []));
   }, [observations, adapterReady]);
 
   useEffect(() => {
     // Keyed on the array reference, which main.js only replaces when a layer
     // is actually toggled — the adapter rebuilds a layer's sources and paint
     // wholesale, so running this on every GPS tick would be ruinous.
-    adapterRef.current?.setFeatureLayers(featureLayers ?? []);
+    guarded(() => adapterRef.current?.setFeatureLayers(featureLayers ?? []));
   }, [featureLayers, adapterReady]);
 
   useEffect(() => {
     // CapturePage stays mounted while another view shows, so the map was
     // laid out at zero size and needs measuring again on the way back.
-    if (visible) adapterRef.current?.resize();
+    if (visible) guarded(() => adapterRef.current?.resize());
   }, [visible, adapterReady]);
 
   function handleRecentre() {

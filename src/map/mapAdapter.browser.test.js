@@ -200,6 +200,50 @@ describe('mapAdapter against real MapLibre', () => {
     expect(onError).not.toHaveBeenCalled();
   });
 
+  test('a fix arriving before the style has loaded is applied, not thrown', async () => {
+    // The real failure, seen on a phone: "Error: Style is not done loading."
+    // on the fatal-error banner over a working app. createMapAdapter resolves
+    // as soon as the archive header is read, which is well before MapLibre's
+    // load event — and a ~1Hz GPS watch lands a fix in that window routinely.
+    // setPaintProperty throws there; getSource()?.setData() silently does
+    // nothing, which is the quieter half of the same bug.
+    const onError = vi.fn();
+    const adapter = await createAdapter({ onError });
+
+    // Deliberately not awaiting adapter.ready.
+    expect(() => adapter.setPosition({ lat: 51.5, lon: -0.14, accuracyM: 8 })).not.toThrow();
+
+    await adapter.ready;
+    expect(await adapter.getSourceFeatureCount('position')).toBe(1);
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  test('observations arriving before the style has loaded are not silently dropped', async () => {
+    // Quieter than the throw and worse to diagnose: an open session's saved
+    // observations are handed over once, on the same early tick, and the
+    // effect does not run again until the array changes. Lost here, they are
+    // missing from the map until the next save.
+    const adapter = await createAdapter();
+
+    adapter.setObservations([
+      { id: 'obs-1', lat: 51.5, lon: -0.14, synced: false },
+      { id: 'obs-2', lat: 51.51, lon: -0.15, synced: true },
+    ]);
+
+    await adapter.ready;
+    expect(await adapter.getSourceFeatureCount('observations')).toBe(2);
+  });
+
+  test('a cleared fix set before load stays cleared, rather than being replayed', async () => {
+    const adapter = await createAdapter();
+
+    adapter.setPosition({ lat: 51.5, lon: -0.14, accuracyM: 8 });
+    adapter.setPosition(null);
+
+    await adapter.ready;
+    expect(await adapter.getSourceFeatureCount('position')).toBe(0);
+  });
+
   test('feature layers draw above the basemap and below the fix and the markers', async () => {
     // The ordering guarantee. A parcel boundary painted over the position dot
     // hides the one thing on the map that must never be hidden, and no unit
