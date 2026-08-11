@@ -4,9 +4,10 @@ import { openDB } from 'idb';
 import { openDatabase, DB_VERSION } from './db.js';
 
 describe('openDatabase', () => {
-  test('creates the sessions, observations, photos, basemap, settings and featureLayers stores', async () => {
+  test('creates the sessions, observations, photos, basemap, settings, featureLayers and audio stores', async () => {
     const db = await openDatabase('db-test-stores');
     expect([...db.objectStoreNames].sort()).toEqual([
+      'audio',
       'basemap',
       'featureLayers',
       'observations',

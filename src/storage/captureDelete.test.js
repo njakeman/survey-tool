@@ -77,7 +77,7 @@ describe('deleteObservationWithPhoto', () => {
 
     await deleteObservationWithPhoto(trackingDb, 'obs-1');
 
-    expect(opened).toEqual([['observations', 'photos']]);
+    expect(opened).toEqual([['audio', 'observations', 'photos']]);
     db.close();
   });
 });

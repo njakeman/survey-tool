@@ -50,11 +50,14 @@ export function createCaptureService({ db, newId, nowIso }) {
   // accuracyM }. When present it replaces the fix's coordinates, but the fix
   // itself is still required and still supplies fixAt and the heading: the
   // observation was made from somewhere, at a time, and that is worth keeping.
+  // `audio` is a recorded voice note — { blob } like a photo, stored in the
+  // same transaction under the observation's id.
   async function saveObservation({
     reading,
     heading,
     note,
     photo,
+    audio = null,
     feature = null,
     pickedPoint = null,
   }) {
@@ -80,6 +83,7 @@ export function createCaptureService({ db, newId, nowIso }) {
       headingAccuracyDeg: heading?.headingAccuracyDeg ?? null,
       note: (note ?? '').trim(),
       photoId: photo ? id : null,
+      audioId: audio ? id : null,
       // Both or neither — createObservation rejects half a link. A feature
       // with no id of its own (legal GeoJSON) therefore links to nothing,
       // which is honest: there would be nothing to join back to.
@@ -92,6 +96,7 @@ export function createCaptureService({ db, newId, nowIso }) {
     await saveObservationWithPhoto(db, {
       observation,
       photo: photo ? { id, blob: photo.blob, contentType: photo.blob.type } : null,
+      audio: audio ? { id, blob: audio.blob, contentType: audio.blob.type } : null,
     });
     return observation;
   }

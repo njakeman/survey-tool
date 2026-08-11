@@ -1,4 +1,5 @@
 import { createObservation } from '../domain/observation.js';
+import { AUDIO_TYPE_BY_EXTENSION } from '../domain/audio.js';
 
 // The pure inverse of domain/geojson.js: zip entries (or a bare
 // session.geojson) → a validated { session, observations, photos } ready to
@@ -12,11 +13,6 @@ import { createObservation } from '../domain/observation.js';
 // can be joined to the observations that reference them.
 
 const decoder = new TextDecoder();
-
-// audio/<id>.webm | .m4a — recognised now so a zip that carries voice notes
-// parses cleanly even before/without the audio feature; unknown files in the
-// archive are simply ignored.
-const AUDIO_CONTENT_TYPES = { webm: 'audio/webm', m4a: 'audio/mp4' };
 
 function parseCollection(text) {
   let parsed;
@@ -85,6 +81,7 @@ function observationFrom(feature, index, sessionId) {
       // with no matching file in the zip is nulled rather than trusted —
       // the mirror of export's "never claim a file the zip doesn't contain".
       photoId: props.photo ? props.photo.replace(/\.jpg$/i, '') : null,
+      audioId: props.audio ? props.audio.replace(/\.(webm|m4a)$/i, '') : null,
       featureLayerId: props.feature_layer ?? null,
       featureId: props.feature_id ?? null,
       featureLabel: props.feature_label ?? null,
@@ -125,16 +122,18 @@ export function parseSessionExport(entries) {
         entry.name.slice('audio/'.length).replace(/\.(webm|m4a)$/i, ''),
         {
           data: entry.data,
-          contentType: AUDIO_CONTENT_TYPES[entry.name.split('.').pop().toLowerCase()],
+          contentType: AUDIO_TYPE_BY_EXTENSION[entry.name.split('.').pop().toLowerCase()],
         },
       ]),
   );
 
   // Null any claim the zip cannot back with bytes, and keep only the bytes
   // some observation actually references.
-  const linked = observations.map((obs) =>
-    obs.photoId && !photoBytes.has(obs.photoId) ? { ...obs, photoId: null } : obs,
-  );
+  const linked = observations.map((obs) => ({
+    ...obs,
+    photoId: obs.photoId && !photoBytes.has(obs.photoId) ? null : obs.photoId,
+    audioId: obs.audioId && !audioBytes.has(obs.audioId) ? null : obs.audioId,
+  }));
   const photos = linked
     .filter((obs) => obs.photoId)
     .map((obs) => ({
@@ -142,6 +141,9 @@ export function parseSessionExport(entries) {
       data: photoBytes.get(obs.photoId),
       contentType: 'image/jpeg',
     }));
+  const audio = linked
+    .filter((obs) => obs.audioId)
+    .map((obs) => ({ audioId: obs.audioId, ...audioBytes.get(obs.audioId) }));
 
-  return { session, observations: linked, photos, audio: audioBytes };
+  return { session, observations: linked, photos, audio };
 }

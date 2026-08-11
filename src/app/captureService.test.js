@@ -456,7 +456,7 @@ describe('deleteObservation', () => {
     opened.length = 0;
     await service.deleteObservation(obs.id);
 
-    expect(opened).toEqual([['observations', 'photos']]);
+    expect(opened).toEqual([['audio', 'observations', 'photos']]);
   });
 });
 

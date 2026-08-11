@@ -1,7 +1,9 @@
 import { getSession } from '../storage/sessionStore.js';
 import { listObservationsForSession } from '../storage/observationStore.js';
 import { getPhoto } from '../storage/photoStore.js';
+import { getAudio } from '../storage/audioStore.js';
 import { sessionToFeatureCollection } from '../domain/geojson.js';
+import { audioExtension } from '../domain/audio.js';
 import { canonicalStringify } from '../domain/canonical-json.js';
 
 // Assembles the data for a session export — GeoJSON text + photo Blobs, as
@@ -45,14 +47,40 @@ export async function buildSessionExport(db, { sessionId, appVersion, gridRef })
     photoEntries.push({ name: `photos/${obs.photoId}.jpg`, input: photo.blob });
   });
 
-  const exportObservations = observations.map((obs) =>
-    obs.photoId && !presentPhotoIds.has(obs.photoId) ? { ...obs, photoId: null } : obs,
-  );
+  // Voice notes, by the photo rules: resolved before serialisation, orphan
+  // claims nulled, the zip never claiming a file it doesn't contain. The
+  // filename extension comes from each recording's stored contentType.
+  const withAudio = observations.filter((obs) => obs.audioId);
+  const audioRecords = await Promise.all(withAudio.map((obs) => getAudio(db, obs.audioId)));
+
+  const audioEntries = [];
+  const audioFilenames = new Map();
+  withAudio.forEach((obs, index) => {
+    const record = audioRecords[index];
+    if (!record) return;
+    const filename = `${obs.audioId}.${audioExtension(record.contentType)}`;
+    audioFilenames.set(obs.audioId, filename);
+    audioEntries.push({ name: `audio/${filename}`, input: record.blob });
+  });
+
+  const exportObservations = observations.map((obs) => ({
+    ...obs,
+    photoId: obs.photoId && !presentPhotoIds.has(obs.photoId) ? null : obs.photoId,
+    audioId: obs.audioId && !audioFilenames.has(obs.audioId) ? null : (obs.audioId ?? null),
+  }));
   const geojsonText = canonicalStringify(
-    sessionToFeatureCollection(session, exportObservations, { appVersion, gridRef }),
+    sessionToFeatureCollection(session, exportObservations, {
+      appVersion,
+      gridRef,
+      audioFilename: (audioId) => audioFilenames.get(audioId) ?? null,
+    }),
   );
 
-  const entries = [{ name: 'session.geojson', input: geojsonText }, ...photoEntries];
+  const entries = [
+    { name: 'session.geojson', input: geojsonText },
+    ...photoEntries,
+    ...audioEntries,
+  ];
 
   const dateStr = session.startedAt.slice(0, 10); // YYYY-MM-DD
   const filename = `${slugify(session.name)}-${dateStr}.zip`;

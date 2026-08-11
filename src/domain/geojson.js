@@ -4,7 +4,7 @@
 // Combine with canonical-json.js's canonicalStringify for the actual bytes
 // written to disk/sync.
 
-function observationToFeature(obs, session, appVersion, gridRef) {
+function observationToFeature(obs, session, appVersion, gridRef, audioFilename) {
   return {
     type: 'Feature',
     geometry: { type: 'Point', coordinates: [obs.lon, obs.lat] },
@@ -21,6 +21,10 @@ function observationToFeature(obs, session, appVersion, gridRef) {
       heading_accuracy_deg: obs.headingAccuracyDeg,
       note: obs.note,
       photo: obs.photoId ? `${obs.photoId}.jpg` : null,
+      // The voice note's filename inside the zip. Injected (like gridRef)
+      // because the extension depends on the recording's contentType, which
+      // lives with the bytes in the audio store, not on the observation.
+      audio: obs.audioId ? (audioFilename?.(obs.audioId) ?? null) : null,
       // The feature the observation was started from, if any. Emitted even
       // when null: a GIS consumer takes its columns from the features it
       // sees, so omitting the keys would make the column set depend on which
@@ -57,11 +61,15 @@ function compareObservations(a, b) {
   return 0;
 }
 
-export function sessionToFeatureCollection(session, observations, { appVersion, gridRef }) {
+export function sessionToFeatureCollection(
+  session,
+  observations,
+  { appVersion, gridRef, audioFilename },
+) {
   const features = observations
     .slice()
     .sort(compareObservations)
-    .map((obs) => observationToFeature(obs, session, appVersion, gridRef));
+    .map((obs) => observationToFeature(obs, session, appVersion, gridRef, audioFilename));
 
   return {
     type: 'FeatureCollection',

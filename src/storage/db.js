@@ -1,7 +1,7 @@
 import { openDB } from 'idb';
 
 export const DB_NAME = 'survey-tool';
-export const DB_VERSION = 4;
+export const DB_VERSION = 5;
 
 // `name` is overridable so tests can open an isolated database per test
 // instead of sharing state through the default name.
@@ -40,6 +40,12 @@ export function openDatabase(name = DB_NAME) {
         // megabytes read through Range requests, and several are enabled at
         // once rather than one being selected.
         db.createObjectStore('featureLayers', { keyPath: 'id' });
+      }
+      if (oldVersion < 5) {
+        // Voice notes: one recording per observation, ArrayBuffer +
+        // contentType exactly like photos (never a Blob — see photoStore.js).
+        // Keyed by the observation's id, same convention as photos.
+        db.createObjectStore('audio', { keyPath: 'id' });
       }
     },
   });

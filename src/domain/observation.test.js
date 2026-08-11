@@ -28,6 +28,7 @@ describe('createObservation', () => {
       headingAccuracyDeg: null,
       note: '',
       photoId: null,
+      audioId: null,
       featureLayerId: null,
       featureId: null,
       featureLabel: null,

@@ -72,6 +72,7 @@ describe('sessionToFeatureCollection', () => {
           heading_accuracy_deg: null,
           note: 'gate post',
           photo: 'obs-1.jpg',
+          audio: null,
           feature_layer: null,
           feature_id: null,
           feature_label: null,

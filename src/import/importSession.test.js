@@ -6,6 +6,7 @@ import { buildSessionExport } from '../export/buildSessionExport.js';
 import { listSessions } from '../storage/sessionStore.js';
 import { listObservationsForSession } from '../storage/observationStore.js';
 import { getPhoto } from '../storage/photoStore.js';
+import { getAudio } from '../storage/audioStore.js';
 import { parseSessionExport } from './parseSessionExport.js';
 import { writeImportedSession, importSessionExport } from './importSession.js';
 
@@ -58,6 +59,7 @@ async function seedSession(dbName, { withPhoto = true, endSession = true } = {})
     heading: null,
     note: 'stile',
     photo: null,
+    audio: { blob: new Blob([new Uint8Array([9, 8, 7])], { type: 'audio/webm;codecs=opus' }) },
     pickedPoint: { lat: 51.61, lon: -0.16, accuracyM: 12 },
   });
   if (endSession) await service.endSession();
@@ -85,6 +87,7 @@ describe('export → import round trip', () => {
       name: 'Hedgerow survey',
       observationCount: 2,
       photoCount: 1,
+      audioCount: 1,
     });
 
     const [imported] = await listSessions(targetDb);
@@ -97,10 +100,11 @@ describe('export → import round trip', () => {
     const importedObs = await listObservationsForSession(targetDb, imported.id);
     expect(importedObs).toHaveLength(2);
     const strip = (obs) => {
-      const fields = { ...obs, hasPhoto: Boolean(obs.photoId) };
+      const fields = { ...obs, hasPhoto: Boolean(obs.photoId), hasAudio: Boolean(obs.audioId) };
       delete fields.id;
       delete fields.sessionId;
       delete fields.photoId;
+      delete fields.audioId;
       return fields;
     };
     // geojson.js sorts by recordedAt then id; both were saved at FIXED_NOW,
@@ -115,6 +119,14 @@ describe('export → import round trip', () => {
     expect(withPhoto.photoId).toBe(withPhoto.id);
     const photo = await getPhoto(targetDb, withPhoto.photoId);
     expect([...new Uint8Array(await photo.blob.arrayBuffer())]).toEqual([1, 2, 3, 4]);
+
+    // The voice note travelled too — bytes and contentType, under the new
+    // observation's id, its zip filename extension derived from the type.
+    const withAudio = importedObs.find((obs) => obs.audioId);
+    expect(withAudio.audioId).toBe(withAudio.id);
+    const audio = await getAudio(targetDb, withAudio.audioId);
+    expect(audio.contentType).toBe('audio/webm');
+    expect([...new Uint8Array(await audio.blob.arrayBuffer())]).toEqual([9, 8, 7]);
 
     // The picked point survived as a picked point.
     const picked = importedObs.find((obs) => obs.positionSource === 'map');

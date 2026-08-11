@@ -28,6 +28,7 @@ export function createObservation({
   headingAccuracyDeg = null,
   note = '',
   photoId = null,
+  audioId = null,
   // Where this observation was started from, when the surveyor tapped a
   // feature on the map rather than just standing somewhere. Optional and
   // null by default — most observations have no such origin.
@@ -93,6 +94,7 @@ export function createObservation({
     headingAccuracyDeg,
     note,
     photoId,
+    audioId,
     featureLayerId,
     featureId,
     featureLabel: linked ? featureLabel : null,

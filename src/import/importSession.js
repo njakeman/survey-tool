@@ -33,18 +33,29 @@ function mintRecords(parsed, newId) {
   };
 
   const photos = [];
+  const audio = [];
   const observations = parsed.observations.map((obs) => {
     const id = newId();
     if (obs.photoId) {
       const source = parsed.photos.find((photo) => photo.photoId === obs.photoId);
-      // Keeps the photoId-is-the-observation-id convention the rest of the
+      // Keeps the media-id-is-the-observation-id convention the rest of the
       // app writes with.
       photos.push({ id, data: source.data, contentType: source.contentType });
     }
-    return { ...obs, id, sessionId, photoId: obs.photoId ? id : null };
+    if (obs.audioId) {
+      const source = parsed.audio.find((record) => record.audioId === obs.audioId);
+      audio.push({ id, data: source.data, contentType: source.contentType });
+    }
+    return {
+      ...obs,
+      id,
+      sessionId,
+      photoId: obs.photoId ? id : null,
+      audioId: obs.audioId ? id : null,
+    };
   });
 
-  return { session, observations, photos };
+  return { session, observations, photos, audio };
 }
 
 // A Uint8Array's .buffer can be larger than the view (or offset into it);
@@ -55,7 +66,7 @@ function toArrayBuffer(data) {
 }
 
 export async function writeImportedSession(db, parsed, { newId }) {
-  const { session, observations, photos } = mintRecords(parsed, newId);
+  const { session, observations, photos, audio } = mintRecords(parsed, newId);
 
   // One transaction: a kill mid-import must leave nothing — not a session
   // with no observations, not an observation claiming an unwritten photo.
@@ -66,14 +77,23 @@ export async function writeImportedSession(db, parsed, { newId }) {
     arrayBuffer: toArrayBuffer(photo.data),
     contentType: photo.contentType,
   }));
+  const audioRecords = audio.map((record) => ({
+    id: record.id,
+    arrayBuffer: toArrayBuffer(record.data),
+    contentType: record.contentType,
+  }));
 
-  const stores = photoRecords.length
-    ? ['sessions', 'observations', 'photos']
-    : ['sessions', 'observations'];
+  const stores = [
+    'sessions',
+    'observations',
+    ...(photoRecords.length ? ['photos'] : []),
+    ...(audioRecords.length ? ['audio'] : []),
+  ];
   const tx = db.transaction(stores, 'readwrite');
   tx.objectStore('sessions').put(session);
   for (const observation of observations) tx.objectStore('observations').put(observation);
   for (const record of photoRecords) tx.objectStore('photos').put(record);
+  for (const record of audioRecords) tx.objectStore('audio').put(record);
   await tx.done;
 
   return {
@@ -81,6 +101,7 @@ export async function writeImportedSession(db, parsed, { newId }) {
     name: session.name,
     observationCount: observations.length,
     photoCount: photoRecords.length,
+    audioCount: audioRecords.length,
   };
 }
 
