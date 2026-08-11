@@ -1,5 +1,11 @@
 import { html } from 'htm/preact';
-import { formatLatLon, formatAccuracy, formatHeading, formatAge } from '../sensors/format.js';
+import {
+  formatLatLon,
+  formatAccuracy,
+  formatHeading,
+  formatAge,
+  accuracyQuality,
+} from '../sensors/format.js';
 
 // A fix older than this is called out. Long enough not to nag during a normal
 // ~1Hz stream, short enough that a surveyor about to save an observation
@@ -17,40 +23,55 @@ const POSITION_ERROR_MESSAGES = {
   unknown: 'Could not read location',
 };
 
+// Natural case here, uppercased by CSS: VoiceOver reads a word rather than
+// spelling out four capitals.
+const QUALITY_WORDS = { good: 'Good', fair: 'Fair', poor: 'Poor' };
+
 function PositionReadout({ position, positionError, now }) {
   const message = positionError ? POSITION_ERROR_MESSAGES[positionError.code] : null;
 
   if (position) {
     const ageMs = now() - position.fixAtMs;
     const stale = Number.isFinite(ageMs) && ageMs >= STALE_AFTER_MS;
+    // Shown as a chip beside the metre figure. The number alone asks the
+    // surveyor to remember what counts as a good fix; accuracyQuality has
+    // been in format.js since Phase 3 with nothing displaying it.
+    const quality = QUALITY_WORDS[accuracyQuality(position.accuracyM)];
     return html`
-      <p>
-        ${formatLatLon(position.lat, position.lon)} · ${formatAccuracy(position.accuracyM)}
-        ${
-          // usePosition keeps the last reading when an error arrives, so
-          // without this the screen shows stale coordinates that look live.
-          stale ? html`<span class="reading-stale"> · ${formatAge(ageMs)} ago</span>` : null
-        }
+      <p class="readings-coords">${formatLatLon(position.lat, position.lon)}</p>
+      <p class="readings-accuracy">
+        <span class="readings-accuracy-value">${formatAccuracy(position.accuracyM)}</span>
+        <span class="readings-accuracy-word">accuracy</span>
+        ${quality ? html`<span class="chip">${quality}</span>` : null}
       </p>
+      ${
+        // usePosition keeps the last reading when an error arrives, so
+        // without this the screen shows stale coordinates that look live.
+        // formatAge already ends in "ago" — appending another read
+        // "1 min ago ago".
+        stale ? html`<p class="reading-stale">Fix taken ${formatAge(ageMs)}</p>` : null
+      }
       ${message ? html`<p class="reading-problem">${message}</p>` : null}
     `;
   }
 
   if (message) return html`<p class="reading-problem">${message}</p>`;
-  return html`<p>Waiting for GPS fix…</p>`;
+  return html`<p class="readings-waiting">Waiting for GPS fix…</p>`;
 }
 
 function CompassReadout({ heading, headingStatus, onEnableCompass, onRetryCompass }) {
   if (headingStatus === 'idle') {
-    return html`<button type="button" onClick=${onEnableCompass}>Enable compass</button>`;
+    return html`<button type="button" class="button-outline" onClick=${onEnableCompass}>
+      Enable compass
+    </button>`;
   }
   if (headingStatus === 'active' && heading) {
-    return html`<p>${formatHeading(heading.headingDeg)}</p>`;
+    return html`<p class="readings-heading-value">${formatHeading(heading.headingDeg)}</p>`;
   }
   if (headingStatus === 'waiting' || headingStatus === 'active') {
     // The Enable button vanishes on tap and the watch allows several seconds
     // for a first reading; rendering nothing in between reads as broken.
-    return html`<p>Waiting for compass…</p>`;
+    return html`<p class="readings-waiting">Waiting for compass…</p>`;
   }
   if (headingStatus === 'denied') {
     return html`<p class="position-only">Position only — no compass</p>`;
@@ -61,13 +82,21 @@ function CompassReadout({ heading, headingStatus, onEnableCompass, onRetryCompas
   return html`
     <p class="position-only">
       Position only — no compass
-      ${onRetryCompass ? html`<button type="button" onClick=${onRetryCompass}>Retry</button>` : null}
+      ${
+        onRetryCompass
+          ? html`<button type="button" class="button-outline" onClick=${onRetryCompass}>
+              Retry
+            </button>`
+          : null
+      }
     </p>
   `;
 }
 
 // Live readings, deliberately never hiding accuracy behind a tick — the
 // surveyor needs the number in metres to judge whether a fix is trustworthy.
+// The largest type in the app, and the reason the map is a panel rather than
+// a screen: this is what gets read at arm's length in sunlight.
 export function ReadingsPanel({
   position,
   positionError,
@@ -79,13 +108,17 @@ export function ReadingsPanel({
 }) {
   return html`
     <div class="readings-panel">
+      <p class="field-label">Position</p>
       <${PositionReadout} position=${position} positionError=${positionError} now=${now} />
-      <${CompassReadout}
-        heading=${heading}
-        headingStatus=${headingStatus}
-        onEnableCompass=${onEnableCompass}
-        onRetryCompass=${onRetryCompass}
-      />
+      <div class="readings-heading">
+        <p class="field-label">Heading</p>
+        <${CompassReadout}
+          heading=${heading}
+          headingStatus=${headingStatus}
+          onEnableCompass=${onEnableCompass}
+          onRetryCompass=${onRetryCompass}
+        />
+      </div>
     </div>
   `;
 }

@@ -129,7 +129,9 @@ describe('CapturePage — save gating', () => {
 
     pushPosition(POSITION);
 
-    await waitFor(() => expect(screen.getByText(/start a session/i)).toBeInTheDocument());
+    // The full phrase, not /start a session/: the first-launch headline
+    // ("Start a session to begin capturing") matches the loose pattern too.
+    await waitFor(() => expect(screen.getByText(/start a session first/i)).toBeInTheDocument());
     expect(screen.getByRole('button', { name: /save observation/i })).toBeDisabled();
   });
 });

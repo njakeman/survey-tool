@@ -228,6 +228,7 @@ export function CapturePage({
       />
       <${CaptureMap}
         activeRegionId=${activeRegionId}
+        regionName=${(regions ?? []).find((region) => region.id === activeRegionId)?.name}
         statusKnown=${statusKnown}
         suggestion=${suggestion}
         createMap=${createMap}
@@ -238,17 +239,39 @@ export function CapturePage({
         observations=${observations}
         visible=${visible}
       />
-      <label>
-        Note
+      <label class="field">
+        <span class="field-label">Note</span>
         <textarea value=${note} onInput=${(event) => setNote(event.target.value)} />
       </label>
-      <${PhotoField}
-        photo=${photo}
-        busy=${photoBusy}
-        error=${photoError}
-        onSelect=${handlePhotoSelect}
-        onClear=${handlePhotoClear}
-      />
+      <div class="capture-actions">
+        <${PhotoField}
+          photo=${photo}
+          busy=${photoBusy}
+          error=${photoError}
+          onSelect=${handlePhotoSelect}
+          onClear=${handlePhotoClear}
+        />
+        ${
+          // Export sits beside Take Photo rather than below the observations:
+          // exporting the *open* session is a thing a surveyor does before
+          // walking away, not a history-screen chore.
+          session
+            ? html`<button
+                type="button"
+                class="button-outline"
+                disabled=${exportState === 'exporting'}
+                onClick=${handleExport}
+              >
+                ${exportState === 'exporting' ? 'Exporting…' : 'Export'}
+              </button>`
+            : null
+        }
+      </div>
+      ${
+        exportMessage
+          ? html`<p class="capture-page-export-message" role="status">${exportMessage}</p>`
+          : null
+      }
       <${SaveButton}
         disabled=${!canSave}
         disabledReason=${disabledReason}
@@ -269,24 +292,10 @@ export function CapturePage({
       }
       ${observationsTable}
       ${
-        session
-          ? html`
-              <button type="button" disabled=${exportState === 'exporting'} onClick=${handleExport}>
-                ${exportState === 'exporting' ? 'Exporting…' : 'Export'}
-              </button>
-              ${
-                exportMessage
-                  ? html`<p class="capture-page-export-message" role="status">${exportMessage}</p>`
-                  : null
-              }
-            `
-          : null
-      }
-      ${
         offlineStatus && offlineStatus.precachedCount === 0
           ? // Appears with no user action, once the offline check settles
             // after first paint — silent means never noticed.
-            html`<p class="offline-status-warning" role="status">
+            html`<p class="offline-status-warning panel-danger" role="status">
               No offline cache — this build will not work offline
             </p>`
           : null

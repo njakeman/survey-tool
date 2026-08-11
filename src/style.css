@@ -166,6 +166,132 @@ body {
   }
 }
 
+/* ---- Shared primitives -------------------------------------------------
+   Three button treatments and one label, used across every screen. Adding a
+   fourth is usually a sign a screen is drifting from the system. */
+
+.button-primary {
+  background: var(--accent);
+  color: var(--on-accent);
+  border: 1px solid var(--accent-ink);
+  border-radius: var(--radius);
+  font-size: var(--type-control);
+  font-weight: 700;
+}
+
+.button-outline {
+  background: transparent;
+  color: inherit;
+  border: 1px solid var(--control-rule);
+  border-radius: var(--radius);
+  font-size: var(--type-small);
+  padding: 0 14px;
+}
+
+/* For controls that float over the map, where "transparent" would mean
+   "unreadable over whatever tile is underneath". */
+.button-surface {
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--control-rule);
+  border-radius: var(--radius);
+  font-size: var(--type-small);
+  padding: 0 14px;
+}
+
+/* Small uppercase field labels — POSITION, HEADING, NOTE. The DOM text is
+   natural case so a screen reader reads a word rather than four capitals;
+   the uppercasing is presentation, which is where it belongs. */
+.field-label {
+  display: block;
+  margin: 0;
+  font-family: var(--font-label);
+  font-size: var(--type-label);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+/* State words: GOOD/FAIR/POOR, PENDING, IN USE. Always a word, never a bare
+   colour — see the header note on constraint 6. */
+.chip {
+  font-family: var(--font-label);
+  font-size: var(--type-badge);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border: 1px solid var(--control-rule);
+  border-radius: 3px;
+  padding: 3px 6px;
+  white-space: nowrap;
+}
+
+.eyebrow {
+  margin: 0;
+  font-family: var(--font-label);
+  font-size: var(--type-label);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent-ink);
+}
+
+/* Alert surfaces keep a light ground in both schemes — they read as a slip
+   of paper laid over the interface. */
+.panel-danger {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-rule);
+  border-radius: var(--radius);
+  color: var(--danger-strong);
+  font-size: 14.5px;
+}
+
+/* A 12px triangle led by CSS, so a warning is a shape as well as a colour.
+   Applied to the degraded-reading and blocked-save lines. */
+.warns::before {
+  content: '';
+  display: inline-block;
+  width: 0;
+  height: 0;
+  margin-right: 6px;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-bottom: 10px solid currentColor;
+  vertical-align: -1px;
+}
+
+/* A bordered rectangle with an inner circle — the camera, drawn rather than
+   downloaded. */
+.glyph-camera {
+  display: inline-block;
+  width: 14px;
+  height: 11px;
+  margin-right: 8px;
+  border: 1.5px solid currentColor;
+  border-radius: 2px;
+  position: relative;
+}
+
+.glyph-camera::after {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  margin: auto;
+  width: 4px;
+  height: 4px;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+}
+
 .probe {
   padding: var(--space-4);
   max-width: var(--shell-wide);
@@ -211,25 +337,151 @@ button {
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  /* Sections are separated by 1px rules and this gap, not by cards or
+     shadows — there are no box-shadows anywhere in this design. */
+  gap: 14px;
 }
 
 .session-bar {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-  flex-wrap: wrap;
+  gap: 10px;
+  padding-bottom: 2px;
+  border-bottom: 1px solid var(--rule);
 }
 
-/* Map panel. A fixed viewport share rather than a fixed height: the point
-   is that it stays a panel in a scrolling page, never the whole screen. */
+/* A session is running and recording. The one piece of pure decoration in
+   the sheet, and it earns its place: nothing else on screen distinguishes
+   "open session" from "looking at the app". */
+.session-live-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.session-bar .session-name {
+  font-size: var(--type-control);
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-bar .session-count {
+  flex: none;
+  font-size: var(--type-small);
+}
+
+.session-bar .button-outline {
+  flex: none;
+  margin-left: auto;
+}
+
+/* First launch: no session, and for a new install this is the entire screen.
+   A column, not a row. */
+.session-start {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  border-bottom: none;
+}
+
+.session-start-headline {
+  margin: 0;
+  font-size: var(--type-heading-xl);
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+
+.session-start .button-primary {
+  min-height: 3.5rem;
+  font-size: var(--type-save);
+}
+
+.session-start-note {
+  margin: 0;
+  font-size: var(--type-meta);
+  color: var(--text-secondary);
+}
+
+/* ---- Readings ---------------------------------------------------------- */
+
+.readings-panel {
+  font-variant-numeric: tabular-nums;
+  padding-bottom: 2px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.readings-coords {
+  margin: 5px 0 0;
+  font-size: var(--type-readout);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+}
+
+.readings-accuracy {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 6px 0 0;
+}
+
+.readings-accuracy-value {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.readings-accuracy-word {
+  font-size: 16px;
+  color: var(--text-secondary);
+}
+
+.readings-accuracy .chip {
+  margin-left: auto;
+}
+
+.readings-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 11px;
+  padding-top: 11px;
+  border-top: 1px solid var(--rule-faint);
+}
+
+.readings-heading-value {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.readings-heading .button-outline {
+  margin-left: auto;
+}
+
+.readings-waiting {
+  margin: 5px 0 0;
+  font-size: var(--type-title);
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+/* Map panel. Full-bleed to the screen edges, but still a panel in a
+   scrolling page — never the whole screen. */
 .capture-map {
   position: relative;
-  height: 40vh;
-  min-height: 12rem;
-  border-radius: var(--radius);
+  height: 236px;
+  margin-inline: calc(var(--space-4) * -1);
   overflow: hidden;
   background: var(--map-backdrop);
+  /* Only a rule below: the readings panel's own bottom border is the rule
+     above, so a second one here would draw two lines 14px apart. */
+  border-bottom: 1px solid var(--rule);
 }
 
 .capture-map-canvas {
@@ -237,12 +489,45 @@ button {
   height: 100%;
 }
 
+/* No archive on the device. Hatched rather than blank, so it reads as
+   "nothing here yet" rather than as a map that failed to draw. */
 .capture-map-placeholder {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 10px;
+  height: 150px;
   padding: var(--space-4);
   text-align: center;
+  background-image: repeating-linear-gradient(
+    45deg,
+    color-mix(in srgb, var(--ink) 5%, transparent) 0 1px,
+    transparent 1px 8px
+  );
+}
+
+.capture-map-placeholder .button-surface {
+  min-height: 3rem;
+}
+
+/* Which archive is on screen, and the placeholder's own caption. */
+.capture-map-caption {
+  margin: 0;
+  font-family: var(--font-label);
+  font-size: var(--type-fine);
+  color: color-mix(in srgb, var(--ink) 42%, transparent);
+}
+
+.capture-map-region {
+  position: absolute;
+  top: var(--space-2);
+  left: var(--space-2);
+  z-index: 1;
+  font-size: var(--type-badge);
+  padding: 3px 6px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--paper) 72%, transparent);
 }
 
 /* Sits over the map, thumb-reachable at the bottom edge rather than under
@@ -267,11 +552,31 @@ button {
   top: var(--space-2);
   z-index: 2;
   margin: 0;
-  padding: var(--space-2);
+  padding: 10px;
   border-radius: var(--radius);
   background: var(--suggestion-bg);
   border: 1px solid var(--accent);
-  color: var(--ink);
+  /* The banner keeps a light ground in both schemes, so its ink has to be
+     the light scheme's ink rather than the token, which inverts. */
+  color: #1e2433;
+  animation: banner-in 120ms ease-out;
+}
+
+.capture-map-suggestion-copy {
+  margin: 0 0 var(--space-2);
+  font-size: 14.5px;
+}
+
+.capture-map-suggestion-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+@keyframes banner-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
 }
 
 .capture-map-change {
@@ -472,11 +777,31 @@ button {
 .capture-page textarea {
   width: 100%;
   min-height: 3.5rem;
+  padding: 10px 11px;
   resize: vertical;
 }
 
-.readings-panel {
+.session-start input {
+  min-height: 3.25rem;
+  font-size: var(--type-title);
   font-variant-numeric: tabular-nums;
+}
+
+/* Take Photo and Export, side by side. Preview and errors stack under the
+   photo control rather than pushing Export around. */
+.capture-actions {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.capture-actions .photo-field {
+  flex: 1;
+}
+
+.capture-actions .button-outline {
+  flex: none;
+  min-height: 3rem;
 }
 
 .reading-stale,

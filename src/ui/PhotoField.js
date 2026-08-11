@@ -25,6 +25,12 @@ export function PhotoField({ photo, busy = false, error, onSelect, onClear }) {
   return html`
     <div class="photo-field">
       <label class="photo-field-button">
+        ${
+          // Drawn in CSS — a bordered rectangle with an inner circle. No icon
+          // set and no SVG file, because every asset has to be local and
+          // precached, and this one need not exist as a file at all.
+          html`<span class="glyph-camera" aria-hidden="true"></span>`
+        }
         Take Photo
         <input
           type="file"
@@ -34,7 +40,7 @@ export function PhotoField({ photo, busy = false, error, onSelect, onClear }) {
           onChange=${handleChange}
         />
       </label>
-      ${busy ? html`<p>Processing photo…</p>` : null}
+      ${busy ? html`<p class="photo-field-busy">Processing photo…</p>` : null}
       ${error ? html`<p class="photo-field-error">${error}</p>` : null}
       ${
         photo && objectUrl

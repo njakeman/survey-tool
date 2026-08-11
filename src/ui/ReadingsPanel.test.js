@@ -68,6 +68,16 @@ describe('stale fixes', () => {
     expect(screen.getByText(/ago/)).toBeInTheDocument();
   });
 
+  test('the age reads once, not twice — formatAge already ends in "ago"', () => {
+    // The panel appended its own " ago" to a string that already had one, so
+    // a stale fix read "1 min ago ago". The assertion above only checked for
+    // /ago/, which the doubled version satisfies.
+    renderPanel({ position: fix({ fixAtMs: NOW - 90_000 }) });
+
+    expect(screen.getByText(/1 min ago/)).toBeInTheDocument();
+    expect(screen.queryByText(/ago ago/)).not.toBeInTheDocument();
+  });
+
   test('an error arriving after a fix is surfaced, not hidden behind the old reading', () => {
     renderPanel({
       position: fix({ fixAtMs: NOW - 90_000 }),
@@ -76,6 +86,31 @@ describe('stale fixes', () => {
 
     expect(screen.getByText(/unavailable/i)).toBeInTheDocument();
     expect(screen.getByText(/51\.500000/)).toBeInTheDocument();
+  });
+});
+
+describe('accuracy quality', () => {
+  // accuracyQuality() has existed in sensors/format.js since Phase 3 and has
+  // never been shown to anyone. A metre figure alone asks the surveyor to
+  // remember what counts as good.
+  // Natural case in the DOM, uppercased by CSS: a screen reader gets the
+  // word, the surveyor gets the chip.
+  test.each([
+    [6, 'Good'],
+    [22, 'Fair'],
+    [80, 'Poor'],
+  ])('a %s m fix is chipped %s', (accuracyM, word) => {
+    renderPanel({ position: fix({ accuracyM }) });
+
+    expect(screen.getByText(word)).toBeInTheDocument();
+  });
+
+  test('no chip when the device reports no accuracy — there is nothing to judge', () => {
+    renderPanel({ position: fix({ accuracyM: null }) });
+
+    for (const word of ['Good', 'Fair', 'Poor']) {
+      expect(screen.queryByText(word)).not.toBeInTheDocument();
+    }
   });
 });
 

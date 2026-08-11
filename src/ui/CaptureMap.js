@@ -18,6 +18,7 @@ import {
 
 export function CaptureMap({
   activeRegionId,
+  regionName,
   statusKnown,
   suggestion,
   createMap,
@@ -108,7 +109,10 @@ export function CaptureMap({
   if (!activeRegionId) {
     return html`
       <div class="capture-map capture-map-placeholder">
-        <button type="button" onClick=${onOpenPicker}>Choose a region</button>
+        <p class="capture-map-caption">no basemap on this device</p>
+        <button type="button" class="button-surface" onClick=${onOpenPicker}>
+          Choose a region
+        </button>
       </div>
     `;
   }
@@ -117,27 +121,53 @@ export function CaptureMap({
     <div class="capture-map">
       <div class="capture-map-canvas" ref=${containerRef}></div>
       ${
+        // Which archive you are looking at. Regions can overlap and several
+        // can be on the device at once; without this the only way to tell is
+        // to open the picker.
+        regionName
+          ? html`<p class="capture-map-caption capture-map-region">${regionName}</p>`
+          : null
+      }
+      ${
         suggestion
           ? // Appears from a GPS tick alone, with no user action.
-            html`<p class="capture-map-suggestion" role="status">
-              You appear to be in ${suggestion.name}.
-              <button type="button" onClick=${() => onSwitchRegion(suggestion.id)}>
-                Switch to it
-              </button>
-              <button type="button" onClick=${() => onDismissSuggestion(suggestion.id)}>
-                Not now
-              </button>
-            </p>`
+            html`<div class="capture-map-suggestion" role="status">
+              <p class="capture-map-suggestion-copy">
+                You appear to be in <strong>${suggestion.name}</strong>.
+              </p>
+              <div class="capture-map-suggestion-actions">
+                <button
+                  type="button"
+                  class="button-primary"
+                  onClick=${() => onSwitchRegion(suggestion.id)}
+                >
+                  Switch to it
+                </button>
+                <button
+                  type="button"
+                  class="button-outline"
+                  onClick=${() => onDismissSuggestion(suggestion.id)}
+                >
+                  Not now
+                </button>
+              </div>
+            </div>`
           : null
       }
       ${
         showsRecentre(follow)
-          ? html`<button type="button" class="capture-map-recentre" onClick=${handleRecentre}>
+          ? html`<button
+              type="button"
+              class="capture-map-recentre button-surface"
+              onClick=${handleRecentre}
+            >
               Re-centre
             </button>`
           : null
       }
-      <button type="button" class="capture-map-change" onClick=${onOpenPicker}>Change map</button>
+      <button type="button" class="capture-map-change button-surface" onClick=${onOpenPicker}>
+        Change map
+      </button>
       ${error ? html`<p class="capture-map-error" role="alert">${error}</p>` : null}
     </div>
   `;
