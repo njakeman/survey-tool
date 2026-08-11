@@ -8,10 +8,16 @@
 
 import { mkdir, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
+import { deflateSync } from 'node:zlib';
 
-// Two fixtures with non-overlapping bounds, so tests can prove that two
+// PMTiles tile types (spec §3): 1 = MVT, 2 = PNG.
+const TILE_TYPE_MVT = 1;
+const TILE_TYPE_PNG = 2;
+
+// Two vector fixtures with non-overlapping bounds, so tests can prove that two
 // archives coexist without colliding and that region selection picks the one
-// covering a given position.
+// covering a given position — plus a raster one, because real archives are not
+// all vector and the app has to render both.
 const FIXTURES = [
   {
     file: 'test-basemap.pmtiles',
@@ -19,6 +25,7 @@ const FIXTURES = [
     // Around London — contains the position the e2e fakes.
     bounds: { minLon: -1.0, minLat: 51.0, maxLon: 0.5, maxLat: 52.0 },
     center: { lon: -0.14, lat: 51.5 },
+    tileType: TILE_TYPE_MVT,
   },
   {
     file: 'test-basemap-north.pmtiles',
@@ -26,6 +33,19 @@ const FIXTURES = [
     // Around Leeds — deliberately nowhere near the southern fixture.
     bounds: { minLon: -2.5, minLat: 53.0, maxLon: -1.0, maxLat: 54.0 },
     center: { lon: -1.55, lat: 53.8 },
+    tileType: TILE_TYPE_MVT,
+  },
+  {
+    file: 'test-basemap-raster.pmtiles',
+    name: 'test-basemap fixture (raster)',
+    // Same coverage as the southern vector fixture, so a test can swap one
+    // for the other and change nothing but the tile type.
+    bounds: { minLon: -1.0, minLat: 51.0, maxLon: 0.5, maxLat: 52.0 },
+    center: { lon: -0.14, lat: 51.5 },
+    tileType: TILE_TYPE_PNG,
+    // 256 is the near-universal raster tile size, and the value the app has
+    // to detect from the bytes rather than assume.
+    tileSize: 256,
   },
 ];
 
@@ -83,6 +103,68 @@ function buildTile() {
   return Uint8Array.from(lengthDelimited(3, layer));
 }
 
+// --- one PNG tile ------------------------------------------------------------
+
+const CRC_TABLE = Array.from({ length: 256 }, (_, n) => {
+  let c = n;
+  for (let k = 0; k < 8; k += 1) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+  return c >>> 0;
+});
+
+function crc32(bytes) {
+  let c = 0xffffffff;
+  for (const byte of bytes) c = CRC_TABLE[(c ^ byte) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+function pngChunk(type, data) {
+  const typeBytes = [...new TextEncoder().encode(type)];
+  const body = [...typeBytes, ...data];
+  const length = data.length;
+  return [
+    (length >>> 24) & 0xff,
+    (length >>> 16) & 0xff,
+    (length >>> 8) & 0xff,
+    length & 0xff,
+    ...body,
+    ...(() => {
+      const crc = crc32(body);
+      return [(crc >>> 24) & 0xff, (crc >>> 16) & 0xff, (crc >>> 8) & 0xff, crc & 0xff];
+    })(),
+  ];
+}
+
+// A real, valid PNG of the given size — solid colour, so it compresses to a
+// few hundred bytes. Real bytes matter: the manifest reads tile dimensions
+// out of the IHDR, and a stub would not exercise that.
+function buildPngTile(size) {
+  const be32 = (n) => [(n >>> 24) & 0xff, (n >>> 16) & 0xff, (n >>> 8) & 0xff, n & 0xff];
+  const raw = new Uint8Array(size * (size * 3 + 1));
+  for (let y = 0; y < size; y += 1) {
+    const rowStart = y * (size * 3 + 1);
+    raw[rowStart] = 0; // filter: none
+    for (let x = 0; x < size; x += 1) {
+      const p = rowStart + 1 + x * 3;
+      raw[p] = 0x8f; // a flat olive, so a rendered tile is obviously "something"
+      raw[p + 1] = 0x9a;
+      raw[p + 2] = 0x6b;
+    }
+  }
+  return Uint8Array.from([
+    0x89,
+    0x50,
+    0x4e,
+    0x47,
+    0x0d,
+    0x0a,
+    0x1a,
+    0x0a,
+    ...pngChunk('IHDR', [...be32(size), ...be32(size), 8, 2, 0, 0, 0]), // 8-bit RGB
+    ...pngChunk('IDAT', [...deflateSync(raw)]),
+    ...pngChunk('IEND', []),
+  ]);
+}
+
 // --- PMTiles v3 container ----------------------------------------------------
 
 function buildRootDirectory(tileLength) {
@@ -97,8 +179,8 @@ function buildRootDirectory(tileLength) {
   ]);
 }
 
-function buildArchive({ name, bounds, center }) {
-  const tile = buildTile();
+function buildArchive({ name, bounds, center, tileType, tileSize }) {
+  const tile = tileType === TILE_TYPE_PNG ? buildPngTile(tileSize) : buildTile();
   const rootDir = buildRootDirectory(tile.length);
   const metadata = new TextEncoder().encode(JSON.stringify({ name }));
 
@@ -125,7 +207,7 @@ function buildArchive({ name, bounds, center }) {
   header[96] = 1; // clustered
   header[97] = 1; // internal compression: none
   header[98] = 1; // tile compression: none
-  header[99] = 1; // tile type: MVT
+  header[99] = tileType;
   header[100] = 0; // min zoom
   header[101] = 0; // max zoom
   // Regional bounds, like a real `pmtiles extract`: the map clamps panning to
