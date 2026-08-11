@@ -30,6 +30,7 @@ export function CapturePage({
   regions,
   dismissedSuggestionId,
   createMap,
+  featureLayers,
   onSwitchRegion,
   onDismissSuggestion,
   onOpenPicker,
@@ -237,6 +238,7 @@ export function CapturePage({
         onOpenPicker=${onOpenPicker}
         position=${position}
         observations=${observations}
+        featureLayers=${featureLayers}
         visible=${visible}
       />
       <label class="field">

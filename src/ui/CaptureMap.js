@@ -27,6 +27,8 @@ export function CaptureMap({
   onOpenPicker,
   position,
   observations,
+  featureLayers,
+  onFeatureTap,
   visible,
 }) {
   const containerRef = useRef(null);
@@ -34,6 +36,13 @@ export function CaptureMap({
   const [adapterReady, setAdapterReady] = useState(false);
   const [follow, setFollow] = useState(createFollowState);
   const [error, setError] = useState(null);
+
+  // The tap handler is a fresh closure on every render, but the map is built
+  // once per region — so the adapter would hold the very first one forever,
+  // and every tap would land in a handler closed over a stale session. A ref
+  // read at call time keeps the adapter's own callback stable.
+  const featureTapRef = useRef(onFeatureTap);
+  featureTapRef.current = onFeatureTap;
 
   useEffect(() => {
     if (!activeRegionId || !containerRef.current) return undefined;
@@ -45,6 +54,7 @@ export function CaptureMap({
     createMap({
       container: containerRef.current,
       onUserPan: () => setFollow((current) => onUserPan(current)),
+      onFeatureTap: (result) => featureTapRef.current?.(result),
     })
       .then((adapter) => {
         // The region can change again — or the view be torn down — while the
@@ -89,6 +99,13 @@ export function CaptureMap({
   useEffect(() => {
     adapterRef.current?.setObservations(observations ?? []);
   }, [observations, adapterReady]);
+
+  useEffect(() => {
+    // Keyed on the array reference, which main.js only replaces when a layer
+    // is actually toggled — the adapter rebuilds a layer's sources and paint
+    // wholesale, so running this on every GPS tick would be ruinous.
+    adapterRef.current?.setFeatureLayers(featureLayers ?? []);
+  }, [featureLayers, adapterReady]);
 
   useEffect(() => {
     // CapturePage stays mounted while another view shows, so the map was

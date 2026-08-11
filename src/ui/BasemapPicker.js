@@ -1,9 +1,15 @@
 import { html } from 'htm/preact';
 import { useState } from 'preact/hooks';
+import { FeatureLayerPanel } from './FeatureLayerPanel.js';
 
-// Choosing which offline map region the map panel shows. A full view rather
-// than a control inside the map panel: there can be several regions, each
-// needing a size, a state and a download or remove action.
+// The map settings view: which offline region the map panel shows, and which
+// feature layers are drawn over it. A full view rather than a control inside
+// the map panel — there can be several regions, each needing a size, a state
+// and a download or remove action.
+//
+// Regions and layers share a screen because in the field they are one
+// question ("what am I looking at"), and because the map panel is 236px tall
+// and has no room for a second control.
 //
 // This is the one screen where picking the wrong row costs a multi-megabyte
 // download over a field connection, so the in-use region is marked four
@@ -47,6 +53,11 @@ export function BasemapPicker({
   onRemove,
   onBack,
   online,
+  featureLayers,
+  featureLayersAvailable,
+  onEnableLayer,
+  onDisableLayer,
+  onRemoveLayer,
 }) {
   const [busyId, setBusyId] = useState(null);
   const [progress, setProgress] = useState(null);
@@ -78,8 +89,10 @@ export function BasemapPicker({
     <main class="basemap-picker">
       <div class="page-header">
         <button type="button" class="button-outline" onClick=${onBack}>← Back to capture</button>
-        <h2>Offline maps</h2>
+        <h2>Maps and layers</h2>
       </div>
+
+      <h3 class="field-label">Offline maps</h3>
 
       ${
         !manifestAvailable
@@ -160,6 +173,15 @@ export function BasemapPicker({
           `;
         })}
       </ul>
+
+      <${FeatureLayerPanel}
+        layers=${featureLayers ?? []}
+        manifestAvailable=${featureLayersAvailable ?? true}
+        online=${online}
+        onEnable=${onEnableLayer}
+        onDisable=${onDisableLayer}
+        onRemove=${onRemoveLayer}
+      />
     </main>
   `;
 }

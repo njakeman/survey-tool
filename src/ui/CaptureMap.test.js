@@ -11,6 +11,7 @@ function fakeAdapter() {
     ready: Promise.resolve(),
     setPosition: vi.fn(),
     setObservations: vi.fn(),
+    setFeatureLayers: vi.fn(),
     centreOn: vi.fn(),
     resize: vi.fn(),
     destroy: vi.fn(),
@@ -119,6 +120,42 @@ describe('CaptureMap — showing a region', () => {
     rerender({ visible: true });
 
     await waitFor(() => expect(adapter.resize).toHaveBeenCalled());
+  });
+
+  test('hands the enabled feature layers to the adapter, and again when they change', async () => {
+    const adapter = fakeAdapter();
+    const createMap = vi.fn().mockResolvedValue(adapter);
+    const parcels = [{ id: 'parcels', name: 'Field parcels', style: {}, geojson: {} }];
+    const { rerender } = renderMap({ createMap, featureLayers: parcels });
+
+    await waitFor(() => expect(adapter.setFeatureLayers).toHaveBeenCalledWith(parcels));
+
+    const both = [...parcels, { id: 'hedges', name: 'Hedges', style: {}, geojson: {} }];
+    rerender({ featureLayers: both });
+
+    await waitFor(() => expect(adapter.setFeatureLayers).toHaveBeenCalledWith(both));
+  });
+
+  test('relays a tap through the latest handler, not the one the map was built with', async () => {
+    // The map is built once per region but the handler is a new closure every
+    // render. Captured at construction it would go stale immediately — and
+    // silently, because it would still be a perfectly callable function.
+    const adapter = fakeAdapter();
+    let tapHandler;
+    const createMap = vi.fn((options) => {
+      tapHandler = options.onFeatureTap;
+      return Promise.resolve(adapter);
+    });
+    const stale = vi.fn();
+    const { rerender } = renderMap({ createMap, onFeatureTap: stale });
+    await waitFor(() => expect(createMap).toHaveBeenCalled());
+
+    const current = vi.fn();
+    rerender({ onFeatureTap: current });
+    tapHandler({ layerId: 'parcels' });
+
+    expect(current).toHaveBeenCalledWith({ layerId: 'parcels' });
+    expect(stale).not.toHaveBeenCalled();
   });
 
   test('tears the map down on unmount', async () => {

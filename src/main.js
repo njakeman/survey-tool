@@ -14,6 +14,7 @@ import { zipEntries } from './export/zip.js';
 import { shareOrDownload } from './export/share.js';
 import { subscribeOfflineStatus } from './app/offlineStatus.js';
 import { createBasemapService } from './app/basemapService.js';
+import { createFeatureLayerService } from './app/featureLayerService.js';
 import { deleteLegacyBasemap } from './storage/basemapStore.js';
 import { chooseActive } from './map/basemapSelection.js';
 import { glyphsUrl } from './map/glyphs.js';
@@ -80,11 +81,19 @@ async function main() {
     nowIso,
   });
 
+  const featureLayerService = createFeatureLayerService({
+    db,
+    fetchFn: (...args) => fetch(...args),
+    manifestUrl: `${baseUrl}feature-layers/manifest.json`,
+    baseUrl,
+    nowIso,
+  });
+
   // The renderer is imported only once an archive actually exists, so a
   // device that has never downloaded one never pays for ~800 KB of MapLibre
   // at startup. The split chunk is still precached, so the import resolves
   // offline (same rule as photo/encode.js: browser-only, main.js only).
-  async function createMap({ container: mapContainer, onUserPan }) {
+  async function createMap({ container: mapContainer, onUserPan, onFeatureTap }) {
     const archiveBuffer = await basemapService.loadArchive(state.activeRegionId);
     if (!archiveBuffer) throw new Error('No offline map archive stored on this device');
     const region = state.regions.find(({ id }) => id === state.activeRegionId);
@@ -98,6 +107,7 @@ async function main() {
       tileType: region?.tileType ?? 'vector',
       tileSize: region?.tileSize,
       onUserPan,
+      onFeatureTap,
       // Map errors are diagnostics, not app failures: a missing tile must
       // never reach the fatal-error banner over a working capture page.
       onError: (error) => console.warn('map error', error),
@@ -160,6 +170,42 @@ async function main() {
     await refreshBasemapState();
   }
 
+  // Which layers exist, and the data for the ones switched on. Swallows its
+  // own failures for the same reason refreshBasemapState does: this runs at
+  // startup, and a failed read must not put the fatal-error banner over a
+  // working capture page. An overlay that fails to load costs an overlay.
+  async function refreshFeatureLayers() {
+    try {
+      const [{ layers, manifestAvailable }, loaded] = await Promise.all([
+        featureLayerService.listAvailable(),
+        featureLayerService.loadEnabled(),
+      ]);
+      state.featureLayerCatalogue = layers;
+      state.featureLayersAvailable = manifestAvailable;
+      state.featureLayers = loaded;
+    } catch {
+      // Leave whatever was already loaded in place.
+    }
+    renderApp();
+  }
+
+  // Errors deliberately propagate: FeatureLayerPanel catches them and shows
+  // the reason on the row that failed, which is where the surveyor is looking.
+  async function enableLayer(id) {
+    await featureLayerService.enable(id);
+    await refreshFeatureLayers();
+  }
+
+  async function disableLayer(id) {
+    await featureLayerService.disable(id);
+    await refreshFeatureLayers();
+  }
+
+  async function removeLayer(id) {
+    await featureLayerService.remove(id);
+    await refreshFeatureLayers();
+  }
+
   function dismissSuggestion(id) {
     state.dismissedSuggestionId = id;
     applySelection();
@@ -197,6 +243,14 @@ async function main() {
     activeRegionId: null,
     dismissedSuggestionId: null,
     online: navigator.onLine,
+    // Two views of the same thing: the catalogue is every published layer
+    // with its state, for the picker; featureLayers is the loaded data for
+    // the ones switched on, for the map. Kept apart because the catalogue
+    // carries no geometry and the loaded set carries nothing about what else
+    // exists.
+    featureLayerCatalogue: [],
+    featureLayersAvailable: false,
+    featureLayers: [],
   };
 
   function renderApp() {
@@ -220,6 +274,12 @@ async function main() {
         onRemoveRegion=${removeRegion}
         onDismissSuggestion=${dismissSuggestion}
         online=${state.online}
+        featureLayers=${state.featureLayers}
+        featureLayerCatalogue=${state.featureLayerCatalogue}
+        featureLayersAvailable=${state.featureLayersAvailable}
+        onEnableLayer=${enableLayer}
+        onDisableLayer=${disableLayer}
+        onRemoveLayer=${removeLayer}
       />`,
       container,
     );
@@ -259,6 +319,7 @@ async function main() {
   deleteLegacyBasemap(db).catch(() => {});
 
   refreshBasemapState();
+  refreshFeatureLayers();
 
   for (const event of ['online', 'offline']) {
     window.addEventListener(event, () => {

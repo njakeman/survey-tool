@@ -29,6 +29,12 @@ export function App({
   onRemoveRegion,
   onDismissSuggestion,
   online,
+  featureLayers,
+  featureLayerCatalogue,
+  featureLayersAvailable,
+  onEnableLayer,
+  onDisableLayer,
+  onRemoveLayer,
 }) {
   const [view, setView] = useState('capture');
 
@@ -64,6 +70,11 @@ export function App({
         onDownload=${onDownloadRegion}
         onRemove=${onRemoveRegion}
         onBack=${() => setView('capture')}
+        featureLayers=${featureLayerCatalogue}
+        featureLayersAvailable=${featureLayersAvailable}
+        onEnableLayer=${onEnableLayer}
+        onDisableLayer=${onDisableLayer}
+        onRemoveLayer=${onRemoveLayer}
       />
     `;
   }
@@ -92,6 +103,7 @@ export function App({
           regions=${regions}
           dismissedSuggestionId=${dismissedSuggestionId}
           createMap=${createMap}
+          featureLayers=${featureLayers}
           onSwitchRegion=${onSelectRegion}
           onDismissSuggestion=${onDismissSuggestion}
           onOpenPicker=${() => setView('basemaps')}

@@ -134,6 +134,7 @@ describe('App', () => {
       ready: Promise.resolve(),
       setPosition: vi.fn(),
       setObservations: vi.fn(),
+      setFeatureLayers: vi.fn(),
       centreOn: vi.fn(),
       resize: vi.fn(),
       destroy: vi.fn(),
