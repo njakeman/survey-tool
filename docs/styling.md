@@ -6,6 +6,12 @@ for the handoff brief it came with. The colours, type scale, spacing and border 
 are the design's; where this document and the mockups disagree, the mockups are the intent and
 this file is what was built.
 
+Two surfaces postdate the handoff and have no mockup: the **feature layer** rows in the picker
+view and the **feature sheet** under the map. Both were built from the design's existing
+vocabulary — the picker row shape, the surface/rule/accent-border treatment, the eyebrow — rather
+than inventing anything, so they should read as part of the same system. Nobody has checked that
+on a device.
+
 Everything lives in one file — `src/style.css`, imported once from `src/main.js`. There is no
 framework, no build step for CSS, and no component-scoped styles. Markup is
 [htm](https://github.com/developit/htm) tagged templates inside Preact components, so classes are
@@ -155,6 +161,8 @@ rendered case.
 | Sync state      | `.chip.badge-pending` / `.chip.badge-synced` (`src/ui/SyncBadge.js`)                                                                                                        | Dashed outline versus solid fill with a tick.                                                                     |
 | Session history | `.session-history` + `-list`, `-row`, `-body`, `-name`, `-date`, `-chevron`, `-unsynced`, `-empty`, `-export`, `-export-message`; detail is `.session-detail-title`/`-meta` | Read-only list of past sessions.                                                                                  |
 | Basemap picker  | `.basemap-picker` + `-list`, `-row`, `-glyph`, `-body`, `-name`, `-size`, `-progress`, `-state`, `-remove`, `-error`, `-note`, `-empty`                                     | `aria-current` marks the region in use, alongside four other signals.                                             |
+| Feature layers  | `.feature-layer-panel` + `-list`, `-row`, `-swatch`, `-body`, `-name`, `-meta`, `-state`                                                                                    | Second section of the picker view. `aria-pressed`, not `aria-current`: independent toggles, not one choice.       |
+| Feature sheet   | `.feature-sheet` + `-header`, `-heading`, `-title`, `-fields`, `-field`, `-empty`, `-record`; the strip above Save is `.linked-feature` + `-label`                          | A panel in the flow under the map, deliberately not a modal. Added after the design pass.                         |
 | Shared header   | `.page-header`                                                                                                                                                              | Back control + title over a rule, on both list screens.                                                           |
 | Update banner   | `.update-banner`                                                                                                                                                            | Rendered above every view; a waiting service worker never activates without this tap.                             |
 | Probe page      | `.probe` + `-row`, `-label`, `-result`, `-log`                                                                                                                              | Developer diagnostics. Tokenised but not designed — see below.                                                    |

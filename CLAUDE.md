@@ -10,7 +10,10 @@ basemap — the app is field-usable offline as of Phase 3. Phase 4 needs a `publ
 the user produces themselves (README → Offline basemap) and has **not yet been signed off on
 device**: run the Phase 4 section of `docs/ios-manual-checklist.md`. Phase 5 is sync. The mobile
 design pass is implemented — `docs/styling.md` describes what was built and the constraints any
-change has to keep, `docs/design/` holds the handoff and mockups it came from. **The stylesheet is
+change has to keep, `docs/design/` holds the handoff and mockups it came from. **Feature layers**
+(the surveyor's own GeoJSON drawn over the basemap, toggled in "Maps and layers", tappable for
+attributes and "Record here") are implemented and, like everything since Phase 3, **unverified on
+a device** — see the Feature layers section of `docs/ios-manual-checklist.md`. **The stylesheet is
 no longer a placeholder**; do not restyle from scratch without reading `docs/styling.md` first.
 See `field-survey-pwa-prompt.md` for the original brief. The approved
 architecture corrected several of the brief's technical choices (raster tiles → PMTiles/MapLibre,
@@ -64,6 +67,8 @@ home-screen icons from earlier local ports before testing against Pages.
 ## Commands
 
 - `npm run dev` — Vite dev server
+- `npm run basemaps:manifest` / `npm run layers:manifest` — regenerate the two published manifests
+  (both also run as `prebuild`; neither may ever throw — see the generator comments)
 - `npm test` — unit tests (Vitest, `node` + `happy-dom` projects)
 - `npm run test:browser` — contract tests against **real** IndexedDB/Cache/WebCrypto in Chromium
   and WebKit (Vitest Browser Mode + Playwright). Run before pushing, not on every save.
@@ -132,6 +137,16 @@ standalone })`, browser globals injected same as `probe/capabilities.js`, so it'
   `pmtilesSource.js` (an `ArrayBuffer`-backed pmtiles `Source`), `glyphs.js`, `manifest.js`
   (Node-only, for the generator script). `src/ui/CaptureMap.js` receives an injected `createMap`
   factory, so it tests against a fake adapter; `src/ui/BasemapPicker.js` is the region list.
+- **Feature layers** are the second class of map data: the surveyor's own GeoJSON, drawn over the
+  basemap and tappable. Called _feature layers_ everywhere, never "overlays" — `map/overlays.js`
+  already owns that word for the position dot, accuracy ring and observation markers.
+  `featureLayerStyle.js` (a style declaration + GeoJSON → one source and up to four
+  geometry-filtered layers; also holds `DEFAULT_STYLE`) and `featureQuery.js` (a
+  `queryRenderedFeatures` result → the one tapped feature, described) are pure and node-tested;
+  `featureLayerManifest.js` is **Node-only** like `manifest.js`. `storage/featureLayerStore.js`
+  holds the GeoJSON as a **string** (never a parsed object, never a Blob),
+  `app/featureLayerService.js` mirrors `basemapService.js`, and `ui/FeatureLayerPanel.js` /
+  `ui/FeatureSheet.js` are the toggle list and the tap result.
 - `src/probe/` — the Phase 1 device-capability probe, still reachable via a footer link in the
   capture UI. Findings recorded in `docs/ios-manual-checklist.md`.
 - Test tiers (`vitest.config.js`): `node` for domain/storage logic (real WebCrypto; jsdom is
@@ -177,7 +192,28 @@ standalone })`, browser globals injected same as `probe/capabilities.js`, so it'
   pmtiles client uses. They live in IndexedDB as ArrayBuffers (`storage/basemapStore.js`), one
   record per region, fetched by explicit in-app downloads and produced by the user (README →
   Offline basemap). `public/basemaps/manifest.json` _is_ precached, which is what keeps region
-  names and bounds available offline.
+  names and bounds available offline — though it was **documented as precached for a whole phase
+  before it actually was**: `json` was missing from the `injectManifest` glob, and only the
+  settings-backed `basemapRegionMeta` fallback hid it. Generating a file into `public/` is not the
+  same as precaching it; check `dist/sw.js`.
+- Feature-layer GeoJSON is **not** precached either, deliberately — it lives in IndexedDB, fetched
+  on first enable, where there is no 2 MiB cliff. `public/feature-layers/manifest.json` is, so the
+  list survives offline. `.geojson` does not match the glob's `*.json`, which is what keeps those
+  two facts from colliding.
+- **A vector `.pmtiles` built from your own data renders blank as a basemap.** `style.js`'s vector
+  branch hands the archive to `@protomaps/basemaps`, whose layers bind to Protomaps' schema
+  (`earth`, `water`, `roads`…); a tippecanoe archive's layer is named whatever was passed to `-l`
+  and matches none of them — with no error, because nothing is technically wrong. Supported routes
+  for the user's own vector data are a feature layer or a raster archive. `docs/making-pmtiles.md`
+  covers it; `style.js` carries a note pointing there. A per-region style sidecar would fix it and
+  was deliberately not built.
+- **Feature layers draw below the position and observation markers**, inserted with
+  `beforeId: 'position-accuracy'`. A parcel boundary painted over the live fix hides the one thing
+  on the map that must never be hidden. Asserted in the browser tier against a real composed style,
+  because no unit test can see a layer stack.
+- The raster style declares `glyphs` even though imagery has nothing to label: a labelled feature
+  layer draws over whichever basemap is active, and without them its text fails to render with no
+  visible error.
 - Two rules the multi-region storage enforces. **Never read the `basemap` store with values in
   bulk** — every value is a multi-megabyte buffer, so listing uses `getAllKeys`. And **region
   metadata (name, bounds) is recorded in `settings` when a region is downloaded**, not on the
@@ -236,6 +272,14 @@ standalone })`, browser globals injected same as `probe/capabilities.js`, so it'
   session written on start/end, observation + photo written in one transaction on the Save tap
   (`captureWrite.js`), before any UI feedback. If you're tempted to write every `watchPosition` tick,
   don't — that's not what "offline-first, nothing lost" means here.
+- An observation's `featureLayerId`/`featureId`/`featureLabel` are **both halves or neither** —
+  `createObservation` throws on a half link, because an id with no layer joins to nothing and a
+  layer with no id says only "somewhere in there". They are exported as `feature_layer`,
+  `feature_id` and `feature_label` **on every observation**, null where absent: a GIS consumer
+  takes its columns from the features it sees, so omitting them would make the column set depend on
+  which rows happened to be linked. Read with `?? null`, because records predating the fields would
+  otherwise export `undefined`, which `canonicalStringify` drops. Note this changed the exported
+  bytes of existing sessions — free before sync exists, not after.
 - `recordedAt` (when the surveyor tapped Save) and `fixAt` (when the position was actually measured)
   on an observation are deliberately distinct fields — a surveyor can stand at a point, type a note
   for 40 seconds, then save. Don't collapse them.

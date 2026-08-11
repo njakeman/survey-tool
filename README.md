@@ -10,12 +10,15 @@ See [`field-survey-pwa-prompt.md`](./field-survey-pwa-prompt.md) for the origina
 
 ## Status
 
-Field-usable offline. Capture (GPS/compass/photo/save), session history, zip export and the
-offline vector basemap are built; sync to GitHub is not yet.
+Field-usable offline. Capture (GPS/compass/photo/save), session history, zip export, the offline
+basemap and [feature layers](#feature-layers) are built; sync to GitHub is not yet.
 
 To see a map you must first produce basemap archives for your survey areas — see
 [Offline basemap](#offline-basemap) below. Without any, the app works exactly as before and the
 map panel simply offers to pick a region.
+
+Nothing since the capture phase has been verified on a real iPhone. `docs/ios-manual-checklist.md`
+is the gate, and it is unticked from Phase 3 onward.
 
 ## Develop
 
@@ -49,6 +52,8 @@ labels; a raster archive (PNG or JPEG tiles — aerial imagery, a scanned map, a
 drawn as-is, with no labels beyond whatever is baked into the pictures. The type is detected from
 each archive's header, along with the raster tile size, so there is nothing to declare. Note that
 a region is one or the other: raster imagery is not currently composited over a vector basemap.
+Vector data of your own goes on top as a [feature layer](#feature-layers) rather than as a second
+archive — including over raster imagery, which is the case it exists for.
 
 Produce a vector region with the [`pmtiles` CLI](https://github.com/protomaps/go-pmtiles) against
 Protomaps' public daily planet build, into `public/basemaps/`, named for the area:
@@ -64,6 +69,11 @@ npm run basemaps:manifest   # regenerates public/basemaps/manifest.json
 A raster region comes from wherever your imagery does — `rio pmtiles` from a GeoTIFF, or
 `pmtiles convert` from an MBTiles pyramid — dropped into the same directory and followed by the
 same `npm run basemaps:manifest`.
+
+Building a **vector** archive from your own data is a different exercise, and one with a sharp
+edge: it renders blank here, because the style expects Protomaps' schema.
+[docs/making-pmtiles.md](docs/making-pmtiles.md) covers the tooling on Windows and says plainly
+what does and does not work.
 
 `--bbox` is `minLon,minLat,maxLon,maxLat`. The filename becomes the region's name in the app
 (`north-wiltshire.pmtiles` → "North Wiltshire"), and the manifest records each archive's real
@@ -103,6 +113,63 @@ in `src/map/glyphs.js`, then:
 ```sh
 node scripts/fetch-glyphs.mjs
 ```
+
+## Feature layers
+
+Your own GIS data, drawn **over** whichever basemap is active and tappable. Parcels, designations,
+monitoring points, a hedgerow network — the things that make an aerial photograph legible. This is
+the answer for datasets up to a few thousand features; past that, see
+[docs/making-pmtiles.md](docs/making-pmtiles.md).
+
+A layer is one GeoJSON file plus an optional style sidecar, in `public/feature-layers/`:
+
+```
+public/feature-layers/
+  parcels.geojson        # a FeatureCollection, EPSG:4326
+  parcels.style.json     # optional — everything that cannot be measured
+```
+
+```sh
+npm run layers:manifest   # regenerates public/feature-layers/manifest.json
+```
+
+Every key of the sidecar is optional:
+
+| Key             | Default                | What it does                                           |
+| --------------- | ---------------------- | ------------------------------------------------------ |
+| `name`          | title-cased filename   | How the layer is listed in the app                     |
+| `colour`        | `#1c5f9e`              | Fill, line, point and label colour                     |
+| `lineWidth`     | `2`                    | Line and polygon-outline width                         |
+| `fillOpacity`   | `0.15`                 | Polygon fill only — outlines are always solid          |
+| `circleRadius`  | `5`                    | Point radius                                           |
+| `labelProperty` | none                   | Which property to draw as a label on the map           |
+| `titleProperty` | none                   | Which property titles the feature in the tap sheet     |
+| `idProperty`    | the feature's own `id` | What gets recorded on an observation                   |
+| `fieldOrder`    | alphabetical           | Which attributes show first in the tap sheet           |
+| `minZoom`       | `0`                    | Hide the layer until this zoom — use it for dense data |
+
+Don't set `colour` to `#c2611f`: that is the live GPS fix and its accuracy ring, and a layer in it
+would scatter things across the map that read as "you are here".
+
+In the app, **Change map → Maps and layers** lists every published layer. Switching one on fetches
+it once into IndexedDB; after that it works with no network, and switching it off keeps the data so
+it comes back offline too. _Remove_ is what reclaims the space, and is offered only for a layer
+that is already switched off.
+
+Tapping a feature shows its attributes and offers **Record here**, which starts an observation
+linked to that feature. The link travels into the exported GeoJSON as `feature_layer`, `feature_id`
+and `feature_label`, so a session can be joined back to the dataset it was surveyed against. Those
+three columns are present on every observation, `null` where there is no link.
+
+Three things that will bite:
+
+- **Coordinates must be EPSG:4326.** British National Grid data exported without reprojecting is
+  valid GeoJSON that lands in the Atlantic. The generator rejects out-of-range coordinates and
+  names the fix — `ogr2ogr -t_srs EPSG:4326` — rather than publishing a broken layer.
+- **The manifest is precached; the GeoJSON is not.** That is deliberate: the list has to be
+  readable offline, and the data belongs in IndexedDB where there is no 2 MiB cliff.
+- A layer the generator cannot read is **warned about and skipped**, never fatal — same rule as the
+  basemap archives. Watch the build log for `SKIPPED`.
 
 ## Fonts and styling
 

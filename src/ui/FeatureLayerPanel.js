@@ -14,8 +14,11 @@ import { useState } from 'preact/hooks';
 // a layer is tens of kilobytes, and a progress bar for a 34 kB fetch is
 // furniture that appears and vanishes before it can be read.
 
-function formatKilobytes(bytes) {
+// Bytes below a kilobyte, because rounding a real 400-byte layer to "0 kB"
+// reads as a broken or empty file rather than a small one.
+function formatSize(bytes) {
   if (!bytes) return null;
+  if (bytes < 1000) return `${bytes} B`;
   return `${Math.round(bytes / 1000)} kB`;
 }
 
@@ -25,7 +28,7 @@ function formatKilobytes(bytes) {
 function describeLayer(layer) {
   const count = layer.featureCount == null ? null : `${layer.featureCount} features`;
   const geometry = layer.geometryTypes?.length ? layer.geometryTypes.join('+') : null;
-  return [count, geometry, formatKilobytes(layer.sizeBytes)].filter(Boolean).join(' · ');
+  return [count, geometry, formatSize(layer.sizeBytes)].filter(Boolean).join(' · ');
 }
 
 export function FeatureLayerPanel({

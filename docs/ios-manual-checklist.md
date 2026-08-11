@@ -177,6 +177,58 @@ real device; Playwright cannot exercise any of it.
 - [ ] Battery/heat: after ~15 minutes of continuous capture with the map on screen, the phone is
       not alarmingly hot and the app has not been killed in the background
 
+## Feature layers
+
+Nothing here has been seen on a device. The three that matter most are the tap target, sunlight
+legibility and the label halo — all of them things a passing test says nothing about.
+
+**Adding and removing**
+
+- [ ] "Change map" opens **Maps and layers**, with regions above and feature layers below, and the
+      two sections are obviously different kinds of thing (pick one vs. toggle any)
+- [ ] Switching a layer on draws it over the basemap within a second or two — no visible progress
+      UI is expected at this size, but nor should it feel hung
+- [ ] Switching it off removes it cleanly; switching it back on **in airplane mode** works, which
+      is the whole reason disable keeps the data
+- [ ] Adding a layer that is not yet on the device is refused in airplane mode, with a reason
+- [ ] Remove is offered only for a layer that is switched off, and frees the space
+
+**Drawing**
+
+- [ ] Over a **raster** region (your own imagery), polygon outlines and points are legible — this
+      is the case the feature is for, and the case with no basemap labels to help
+- [ ] Labels render at all over raster imagery. If they are missing, the raster style's `glyphs`
+      declaration is the suspect — it is the exact silent failure it exists to prevent
+- [ ] Labels are readable **against busy imagery**, i.e. the halo is doing its job
+- [ ] In direct sunlight, a layer's colour is distinguishable from the accent-orange position dot
+      at arm's length
+- [ ] Several layers on at once stay individually distinguishable
+- [ ] The live fix, the accuracy ring and saved observation markers are **always on top** of every
+      feature layer, including where a filled polygon covers them
+- [ ] Panning and zooming with layers on stays smooth; a dense layer with a `minZoom` disappears
+      below it rather than stuttering
+
+**Tapping**
+
+- [ ] A gloved thumb hits a **point** feature reliably — this is the 10px query box, and the number
+      is a guess until someone tries it
+- [ ] A gloved thumb hits a **line** feature (harder: two pixels wide before tolerance)
+- [ ] Tapping empty map dismisses the sheet
+- [ ] The sheet does not block reading the map, and the page still scrolls behind it
+- [ ] Attribute values that are long (a full address, a description) wrap rather than overflow
+- [ ] A tap does not fire while panning — a drag that ends over a feature should not open the sheet
+
+**Record here**
+
+- [ ] "Record here" prefills an empty note and shows the linked-feature strip above Save
+- [ ] With a note already typed, the note is **not** overwritten
+- [ ] The link survives typing, taking a photo, and dismissing the sheet
+- [ ] Unlink removes the link and leaves the note and photo alone
+- [ ] After Save, the link is gone — the next observation must not attach itself silently
+- [ ] With no session open, the sheet still shows attributes but offers no "Record here"
+- [ ] Export the session and open `session.geojson` in QGIS: `feature_layer`, `feature_id` and
+      `feature_label` are present on every row, populated on the linked ones
+
 ## Later phases (fill in as each lands)
 
 - [ ] Phase 5 — sync completes on a real connection; killing the app mid-sync and reopening

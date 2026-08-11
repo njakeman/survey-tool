@@ -47,6 +47,14 @@ describe('FeatureLayerPanel', () => {
     expect(screen.getByText('3 features · Polygon+Point · 8 kB')).toBeInTheDocument();
   });
 
+  test('a sub-kilobyte layer reads in bytes, not as "0 kB"', () => {
+    // Rounding 403 bytes to 0 kB reads as a broken or empty file rather than
+    // a small one, and small is normal for a handful of survey points.
+    renderPanel({ layers: [{ ...PARCELS, sizeBytes: 403 }] });
+
+    expect(screen.getByText(/403 B$/)).toBeInTheDocument();
+  });
+
   test('a toggle reports whether the layer is on, not just how it looks', () => {
     // aria-pressed rather than a colour or a glyph: this is a two-state
     // control and a screen reader has to be told which state it is in.
