@@ -14,6 +14,13 @@ export function listObservationsForSession(db, sessionId) {
   return db.getAllFromIndex('observations', 'by-session', sessionId);
 }
 
+// Counts through the index rather than materialising the records: the
+// history list wants integers, and a long session's notes and metadata have
+// no business being read to produce one.
+export function countObservationsForSession(db, sessionId) {
+  return db.countFromIndex('observations', 'by-session', sessionId);
+}
+
 export function deleteObservation(db, id) {
   return db.delete('observations', id);
 }

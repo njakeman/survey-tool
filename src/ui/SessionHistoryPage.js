@@ -17,18 +17,26 @@ export function SessionHistoryPage({ service, exportSession, onBack }) {
   const [exportMessage, setExportMessage] = useState('');
 
   useEffect(() => {
+    let cancelled = false;
     (async () => {
       const [open, all] = await Promise.all([service.getOpenSession(), service.listSessions()]);
       const past = all
         .filter((s) => s.id !== open?.id)
         .sort((a, b) => (a.startedAt < b.startedAt ? 1 : -1));
+      // countObservations counts through the index. Listing them instead
+      // deserialised every observation in the database — notes, metadata and
+      // all — to render a column of integers.
       const countEntries = await Promise.all(
-        past.map(async (s) => [s.id, (await service.listObservations(s.id)).length]),
+        past.map(async (s) => [s.id, await service.countObservations(s.id)]),
       );
+      if (cancelled) return;
       setOpenSessionId(open?.id ?? null);
       setSessions(past);
       setCounts(Object.fromEntries(countEntries));
     })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   async function openSession(session) {

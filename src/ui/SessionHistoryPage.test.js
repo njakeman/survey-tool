@@ -39,6 +39,11 @@ function createFakeService({ openSession = null, sessions = [], observationsBySe
     getOpenSession: vi.fn().mockResolvedValue(openSession),
     listSessions: vi.fn().mockResolvedValue(sessions),
     listObservations: vi.fn((sessionId) => Promise.resolve(observationsBySession[sessionId] ?? [])),
+    // The list renders counts via countObservations, which counts through
+    // the index instead of loading every observation to measure it.
+    countObservations: vi.fn((sessionId) =>
+      Promise.resolve((observationsBySession[sessionId] ?? []).length),
+    ),
   };
 }
 

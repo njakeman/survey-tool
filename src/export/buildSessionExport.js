@@ -29,15 +29,21 @@ export async function buildSessionExport(db, { sessionId, appVersion }) {
   // disagree: an orphan photoId (record missing) is skipped rather than
   // failing the export, and the feature's `photo` property is nulled to
   // match — the zip must never claim a file it doesn't contain.
+  // Fetched together rather than one round trip at a time: a long session's
+  // photos were read strictly sequentially before the zip could even start,
+  // with the surveyor waiting. Order is preserved by mapping, which matters
+  // for the zip's contents but never for the fetching.
+  const withPhotos = observations.filter((obs) => obs.photoId);
+  const photos = await Promise.all(withPhotos.map((obs) => getPhoto(db, obs.photoId)));
+
   const photoEntries = [];
   const presentPhotoIds = new Set();
-  for (const obs of observations) {
-    if (!obs.photoId) continue;
-    const photo = await getPhoto(db, obs.photoId);
-    if (!photo) continue;
+  withPhotos.forEach((obs, index) => {
+    const photo = photos[index];
+    if (!photo) return;
     presentPhotoIds.add(obs.photoId);
     photoEntries.push({ name: `photos/${obs.photoId}.jpg`, input: photo.blob });
-  }
+  });
 
   const exportObservations = observations.map((obs) =>
     obs.photoId && !presentPhotoIds.has(obs.photoId) ? { ...obs, photoId: null } : obs,

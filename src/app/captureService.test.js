@@ -332,6 +332,48 @@ describe('listObservations', () => {
   });
 });
 
+describe('countObservations', () => {
+  test('counts without loading the observations themselves', async () => {
+    // A session's observations carry notes and metadata; the history list
+    // needs integers, not records. Counting through the index keeps a long
+    // session's rows out of memory entirely.
+    const db = await openDatabase('capture-service-count-cheap');
+    const loaded = [];
+    const trackingDb = new Proxy(db, {
+      get(target, prop) {
+        if (prop === 'getAllFromIndex') {
+          return (...args) => {
+            loaded.push(args[0]);
+            return target.getAllFromIndex(...args);
+          };
+        }
+        const value = target[prop];
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    });
+    const service = createCaptureService({
+      db: trackingDb,
+      newId: fakeIdGenerator(),
+      nowIso: () => FIXED_NOW,
+    });
+    const session = await service.startSession('Ashton Keynes');
+    for (let i = 0; i < 3; i += 1) {
+      await service.saveObservation({ reading: READING, heading: null, note: 'x', photo: null });
+    }
+    loaded.length = 0;
+
+    expect(await service.countObservations(session.id)).toBe(3);
+
+    expect(loaded).toEqual([]);
+  });
+
+  test('is zero for a session with nothing saved', async () => {
+    const service = await makeService('capture-service-count-empty');
+    const session = await service.startSession('Empty');
+    expect(await service.countObservations(session.id)).toBe(0);
+  });
+});
+
 describe('deleteObservation', () => {
   test('removes the observation and its photo', async () => {
     const db = await openDatabase('capture-service-delete');

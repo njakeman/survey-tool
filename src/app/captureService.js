@@ -1,7 +1,10 @@
 import { createSession, closeSession, findOpenSession } from '../domain/session.js';
 import { createObservation } from '../domain/observation.js';
 import { putSession, listSessions as listSessionsFromStore } from '../storage/sessionStore.js';
-import { listObservationsForSession } from '../storage/observationStore.js';
+import {
+  listObservationsForSession,
+  countObservationsForSession,
+} from '../storage/observationStore.js';
 import { saveObservationWithPhoto } from '../storage/captureWrite.js';
 import { deleteObservationWithPhoto } from '../storage/captureDelete.js';
 
@@ -68,9 +71,8 @@ export function createCaptureService({ db, newId, nowIso }) {
     return observation;
   }
 
-  async function countObservations(sessionId) {
-    const observations = await listObservationsForSession(db, sessionId);
-    return observations.length;
+  function countObservations(sessionId) {
+    return countObservationsForSession(db, sessionId);
   }
 
   function listObservations(sessionId) {

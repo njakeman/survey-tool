@@ -1,5 +1,5 @@
 import { html } from 'htm/preact';
-import { useEffect, useState } from 'preact/hooks';
+import { useEffect, useMemo, useState } from 'preact/hooks';
 import { usePosition } from './hooks/usePosition.js';
 import { useHeading } from './hooks/useHeading.js';
 import { SessionBar } from './SessionBar.js';
@@ -180,6 +180,16 @@ export function CapturePage({
     ? { id: suggestedRegion.id, name: suggestedRegion.name }
     : null;
 
+  // The GPS watch re-renders this component about once a second, and the
+  // table re-formats every saved row each time — a per-row Date and
+  // toLocaleTimeString, growing with the session, on the weakest CPU in the
+  // system while the radio is busy. The rows only change on save, so hold the
+  // vnode still between saves and Preact skips the subtree entirely.
+  const observationsTable = useMemo(
+    () => html`<${ObservationsTable} observations=${observations} />`,
+    [observations],
+  );
+
   const disabledReason = !session
     ? 'start a session first'
     : !position
@@ -254,7 +264,7 @@ export function CapturePage({
             </p>`
           : null
       }
-      <${ObservationsTable} observations=${observations} />
+      ${observationsTable}
       ${
         session
           ? html`
