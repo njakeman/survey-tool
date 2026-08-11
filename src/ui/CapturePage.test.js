@@ -286,6 +286,25 @@ describe('CapturePage — undo lifecycle', () => {
     return { service };
   }
 
+  test('a save is confirmed with the running count, not just an Undo link', async () => {
+    // "last saved · Undo" alone never told the surveyor a save had landed —
+    // the only feedback was a control appearing. The count is the receipt.
+    const observation = { id: 'obs-1', sessionId: 'sess-1', lat: 51.5, lon: -0.14 };
+    const service = createFakeService({ openSession: OPEN_SESSION, observations: [observation] });
+    const { sensors, pushPosition } = createFakeSensors();
+    render(html`<${CapturePage} service=${service} sensors=${sensors} downscale=${vi.fn()} />`);
+    await screen.findByText('Ashton Keynes');
+    pushPosition(POSITION);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /save observation/i })).not.toBeDisabled(),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /save observation/i }));
+
+    await screen.findByRole('button', { name: /undo/i });
+    expect(screen.getByText(/1 this session/i)).toBeInTheDocument();
+  });
+
   test('ending the session removes the Undo affordance', async () => {
     // A surviving Undo would delete from a session that is already closed.
     const { service } = await renderReadyWithSave();

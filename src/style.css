@@ -852,34 +852,79 @@ button {
   margin-top: var(--space-2);
 }
 
+/* Five states, each carrying a word and a shape as well as a colour. */
+
 .save-button button {
   width: 100%;
   min-height: 3.5rem;
   font-size: var(--type-save);
   font-weight: 700;
-  background: var(--accent);
-  color: var(--on-accent);
-  border: 1px solid var(--accent-ink);
   border-radius: var(--radius);
 }
 
+.save-button-ready {
+  background: var(--accent);
+  color: var(--on-accent);
+  border: 1px solid var(--accent-ink);
+}
+
+/* Dashed, so "not yet" is legible without reading the reason underneath. */
+.save-button-blocked {
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  color: color-mix(in srgb, var(--ink) 42%, transparent);
+  border: 1px dashed var(--control-rule);
+}
+
+/* Deliberately darker than ready rather than merely disabled: a gloved
+   double-tap has to look like it did nothing. */
+.save-button-saving {
+  background: var(--accent-deep);
+  color: rgba(255, 255, 255, 0.8);
+  border: 1px solid var(--accent-deep);
+}
+
 .save-button-reason {
+  margin: var(--space-2) 0 0;
+  font-size: var(--type-small);
   color: var(--accent-deep);
 }
 
-.save-error {
-  color: var(--danger-strong);
+.save-confirmation {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--ink);
+  border-radius: var(--radius);
+}
+
+.save-confirmation-tick {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 11px;
+}
+
+.save-confirmation-text {
+  font-size: 14.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.save-confirmation .link {
+  margin-left: auto;
+  color: var(--accent-ink);
 }
 
 .offline-status-warning {
   font-weight: 700;
-  color: var(--danger-strong);
-}
-
-.last-saved {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
 }
 
 .observations-empty {

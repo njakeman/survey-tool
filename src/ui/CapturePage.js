@@ -281,13 +281,20 @@ export function CapturePage({
       ${
         // role="alert" rather than a plain paragraph: a save that failed is
         // the one thing the surveyor must not walk away from unaware.
-        saveError ? html`<p class="save-error" role="alert">${saveError}</p>` : null
+        saveError ? html`<p class="save-error panel-danger" role="alert">✕ ${saveError}</p>` : null
       }
       ${
+        // A visible receipt, not just an Undo control appearing. The count is
+        // the part a surveyor actually checks — that the tap landed and how
+        // many are now in the session.
         lastSaved
-          ? html`<p class="last-saved">
-              last saved · <button type="button" onClick=${handleUndo}>Undo</button>
-            </p>`
+          ? html`<div class="save-confirmation">
+              <span class="save-confirmation-tick" aria-hidden="true">✓</span>
+              <span class="save-confirmation-text"
+                >last saved · ${observations.length} this session</span
+              >
+              <button type="button" class="link" onClick=${handleUndo}>Undo</button>
+            </div>`
           : null
       }
       ${observationsTable}
