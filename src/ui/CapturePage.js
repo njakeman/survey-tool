@@ -207,6 +207,11 @@ export function CapturePage({
         heading=${heading}
         headingStatus=${headingStatus}
         onEnableCompass=${enableCompass}
+        ${
+          '' /* enable() stops any existing watch and re-arms, so retry is the
+             same call — and it comes from a tap, which is what iOS needs. */
+        }
+        onRetryCompass=${enableCompass}
       />
       <${CaptureMap}
         activeRegionId=${activeRegionId}

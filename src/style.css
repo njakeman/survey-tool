@@ -362,6 +362,15 @@ button {
   font-variant-numeric: tabular-nums;
 }
 
+.reading-stale,
+.reading-problem {
+  color: var(--warning);
+}
+
+.reading-problem {
+  margin: 0;
+}
+
 .readings-panel .position-only {
   color: color-mix(in srgb, orange 70%, currentColor);
 }
