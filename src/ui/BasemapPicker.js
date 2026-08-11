@@ -8,7 +8,7 @@ import { FeatureLayerPanel } from './FeatureLayerPanel.js';
 // and a download or remove action.
 //
 // Regions and layers share a screen because in the field they are one
-// question ("what am I looking at"), and because the map panel is 236px tall
+// question ("what am I looking at"), and because the map panel is 300px tall
 // and has no room for a second control.
 //
 // This is the one screen where picking the wrong row costs a multi-megabyte

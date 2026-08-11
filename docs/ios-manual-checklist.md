@@ -249,10 +249,22 @@ millimetre, so the arithmetic is not in doubt. What is in doubt is everything a 
 
 ## Marking a point you cannot reach
 
-- [ ] "Mark a distant point" is findable without being told it exists
+- [ ] "Mark a distant point" is findable without being told it exists, and the three map controls
+      (Change map / Mark a distant point / Re-centre) **fit without overlapping**. Pan away from
+      your fix first, so Re-centre is showing — with all three visible they came to roughly 380px
+      across a 320px map before they were put in a wrapping row
+- [ ] **The crosshair is fully clear of the confirm panel.** This is the reported bug: at 236px
+      with a three-line panel, the reticle's target sat behind it and there was nothing to aim
+      with. The map is 300px now and the crosshair a third of the way down
+- [ ] **The point saved is the point under the crosshair.** Line the crosshair up on something
+      identifiable — a gate, a corner, a pylon — confirm, save, then check the recorded grid
+      reference against where you aimed. The reticle is deliberately not at the map's centre, and
+      a ~50px disagreement between where it draws and what gets unprojected would be about 45 m of
+      silent error at z17. Tests cover it; this is the one that would actually be believed
 - [ ] The crosshair is visible over aerial imagery, over a pale vector basemap, and over a dark
       one — the arms are accent-coloured with a pale outline, and that is untested against real
       ground
+- [ ] 300px of map still leaves the page comfortable — Save reachable without excessive scrolling
 - [ ] Panning the map under the crosshair one-handed, with gloves, is actually workable. This is
       the interaction the whole feature rests on and the reason a tap was rejected
 - [ ] The gap at the centre of the crosshair leaves the target visible rather than covering it
@@ -268,6 +280,39 @@ millimetre, so the arithmetic is not in doubt. What is in doubt is everything a 
 - [ ] The saved card says "Marked on the map, not measured", and its accuracy figure is plausible
       for the zoom you picked at — a few metres zoomed right in, tens zoomed out
 - [ ] Export and confirm `position_source` is `map` for those rows and `gps` for the others
+
+## Microphone — deciding whether voice notes are possible
+
+**Must be run from the home-screen icon, in standalone.** That is the whole question: WebKit bug
+185448 is "getUserMedia not working in apps added to home screen that run in standalone mode", and
+Safari-the-browser working tells us nothing. Probe page → Microphone → "Record 3 s".
+
+- [ ] **Run it in Safari first, then in standalone.** If it works in one and not the other, that
+      is bug 185448 and it settles the question on its own
+- [ ] The permission prompt appears, and granting it produces a recording with **non-zero bytes**.
+      "getUserMedia resolved but no audio captured" is a different failure from a denial and the
+      probe reports them separately — note which you got
+- [ ] **Press it a second time, and a third.** Working once and then failing until the phone is
+      restarted is the specific reported failure and the reason the check is re-runnable
+- [ ] Record the mime type it chose and the measured **MB/min**. Against a photo's ~300 KB that
+      figure is what decides whether voice notes are affordable
+- [ ] Force-quit, relaunch, run it again — permission surviving a cold launch matters as much as
+      it did for the compass
+- [ ] The iOS recording indicator goes **out** when the check finishes. If it stays lit, a track
+      is being left open and that is the likeliest cause of the works-once failure
+- [ ] Note whether audio output jumps to the speaker during capture (a documented iOS behaviour
+      with getUserMedia) — worth knowing before building anything that plays back
+
+**Try this on the same trip, before any of the above matters:** tap the note field on the capture
+page and use the **microphone key on the iOS keyboard** to dictate an observation.
+
+- [ ] Dictation works in standalone, with the phone in airplane mode (on-device recognition)
+- [ ] It is usable one-handed with gloves — this is the fiddly part, since it needs the keyboard up
+- [ ] The dictated text is accurate enough for field vocabulary — place names, "stile", "coppice"
+
+If that is good enough, voice notes may never be needed: dictation lands searchable text in the
+`note` field, which exports and syncs, where an audio file is something a human has to sit and
+replay.
 
 ## Later phases (fill in as each lands)
 
