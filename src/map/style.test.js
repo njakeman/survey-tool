@@ -40,11 +40,21 @@ describe('buildStyle', () => {
     ).toBe(256);
   });
 
-  test('a raster style asks for no glyphs and no sprite — there is nothing to label', () => {
+  test('a raster style asks for no sprite — there are no icons to draw', () => {
     const style = buildStyle({ glyphsUrl: GLYPHS_URL, tileType: 'raster', tileSize: 256 });
 
-    expect(style).not.toHaveProperty('glyphs');
     expect(style).not.toHaveProperty('sprite');
+  });
+
+  test('a raster style still declares glyphs, because feature layers label over it', () => {
+    // This asserted the opposite until feature layers existed, and the
+    // reasoning was sound at the time: imagery has nothing to label. But a
+    // labelled feature layer draws over whichever basemap is active, and
+    // without glyphs its text silently fails to render — no error, no label,
+    // exactly the failure vendoring the glyph ranges was meant to end.
+    const style = buildStyle({ glyphsUrl: GLYPHS_URL, tileType: 'raster', tileSize: 256 });
+
+    expect(style.glyphs).toBe(GLYPHS_URL);
   });
 
   test('a raster style makes no claim about OpenStreetMap, whose data it is not', () => {

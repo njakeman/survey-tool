@@ -33,12 +33,19 @@ function withoutIcons(layer) {
 }
 
 // A raster archive is the surveyor's own imagery: one source, one layer, no
-// glyphs or sprite because there is nothing to label, and emphatically no
-// OpenStreetMap/Protomaps attribution — that would be a false claim about
-// whose data it is. Any attribution comes from the archive itself.
-function buildRasterStyle({ archiveKey, tileSize, attribution }) {
+// sprite, and emphatically no OpenStreetMap/Protomaps attribution — that
+// would be a false claim about whose data it is. Any attribution comes from
+// the archive itself.
+//
+// Glyphs are declared even though the imagery has nothing to label. Feature
+// layers draw on top of whichever basemap is active, and a labelled feature
+// layer over a raster region would fail to render its text with no visible
+// error — the same silent failure that vendoring the glyphs was meant to end.
+// Declaring them costs nothing when unused; the ranges are precached anyway.
+function buildRasterStyle({ glyphsUrl, archiveKey, tileSize, attribution }) {
   return {
     version: 8,
+    glyphs: glyphsUrl,
     sources: {
       basemap: {
         type: 'raster',
@@ -58,8 +65,17 @@ export function buildStyle({
   tileSize,
   attribution,
 }) {
-  if (tileType === 'raster') return buildRasterStyle({ archiveKey, tileSize, attribution });
+  if (tileType === 'raster') {
+    return buildRasterStyle({ glyphsUrl, archiveKey, tileSize, attribution });
+  }
 
+  // Note that "vector" here means *Protomaps-schema* vector. The layers
+  // below bind to that schema's source-layer names (earth, water, roads,
+  // places…), so a vector archive built from your own data with tippecanoe —
+  // whose layer names are whatever you passed to -l — matches none of them
+  // and renders as an empty map with no error. Supported routes for your own
+  // vector data are a feature layer (src/map/featureLayerStyle.js) or a
+  // raster archive. See docs/making-pmtiles.md.
   const flavor = {
     ...namedFlavor('light'),
     regular: FONT_STACK,
