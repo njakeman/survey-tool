@@ -45,6 +45,54 @@ export function accuracyRadiusExpression(reading) {
   ];
 }
 
+// Marker colours are literals rather than CSS tokens: MapLibre paints on a
+// canvas and cannot read custom properties, and the basemap style itself does
+// not follow the OS colour scheme — so these are keyed to the map's own light
+// flavour, not to the interface around it.
+const MARKER_INK = '#1e2433';
+const MARKER_OUTLINE = '#f4f0e8';
+
+// Pending versus synced, at map scale. The pair this replaced was '#00703c'
+// and '#d4351c' — green and red, telling the two apart by hue alone, which
+// fails in greyscale and for red-green colour blindness. Fill against hollow
+// survives both.
+//
+// The design's rotated square with a dashed stroke is not expressible in a
+// circle layer: MapLibre has no dashed circle stroke, and a rotated square
+// would need a symbol layer with two bundled sprite images. Fill-versus-
+// hollow carries the distinction on its own, so the sprites stay unbuilt —
+// see docs/styling.md if the dash turns out to matter on a real archive.
+export function observationPaint() {
+  return {
+    'circle-radius': 7,
+    'circle-color': ['case', ['get', 'synced'], MARKER_INK, 'transparent'],
+    'circle-stroke-width': 2,
+    'circle-stroke-color': ['case', ['get', 'synced'], MARKER_OUTLINE, MARKER_INK],
+  };
+}
+
+// The live fix and the ring of its reported accuracy. Accent-coloured so it
+// is never mistaken for a saved observation.
+export function positionPaint() {
+  return {
+    'circle-radius': 6,
+    'circle-color': '#c2611f',
+    'circle-stroke-width': 2,
+    'circle-stroke-color': MARKER_OUTLINE,
+  };
+}
+
+export function accuracyPaint() {
+  return {
+    'circle-radius': 0,
+    'circle-color': '#c2611f',
+    'circle-opacity': 0.18,
+    'circle-stroke-width': 1,
+    'circle-stroke-color': '#c2611f',
+    'circle-stroke-opacity': 0.4,
+  };
+}
+
 export function observationsFeatureCollection(observations) {
   return {
     type: 'FeatureCollection',

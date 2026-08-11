@@ -49,13 +49,13 @@ function PositionReadout({ position, positionError, now }) {
         // without this the screen shows stale coordinates that look live.
         // formatAge already ends in "ago" — appending another read
         // "1 min ago ago".
-        stale ? html`<p class="reading-stale">Fix taken ${formatAge(ageMs)}</p>` : null
+        stale ? html`<p class="reading-stale warns">Fix taken ${formatAge(ageMs)}</p>` : null
       }
-      ${message ? html`<p class="reading-problem">${message}</p>` : null}
+      ${message ? html`<p class="reading-problem warns">${message}</p>` : null}
     `;
   }
 
-  if (message) return html`<p class="reading-problem">${message}</p>`;
+  if (message) return html`<p class="reading-problem warns">${message}</p>`;
   return html`<p class="readings-waiting">Waiting for GPS fix…</p>`;
 }
 
@@ -74,13 +74,13 @@ function CompassReadout({ heading, headingStatus, onEnableCompass, onRetryCompas
     return html`<p class="readings-waiting">Waiting for compass…</p>`;
   }
   if (headingStatus === 'denied') {
-    return html`<p class="position-only">Position only — no compass</p>`;
+    return html`<p class="position-only warns">Position only — no compass</p>`;
   }
   // 'unavailable': the watch tears itself down after its no-heading timeout
   // and nothing re-arms it, so without an explicit retry the compass is gone
   // for the rest of the session.
   return html`
-    <p class="position-only">
+    <p class="position-only warns">
       Position only — no compass
       ${
         onRetryCompass

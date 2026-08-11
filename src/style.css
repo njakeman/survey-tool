@@ -1139,14 +1139,30 @@ button {
   border-color: var(--ink);
 }
 
+/* Full-bleed above every view. An accent fill rather than the 25% orange
+   wash this replaced, which read as a warning about something rather than an
+   offer to do something. */
 .update-banner {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
-  padding: 0.7rem var(--space-4);
+  padding: 11px var(--space-4);
   margin: 0;
+  font-size: var(--type-body);
   font-weight: 700;
   background: var(--accent);
   color: var(--paper);
+  animation: banner-in 120ms ease-out;
+}
+
+/* A control on an accent fill: the ground and the ink swap. */
+.button-inverse {
+  background: var(--paper);
+  color: var(--ink);
+  border: 1px solid var(--paper);
+  border-radius: var(--radius);
+  font-size: var(--type-small);
+  font-weight: 700;
+  padding: 0 14px;
 }

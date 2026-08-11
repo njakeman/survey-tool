@@ -72,9 +72,11 @@ export function App({
     <div>
       ${
         updateAvailable
-          ? html`<p class="update-banner">
+          ? // An offer, not a warning: a waiting service worker never
+            // activates without this tap, and the surveyor chooses when.
+            html`<p class="update-banner">
               New version available.
-              <button type="button" onClick=${onReload}>Reload</button>
+              <button type="button" class="button-inverse" onClick=${onReload}>Reload</button>
             </p>`
           : null
       }

@@ -8,6 +8,9 @@ import {
   accuracyRadiusExpression,
   observationsFeatureCollection,
   positionFeature,
+  observationPaint,
+  positionPaint,
+  accuracyPaint,
 } from './overlays.js';
 import { initialZoomFromHeader, maxBoundsFromHeader, minZoomFromHeader } from './viewport.js';
 
@@ -116,42 +119,26 @@ export async function createMapAdapter({
       map.addSource('position', { type: 'geojson', data: EMPTY_COLLECTION });
       map.addSource('observations', { type: 'geojson', data: EMPTY_COLLECTION });
 
+      // The paint lives in overlays.js with the rest of the pure marker
+      // logic, so the pending/synced distinction is node-testable rather
+      // than only visible on a real map.
       map.addLayer({
         id: 'position-accuracy',
         type: 'circle',
         source: 'position',
-        paint: {
-          'circle-radius': 0,
-          'circle-color': '#1d70b8',
-          'circle-opacity': 0.15,
-          'circle-stroke-width': 1,
-          'circle-stroke-color': '#1d70b8',
-          'circle-stroke-opacity': 0.4,
-        },
+        paint: accuracyPaint(),
       });
       map.addLayer({
         id: 'observations-markers',
         type: 'circle',
         source: 'observations',
-        paint: {
-          'circle-radius': 7,
-          // Pending vs synced has to stay visible everywhere observations
-          // are shown (CLAUDE.md), markers included.
-          'circle-color': ['case', ['get', 'synced'], '#00703c', '#d4351c'],
-          'circle-stroke-width': 2,
-          'circle-stroke-color': '#ffffff',
-        },
+        paint: observationPaint(),
       });
       map.addLayer({
         id: 'position-dot',
         type: 'circle',
         source: 'position',
-        paint: {
-          'circle-radius': 6,
-          'circle-color': '#1d70b8',
-          'circle-stroke-width': 2,
-          'circle-stroke-color': '#ffffff',
-        },
+        paint: positionPaint(),
       });
 
       container.dataset.mapLoaded = 'true';

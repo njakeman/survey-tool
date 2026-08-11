@@ -4,6 +4,7 @@ import {
   accuracyRadiusExpression,
   observationsFeatureCollection,
   metresToPixels,
+  observationPaint,
 } from './overlays.js';
 
 describe('positionFeature', () => {
@@ -93,5 +94,39 @@ describe('observationsFeatureCollection', () => {
 
   test('tolerates a missing list, e.g. before the first load resolves', () => {
     expect(observationsFeatureCollection(undefined).features).toEqual([]);
+  });
+});
+
+describe('observationPaint', () => {
+  // The markers were '#00703c' when synced and '#d4351c' otherwise: green
+  // versus red, distinguishable by hue alone. That fails in greyscale, in
+  // sunlight, and for the ~8% of men with red-green colour blindness — and
+  // it was the one live accessibility defect the design pass named.
+  test('distinguishes pending from synced by fill, not only by colour', () => {
+    const paint = observationPaint();
+
+    // A 'case' expression on `synced`, whose two branches differ.
+    const [operator, condition, whenSynced, whenPending] = paint['circle-color'];
+    expect(operator).toBe('case');
+    expect(condition).toEqual(['get', 'synced']);
+    // Synced is filled; pending is hollow. The shapes differ before the
+    // colours do.
+    expect(whenSynced).not.toBe('transparent');
+    expect(whenPending).toBe('transparent');
+  });
+
+  test('gives a pending marker a stroke, so a hollow marker is still visible', () => {
+    const paint = observationPaint();
+
+    expect(paint['circle-stroke-width']).toBeGreaterThanOrEqual(2);
+  });
+
+  test('the two states never differ by hue alone', () => {
+    const paint = observationPaint();
+    const [, , whenSynced, whenPending] = paint['circle-color'];
+
+    // If both branches were opaque colours, the only difference would be
+    // hue — exactly the defect this replaced.
+    expect([whenSynced, whenPending]).toContain('transparent');
   });
 });
