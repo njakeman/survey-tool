@@ -104,6 +104,25 @@ in `src/map/glyphs.js`, then:
 node scripts/fetch-glyphs.mjs
 ```
 
+## Fonts and styling
+
+Two font families are vendored into `public/fonts/` and precached, because the app has to render
+with no network at all — a hosted webfont would leave the interface in a fallback face in exactly
+the situation the app exists for.
+
+| Family                 | Where                             | For        | Script                          |
+| ---------------------- | --------------------------------- | ---------- | ------------------------------- |
+| Atkinson Hyperlegible  | `public/fonts/atkinson/`          | the UI     | `node scripts/fetch-fonts.mjs`  |
+| Noto Sans (glyph .pbf) | `public/fonts/noto-sans-regular/` | map labels | `node scripts/fetch-glyphs.mjs` |
+
+Both are [OFL 1.1](https://openfontlicense.org/) and both are committed — the scripts are run by
+hand, not on install. Adding any asset means checking the precache count in the build output:
+something unprecached is invisible on a laptop and missing in a field.
+
+The interface implements the design pass in [`docs/design/`](./docs/design/) (open
+`mockups.dc.html` in a browser). [`docs/styling.md`](./docs/styling.md) is the reference for what
+was built, the tokens, and the constraints any future change has to keep.
+
 ## Manual verification
 
 Playwright's WebKit is not Safari and not iOS. Before signing off any phase, run through

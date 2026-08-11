@@ -8,7 +8,11 @@ Phases 1–4 are complete: device capability probe verified on iOS 26, storage/d
 capture (GPS/compass readings, photo, save), session history + zip export, and the offline vector
 basemap — the app is field-usable offline as of Phase 3. Phase 4 needs a `public/basemap.pmtiles`
 the user produces themselves (README → Offline basemap) and has **not yet been signed off on
-device**: run the Phase 4 section of `docs/ios-manual-checklist.md`. Phase 5 is sync. See `field-survey-pwa-prompt.md` for the original brief. The approved
+device**: run the Phase 4 section of `docs/ios-manual-checklist.md`. Phase 5 is sync. The mobile
+design pass is implemented — `docs/styling.md` describes what was built and the constraints any
+change has to keep, `docs/design/` holds the handoff and mockups it came from. **The stylesheet is
+no longer a placeholder**; do not restyle from scratch without reading `docs/styling.md` first.
+See `field-survey-pwa-prompt.md` for the original brief. The approved
 architecture corrected several of the brief's technical choices (raster tiles → PMTiles/MapLibre,
 download-as-primary-export → Web Share-as-primary) — read the plan history / recent commits before
 assuming the brief's map or export sections still describe the built app.
@@ -120,8 +124,10 @@ standalone })`, browser globals injected same as `probe/capabilities.js`, so it'
   **only** module that imports `maplibre-gl`/`pmtiles`, and `main.js` is its only importer
   (dynamic `import()`, so ~1.5 MB of renderer stays out of the startup bundle) — same rule as
   `photo/encode.js`. Everything else is pure and node-tested: `style.js` (one font stack, no
-  sprite), `overlays.js` (position dot, accuracy-ring expression, marker FeatureCollection —
-  deliberately _not_ reusing `domain/geojson.js`, whose bytes sync depends on), `followMode.js`,
+  sprite), `overlays.js` (position dot, accuracy-ring expression, marker FeatureCollection, and
+  the layer **paint** — the pending/synced markers are filled-vs-hollow rather than green/red, and
+  live here rather than in `mapAdapter.js` so that distinction is node-testable; deliberately
+  _not_ reusing `domain/geojson.js`, whose bytes sync depends on), `followMode.js`,
   `viewport.js`, `basemapSelection.js` (which region is active, and which merely _suggested_),
   `pmtilesSource.js` (an `ArrayBuffer`-backed pmtiles `Source`), `glyphs.js`, `manifest.js`
   (Node-only, for the generator script). `src/ui/CaptureMap.js` receives an injected `createMap`
