@@ -28,16 +28,21 @@ export function ObservationsList({ observations }) {
     <ul class="observations-list">
       ${observations.map((obs) => {
         const poor = accuracyQuality(obs.gpsAccuracyM) === 'poor';
+        // One string rather than three interpolations: htm drops the
+        // whitespace around a line break between expressions, so a wrapped
+        // template loses the spaces around the separators.
+        const meta = [
+          formatLatLon(obs.lat, obs.lon),
+          formatAccuracy(obs.gpsAccuracyM),
+          obs.headingDeg == null ? '—' : formatHeading(obs.headingDeg),
+        ].join(' · ');
         return html`
           <li key=${obs.id} class="observations-row">
             <p class="observations-row-head">
               <span class="observations-time">${formatTime(obs.fixAt)}</span>
               <${SyncBadge} synced=${obs.synced} />
             </p>
-            <p class="observations-meta">
-              ${formatLatLon(obs.lat, obs.lon)} · ${formatAccuracy(obs.gpsAccuracyM)} ·
-              ${obs.headingDeg == null ? '—' : formatHeading(obs.headingDeg)}
-            </p>
+            <p class="observations-meta">${meta}</p>
             ${obs.note ? html`<p class="observations-note">${obs.note}</p>` : null}
             ${
               obs.photoId

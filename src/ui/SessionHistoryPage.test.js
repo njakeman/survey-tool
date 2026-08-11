@@ -80,8 +80,30 @@ describe('SessionHistoryPage — list', () => {
     );
 
     await screen.findByText('Site A');
-    expect(screen.getByText('2026-08-05')).toBeInTheDocument();
-    expect(screen.getByText('2 saved')).toBeInTheDocument();
+    // One metadata line rather than two loose spans.
+    expect(screen.getByText('2026-08-05 · 2 saved')).toBeInTheDocument();
+  });
+
+  test('totals what is still unsynced, which is the thing worth knowing before leaving signal', async () => {
+    const service = createFakeService({
+      sessions: [CLOSED_A, CLOSED_B],
+      observationsBySession: { 'sess-a': [OBS, OBS], 'sess-b': [OBS] },
+    });
+    render(
+      html`<${SessionHistoryPage} service=${service} exportSession=${vi.fn()} onBack=${vi.fn()} />`,
+    );
+
+    expect(await screen.findByText(/3 observations not yet synced/i)).toBeInTheDocument();
+  });
+
+  test('no unsynced summary when there is nothing pending', async () => {
+    const service = createFakeService({ sessions: [CLOSED_A] });
+    render(
+      html`<${SessionHistoryPage} service=${service} exportSession=${vi.fn()} onBack=${vi.fn()} />`,
+    );
+
+    await screen.findByText('Site A');
+    expect(screen.queryByText(/not yet synced/i)).not.toBeInTheDocument();
   });
 
   test('lists multiple past sessions newest first', async () => {

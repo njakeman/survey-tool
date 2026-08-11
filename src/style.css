@@ -605,7 +605,7 @@ button {
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-1);
 }
 
 .basemap-picker-list > li {
@@ -614,39 +614,115 @@ button {
   gap: var(--space-1);
 }
 
-.basemap-picker-list > li > button:first-child {
+.basemap-picker-row {
   display: flex;
-  flex-direction: column;
   align-items: flex-start;
-  gap: 0.15rem;
+  gap: 10px;
   width: 100%;
+  min-height: 3rem;
+  padding: 14px 12px;
   text-align: left;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--rule);
+  color: inherit;
 }
 
-.basemap-picker-list > li > button[aria-current='true'] {
-  border-color: var(--accent);
-  border-width: 2px;
-  font-weight: 700;
+/* In use is marked by aria-current, a filled glyph, a fill, a left border
+   AND the word. Deliberate redundancy — see the note at the top of
+   BasemapPicker.js. */
+.basemap-picker-row[aria-current='true'] {
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-left: 4px solid var(--accent);
+  border-radius: var(--radius);
+}
+
+.basemap-picker-row.is-unavailable {
+  opacity: 0.55;
+}
+
+.basemap-picker-glyph {
+  flex: none;
+  width: 13px;
+  height: 13px;
+  margin-top: 4px;
+  border-radius: 2px;
+}
+
+.glyph-filled {
+  background: var(--accent);
+}
+
+.glyph-solid {
+  border: 2px solid color-mix(in srgb, var(--ink) 45%, transparent);
+}
+
+.glyph-dotted {
+  border: 2px dotted color-mix(in srgb, var(--ink) 40%, transparent);
+}
+
+.basemap-picker-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
 }
 
 .basemap-picker-name {
   font-size: var(--type-control);
+  font-weight: 700;
 }
 
-.basemap-picker-size,
-.basemap-picker-state {
+.basemap-picker-size {
   font-size: var(--type-small);
   color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A 6px track under the metadata, filled from the download's own progress
+   callback. --progress is set inline because it is the one value in the
+   sheet that genuinely changes per frame. */
+.basemap-picker-progress {
+  display: block;
+  height: 6px;
+  margin-top: 6px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--ink) 12%, transparent);
+  background-image: linear-gradient(var(--accent), var(--accent));
+  background-repeat: no-repeat;
+  background-size: var(--progress, 0%) 100%;
+}
+
+.basemap-picker-state {
+  flex: none;
+  font-size: var(--type-fine);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.badge-in-use {
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
+}
+
+/* Indented to sit under the row it belongs to, not floating between two. */
+.basemap-picker-remove {
+  margin-left: 25px;
+  align-self: flex-start;
 }
 
 .basemap-picker-error {
-  color: var(--danger-strong);
   margin: 0;
 }
 
 .basemap-picker-note,
 .basemap-picker-empty {
   margin: 0;
+  font-size: var(--type-small);
+  color: var(--text-secondary);
 }
 
 /* Session history: a read-only list of past sessions, each opening its own
@@ -666,24 +742,38 @@ button {
   margin: 0;
   padding: 0;
   width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
 }
 
 /* One button fills each row: the whole row is the touch target, not a link
    buried in text. */
-.session-history-list > li > button {
+.session-history-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 3rem;
+  padding: 14px 0 13px;
+  text-align: left;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--rule);
+  color: inherit;
+}
+
+.session-history-body {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: var(--space-1);
-  width: 100%;
-  text-align: left;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
 }
 
 .session-history-name {
   font-size: var(--type-control);
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .session-history-date,
@@ -693,14 +783,72 @@ button {
   font-variant-numeric: tabular-nums;
 }
 
+.session-history-chevron {
+  flex: none;
+  font-size: 20px;
+  color: color-mix(in srgb, var(--ink) 35%, transparent);
+}
+
+/* The one fact worth having before driving out of signal. */
+.session-history-unsynced {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--type-meta);
+}
+
 .session-history-empty {
   color: var(--text-muted);
 }
 
+.session-detail-title {
+  margin: 0;
+  font-size: var(--type-heading-xl);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.session-detail-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: var(--type-small);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.session-history-export {
+  width: 100%;
+  min-height: 3.25rem;
+}
+
 .session-history-export-message,
 .capture-page-export-message {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
   margin: 0;
+  font-size: var(--type-small);
   color: var(--text-secondary);
+}
+
+/* Shared by both list views: a back control and the screen's title, over a
+   rule. Switching views never changes the page width — both run at --shell. */
+.page-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--rule);
+}
+
+.page-header h2 {
+  margin: 0 0 0 auto;
+  font-size: var(--type-title);
+  font-weight: 700;
 }
 
 /* Footer navigation. Visually a link, but still a real button with a real

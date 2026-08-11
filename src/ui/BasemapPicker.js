@@ -2,16 +2,28 @@ import { html } from 'htm/preact';
 import { useState } from 'preact/hooks';
 
 // Choosing which offline map region the map panel shows. A full view rather
-// than a control inside the 40vh panel: there can be several regions, each
+// than a control inside the map panel: there can be several regions, each
 // needing a size, a state and a download or remove action.
 //
-// Follows SessionHistoryPage's list shape — one button filling each row —
-// with aria-current marking the region in use, which that page has no
-// equivalent of.
+// This is the one screen where picking the wrong row costs a multi-megabyte
+// download over a field connection, so the in-use region is marked four
+// times over — aria-current, a filled glyph, a left border and the word
+// itself. That redundancy is deliberate, not belt-and-braces.
 
 function formatMegabytes(bytes) {
   if (!bytes) return null;
   return `${Math.round(bytes / 1_000_000)} MB`;
+}
+
+// "24 MB · vector · z5–15". Every part is optional: offline, listAvailable()
+// falls back to what is on the device, and an older download may have no
+// recorded type or zoom range. Blanks are omitted rather than printed.
+function describeRegion(region) {
+  const zooms =
+    region.minZoom != null && region.maxZoom != null
+      ? `z${region.minZoom}–${region.maxZoom}`
+      : null;
+  return [formatMegabytes(region.sizeBytes), region.tileType, zooms].filter(Boolean).join(' · ');
 }
 
 function describeProgress(progress) {
@@ -19,6 +31,11 @@ function describeProgress(progress) {
   const { receivedBytes, totalBytes } = progress;
   if (!totalBytes) return `Downloading — ${formatMegabytes(receivedBytes) ?? '0 MB'}`;
   return `Downloading — ${Math.round((receivedBytes / totalBytes) * 100)}%`;
+}
+
+function progressFraction(progress) {
+  if (!progress?.totalBytes) return null;
+  return Math.min(1, progress.receivedBytes / progress.totalBytes);
 }
 
 export function BasemapPicker({
@@ -59,8 +76,10 @@ export function BasemapPicker({
 
   return html`
     <main class="basemap-picker">
-      <button type="button" onClick=${onBack}>Back to capture</button>
-      <h2>Offline maps</h2>
+      <div class="page-header">
+        <button type="button" class="button-outline" onClick=${onBack}>← Back to capture</button>
+        <h2>Offline maps</h2>
+      </div>
 
       ${
         !manifestAvailable
@@ -79,23 +98,40 @@ export function BasemapPicker({
       ${!online ? html`<p class="basemap-picker-note">Connect to download a new region.</p>` : null}
 
       <ul class="basemap-picker-list">
-        ${regions.map(
-          (region) => html`
+        ${regions.map((region) => {
+          const downloading = busyId === region.id;
+          const inUse = region.id === activeId;
+          // Filled for in use, solid outline for on the device, dotted for
+          // absent — the state is a shape before it is a colour.
+          const glyph = inUse ? 'filled' : region.downloaded ? 'solid' : 'dotted';
+          return html`
             <li key=${region.id}>
               <button
                 type="button"
-                aria-current=${region.id === activeId ? 'true' : undefined}
-                disabled=${busyId === region.id || (!region.downloaded && !online)}
+                class=${`basemap-picker-row${!region.downloaded && !online ? ' is-unavailable' : ''}`}
+                aria-current=${inUse ? 'true' : undefined}
+                disabled=${downloading || (!region.downloaded && !online)}
                 onClick=${() => handleRow(region)}
               >
-                <span class="basemap-picker-name">${region.name}</span>
-                <span class="basemap-picker-size">${formatMegabytes(region.sizeBytes) ?? ''}</span>
+                <span class=${`basemap-picker-glyph glyph-${glyph}`} aria-hidden="true"></span>
+                <span class="basemap-picker-body">
+                  <span class="basemap-picker-name">${region.name}</span>
+                  <span class="basemap-picker-size">${describeRegion(region)}</span>
+                  ${
+                    downloading
+                      ? html`<span
+                          class="basemap-picker-progress"
+                          style=${`--progress: ${(progressFraction(progress) ?? 0) * 100}%`}
+                        ></span>`
+                      : null
+                  }
+                </span>
                 <span class="basemap-picker-state">
                   ${
-                    busyId === region.id
+                    downloading
                       ? describeProgress(progress)
-                      : region.id === activeId
-                        ? 'In use'
+                      : inUse
+                        ? html`<span class="chip badge-in-use">In use</span>`
                         : region.downloaded
                           ? 'On this device'
                           : 'Not downloaded'
@@ -104,19 +140,25 @@ export function BasemapPicker({
               </button>
               ${
                 errors[region.id]
-                  ? html`<p class="basemap-picker-error" role="alert">${errors[region.id]}</p>`
+                  ? html`<p class="basemap-picker-error panel-danger" role="alert">
+                      ${errors[region.id]}
+                    </p>`
                   : null
               }
               ${
-                region.downloaded && region.id !== activeId
-                  ? html`<button type="button" onClick=${() => onRemove(region.id)}>
+                region.downloaded && !inUse
+                  ? html`<button
+                      type="button"
+                      class="button-outline basemap-picker-remove"
+                      onClick=${() => onRemove(region.id)}
+                    >
                       Remove ${region.name}
                     </button>`
                   : null
               }
             </li>
-          `,
-        )}
+          `;
+        })}
       </ul>
     </main>
   `;

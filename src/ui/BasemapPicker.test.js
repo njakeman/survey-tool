@@ -53,6 +53,26 @@ describe('BasemapPicker', () => {
     expect(screen.getByText(/18 MB/)).toBeInTheDocument();
   });
 
+  test('says what kind of archive a region is and how deep it goes', () => {
+    // tileType and the zoom range are already in the manifest and already
+    // carried through basemapService — and they matter before committing to
+    // a download: a raster region behaves differently on screen, and z5–15
+    // will not zoom in as far as the surveyor might expect.
+    renderPicker({
+      regions: [{ ...SOUTH, tileType: 'vector', minZoom: 5, maxZoom: 15 }],
+    });
+
+    expect(screen.getByText('24 MB · vector · z5–15')).toBeInTheDocument();
+  });
+
+  test('omits what the manifest could not tell us rather than printing blanks', () => {
+    // Offline, listAvailable() falls back to what is on the device, and an
+    // older download may have no recorded type or zoom range.
+    renderPicker({ regions: [{ ...SOUTH, tileType: null, minZoom: null, maxZoom: null }] });
+
+    expect(screen.getByText('24 MB')).toBeInTheDocument();
+  });
+
   test('marks which region the map is currently using', () => {
     renderPicker({ activeId: 'south' });
 
