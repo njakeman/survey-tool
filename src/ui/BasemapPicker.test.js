@@ -175,3 +175,43 @@ describe('BasemapPicker', () => {
     expect(onBack).toHaveBeenCalled();
   });
 });
+
+describe('BasemapPicker online imagery row', () => {
+  const IMAGERY = {
+    id: 'online-imagery',
+    name: 'Aerial imagery (online)',
+    online: true,
+  };
+
+  test('describes itself as streamed, with its own state text', () => {
+    renderPicker({ regions: [SOUTH, IMAGERY] });
+
+    expect(screen.getByText('imagery streamed over the network')).toBeInTheDocument();
+    expect(screen.getByText('Online — needs signal')).toBeInTheDocument();
+  });
+
+  test('tapping it selects — there is nothing to download', async () => {
+    const { onSelect, onDownload, onBack } = renderPicker({ regions: [SOUTH, IMAGERY] });
+
+    fireEvent.click(screen.getByRole('button', { name: /^Aerial imagery/ }));
+
+    await waitFor(() => expect(onSelect).toHaveBeenCalledWith('online-imagery'));
+    expect(onDownload).not.toHaveBeenCalled();
+    expect(onBack).toHaveBeenCalled();
+  });
+
+  test('is disabled with no connection, exactly like an undownloaded region', () => {
+    // Selecting a map that needs signal while there is none would swap a
+    // working offline map for a grey void.
+    renderPicker({ regions: [SOUTH, IMAGERY], online: false });
+
+    expect(screen.getByRole('button', { name: /^Aerial imagery/ })).toBeDisabled();
+  });
+
+  test('shows the In use chip when it is the active map, and offers no Remove', () => {
+    renderPicker({ regions: [SOUTH, IMAGERY], activeId: 'online-imagery' });
+
+    expect(screen.getByText('In use')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Remove Aerial imagery/ })).toBeNull();
+  });
+});

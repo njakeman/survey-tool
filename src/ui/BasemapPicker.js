@@ -21,6 +21,9 @@ import { formatSize } from './format.js';
 // falls back to what is on the device, and an older download may have no
 // recorded type or zoom range. Blanks are omitted rather than printed.
 function describeRegion(region) {
+  // The online region has no size, no archive type and no zoom range —
+  // saying what it is beats an empty line.
+  if (region.online) return 'imagery streamed over the network';
   const zooms =
     region.minZoom != null && region.maxZoom != null
       ? `z${region.minZoom}–${region.maxZoom}`
@@ -60,7 +63,10 @@ export function BasemapPicker({
   const [errors, setErrors] = useState({});
 
   async function handleRow(region) {
-    if (region.downloaded) {
+    // Downloaded regions and the online one both just become the active map
+    // — there is nothing to fetch for either. Only an absent archive
+    // downloads.
+    if (region.downloaded || region.online) {
       await onSelect(region.id);
       onBack();
       return;
@@ -143,7 +149,9 @@ export function BasemapPicker({
                         ? html`<span class="chip badge-in-use">In use</span>`
                         : region.downloaded
                           ? 'On this device'
-                          : 'Not downloaded'
+                          : region.online
+                            ? 'Online — needs signal'
+                            : 'Not downloaded'
                   }
                 </span>
               </button>

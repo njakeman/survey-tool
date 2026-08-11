@@ -17,6 +17,7 @@ import { createBasemapService } from './app/basemapService.js';
 import { createFeatureLayerService } from './app/featureLayerService.js';
 import { deleteLegacyBasemap } from './storage/basemapStore.js';
 import { chooseActive } from './map/basemapSelection.js';
+import { ONLINE_IMAGERY, isOnlineImagery } from './map/onlineImagery.js';
 import { glyphsUrl } from './map/glyphs.js';
 import { toGridRef } from './geo/osgb.js';
 import './style.css';
@@ -103,6 +104,20 @@ async function main() {
   // at startup. The split chunk is still precached, so the import resolves
   // offline (same rule as photo/encode.js: browser-only, main.js only).
   async function createMap({ container: mapContainer, onUserPan, onFeatureTap }) {
+    // The online imagery region has no archive: hand the adapter the tile
+    // template and let failed fetches surface as warnings. Everything about
+    // the map's behaviour — overlays, picking, feature layers — is identical.
+    if (isOnlineImagery(state.activeRegionId)) {
+      const { createMapAdapter } = await import('./map/mapAdapter.js');
+      return createMapAdapter({
+        container: mapContainer,
+        online: ONLINE_IMAGERY,
+        glyphsUrl: glyphsUrl(import.meta.env.BASE_URL),
+        onUserPan,
+        onFeatureTap,
+        onError: (error) => console.warn('map error', error),
+      });
+    }
     const archiveBuffer = await basemapService.loadArchive(state.activeRegionId);
     if (!archiveBuffer) throw new Error('No offline map archive stored on this device');
     const region = state.regions.find(({ id }) => id === state.activeRegionId);
@@ -134,7 +149,11 @@ async function main() {
         basemapService.listAvailable(),
         basemapService.getSelectedId(),
       ]);
-      state.regions = regions;
+      // The online imagery pseudo-region rides at the end of the list. It is
+      // not part of what the service knows — nothing is stored, nothing is
+      // downloaded — but the picker and the selection logic treat it as one
+      // more region, which is what keeps it one mechanism instead of two.
+      state.regions = [...regions, ONLINE_IMAGERY];
       state.manifestAvailable = manifestAvailable;
       state.selectedRegionId = selectedId;
       state.statusKnown = true;
