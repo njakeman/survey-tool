@@ -18,6 +18,54 @@ describe('buildStyle', () => {
     expect(style.sources.basemap.attribution).toMatch(/OpenStreetMap/);
   });
 
+  test('a raster archive gets a raster source and layer, not the vector layer set', () => {
+    const style = buildStyle({
+      glyphsUrl: GLYPHS_URL,
+      archiveKey: 'basemap-2',
+      tileType: 'raster',
+    });
+
+    expect(style.sources.basemap.type).toBe('raster');
+    expect(style.sources.basemap.url).toBe('pmtiles://basemap-2');
+    expect(style.layers).toHaveLength(1);
+    expect(style.layers[0].type).toBe('raster');
+    expect(style.layers[0].source).toBe('basemap');
+  });
+
+  test('a raster style carries the detected tile size, since nothing else records it', () => {
+    // Wrong tile size renders the imagery at the wrong scale.
+    expect(
+      buildStyle({ glyphsUrl: GLYPHS_URL, tileType: 'raster', tileSize: 256 }).sources.basemap
+        .tileSize,
+    ).toBe(256);
+  });
+
+  test('a raster style asks for no glyphs and no sprite — there is nothing to label', () => {
+    const style = buildStyle({ glyphsUrl: GLYPHS_URL, tileType: 'raster', tileSize: 256 });
+
+    expect(style).not.toHaveProperty('glyphs');
+    expect(style).not.toHaveProperty('sprite');
+  });
+
+  test('a raster style makes no claim about OpenStreetMap, whose data it is not', () => {
+    // The imagery is the surveyor's own; asserting OSM/Protomaps attribution
+    // over it would be plainly false.
+    const style = buildStyle({ glyphsUrl: GLYPHS_URL, tileType: 'raster', tileSize: 256 });
+
+    expect(style.sources.basemap.attribution ?? '').not.toMatch(/OpenStreetMap|Protomaps/);
+  });
+
+  test('an archive attribution is carried through when the archive supplies one', () => {
+    const style = buildStyle({
+      glyphsUrl: GLYPHS_URL,
+      tileType: 'raster',
+      tileSize: 256,
+      attribution: 'Survey imagery © Neil',
+    });
+
+    expect(style.sources.basemap.attribution).toBe('Survey imagery © Neil');
+  });
+
   test('addresses the archive by key, so two open regions cannot collide', () => {
     // The scheme must stay `pmtiles` — the library parses tile URLs with a
     // hardcoded prefix — so per-map uniqueness lives in the key. The source

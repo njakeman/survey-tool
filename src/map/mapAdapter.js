@@ -9,7 +9,7 @@ import {
   observationsFeatureCollection,
   positionFeature,
 } from './overlays.js';
-import { initialZoomFromHeader, maxBoundsFromHeader } from './viewport.js';
+import { initialZoomFromHeader, maxBoundsFromHeader, minZoomFromHeader } from './viewport.js';
 
 // The one module that touches MapLibre. Everything above it (style, overlays,
 // follow mode) is pure and node-tested; everything below it (CaptureMap) sees
@@ -61,6 +61,9 @@ export async function createMapAdapter({
   container,
   archiveBuffer,
   glyphsUrl,
+  tileType = 'vector',
+  tileSize,
+  attribution,
   onUserPan,
   onError,
 }) {
@@ -74,9 +77,13 @@ export async function createMapAdapter({
 
   const map = new MapLibreMap({
     container,
-    style: buildStyle({ glyphsUrl, archiveKey }),
+    style: buildStyle({ glyphsUrl, archiveKey, tileType, tileSize, attribution }),
     center: [header.centerLon, header.centerLat],
     zoom: initialZoomFromHeader(header, SURVEY_ZOOM),
+    // A floor only where the archive has one: below its lowest tile zoom
+    // there is nothing to draw. maxZoom stays unset so overzoom past the
+    // deepest tile still works — blurry beats blank.
+    ...(minZoomFromHeader(header) === null ? {} : { minZoom: minZoomFromHeader(header) }),
     // Deliberately no min/maxZoom: those are the archive's *tile* zooms,
     // carried by the vector source itself. Clamping the map to them would
     // stop the surveyor zooming in past the deepest tile, which MapLibre

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import fixtureUrl from '../../e2e/fixtures/test-basemap.pmtiles?url';
 import northFixtureUrl from '../../e2e/fixtures/test-basemap-north.pmtiles?url';
+import rasterFixtureUrl from '../../e2e/fixtures/test-basemap-raster.pmtiles?url';
 import { createMapAdapter, registeredArchiveCount } from './mapAdapter.js';
 
 // Real MapLibre + real WebGL + the real pmtiles protocol, reading the real
@@ -148,6 +149,25 @@ describe('mapAdapter against real MapLibre', () => {
 
     expect(north.getMaxBounds().getSouth()).toBeCloseTo(53, 1);
     expect(north.container.dataset.mapLoaded).toBe('true');
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  test('renders a raster archive as well as a vector one', async () => {
+    // The user's first real archive was JPEG raster, so this is not a
+    // hypothetical. It also proves the pmtiles protocol serves a MapLibre
+    // raster source, which no unit test can establish.
+    const onError = vi.fn();
+
+    const adapter = await createAdapter({
+      onError,
+      archiveBuffer: await loadFixtureBuffer(rasterFixtureUrl),
+      tileType: 'raster',
+      tileSize: 256,
+    });
+    await adapter.ready;
+
+    expect(adapter.container.querySelector('canvas')).toBeTruthy();
+    expect(adapter.container.dataset.mapLoaded).toBe('true');
     expect(onError).not.toHaveBeenCalled();
   });
 

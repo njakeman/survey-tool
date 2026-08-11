@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { maxBoundsFromHeader, initialZoomFromHeader } from './viewport.js';
+import { maxBoundsFromHeader, initialZoomFromHeader, minZoomFromHeader } from './viewport.js';
 
 const londonHeader = {
   minLon: -1,
@@ -37,6 +37,24 @@ describe('maxBoundsFromHeader', () => {
     expect(
       maxBoundsFromHeader({ ...londonHeader, minLon: -180, maxLon: 180, maxLat: 60 }),
     ).toBeNull();
+  });
+});
+
+describe('minZoomFromHeader', () => {
+  test('stops the surveyor zooming out past where the archive has tiles', () => {
+    // A regional extract typically starts well in — cissbury.pmtiles begins
+    // at z12 — so zooming out below that shows nothing at all.
+    expect(minZoomFromHeader({ ...londonHeader, minZoom: 12, maxZoom: 17 })).toBe(12);
+  });
+
+  test('sets no floor for a degenerate range, which breaks MapLibre outright', () => {
+    // min === max is the crash case the adapter already avoids; keep it out
+    // of the zoom options entirely.
+    expect(minZoomFromHeader({ ...londonHeader, minZoom: 0, maxZoom: 0 })).toBeNull();
+  });
+
+  test('sets no floor for an archive that already starts at the world view', () => {
+    expect(minZoomFromHeader({ ...londonHeader, minZoom: 0, maxZoom: 15 })).toBeNull();
   });
 });
 

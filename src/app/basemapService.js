@@ -153,6 +153,10 @@ export function createBasemapService({ db, fetchFn, manifestUrl, baseUrl, nowIso
         sizeBytes: entry.sizeBytes ?? receivedBytes,
         minZoom: entry.minZoom ?? null,
         maxZoom: entry.maxZoom ?? null,
+        // Without these, an offline raster region would be styled as vector:
+        // a blank map with the archive sitting right there.
+        tileType: entry.tileType ?? 'vector',
+        tileSize: entry.tileSize ?? null,
       },
     });
   }

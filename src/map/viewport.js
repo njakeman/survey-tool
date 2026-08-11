@@ -14,6 +14,16 @@ export function maxBoundsFromHeader(header) {
   ];
 }
 
+export function minZoomFromHeader(header) {
+  // Regional extracts often start well in (cissbury.pmtiles begins at z12),
+  // and zooming out below that shows nothing at all. Skipped when the range
+  // is degenerate — min === max is the case that breaks MapLibre's viewport
+  // maths outright — or when the archive already covers the world view.
+  if (header.maxZoom <= header.minZoom) return null;
+  if (header.minZoom <= 0) return null;
+  return header.minZoom;
+}
+
 export function initialZoomFromHeader(header, surveyZoom) {
   // Open where surveying happens rather than at the archive's overview zoom
   // (follow mode recentres on the first fix anyway), but never claim a depth

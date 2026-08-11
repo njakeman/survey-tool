@@ -32,7 +32,34 @@ function withoutIcons(layer) {
   return { ...layer, layout };
 }
 
-export function buildStyle({ glyphsUrl, archiveKey = 'basemap' }) {
+// A raster archive is the surveyor's own imagery: one source, one layer, no
+// glyphs or sprite because there is nothing to label, and emphatically no
+// OpenStreetMap/Protomaps attribution — that would be a false claim about
+// whose data it is. Any attribution comes from the archive itself.
+function buildRasterStyle({ archiveKey, tileSize, attribution }) {
+  return {
+    version: 8,
+    sources: {
+      basemap: {
+        type: 'raster',
+        url: `pmtiles://${archiveKey}`,
+        tileSize: tileSize ?? 256,
+        ...(attribution ? { attribution } : {}),
+      },
+    },
+    layers: [{ id: 'basemap', type: 'raster', source: 'basemap' }],
+  };
+}
+
+export function buildStyle({
+  glyphsUrl,
+  archiveKey = 'basemap',
+  tileType = 'vector',
+  tileSize,
+  attribution,
+}) {
+  if (tileType === 'raster') return buildRasterStyle({ archiveKey, tileSize, attribution });
+
   const flavor = {
     ...namedFlavor('light'),
     regular: FONT_STACK,

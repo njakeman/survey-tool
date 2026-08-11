@@ -120,6 +120,35 @@ describe('basemapService.listAvailable', () => {
     ]);
   });
 
+  test('remembers that a region is raster, so it does not come back as vector offline', async () => {
+    // Getting this wrong offline would build a vector style over raster
+    // tiles: a blank map, with the archive sitting right there.
+    const raster = {
+      id: 'cissbury',
+      name: 'Cissbury',
+      url: 'basemaps/cissbury.pmtiles',
+      sizeBytes: 12,
+      bounds: [-0.4, 50.83, -0.35, 50.87],
+      minZoom: 12,
+      maxZoom: 17,
+      tileType: 'raster',
+      tileSize: 256,
+    };
+    const fetchFn = routingFetch({
+      [MANIFEST_URL]: () => manifestResponse([raster]),
+      'cissbury.pmtiles': () => streamingResponse([bytes('jpeg bytes')]),
+    });
+    const { service } = await makeService('service-raster-meta', { fetchFn });
+    await service.download('cissbury');
+
+    fetchFn.mockImplementation(() => Promise.reject(new TypeError('Failed to fetch')));
+    const { regions } = await service.listAvailable();
+
+    expect(regions[0]).toEqual(
+      expect.objectContaining({ id: 'cissbury', tileType: 'raster', tileSize: 256 }),
+    );
+  });
+
   test('falls back to bare ids for an archive stored before its metadata was known', async () => {
     const fetchFn = routingFetch({});
     const { db, service } = await makeService('service-list-no-meta', { fetchFn });

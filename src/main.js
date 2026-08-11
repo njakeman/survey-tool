@@ -87,11 +87,16 @@ async function main() {
   async function createMap({ container: mapContainer, onUserPan }) {
     const archiveBuffer = await basemapService.loadArchive(state.activeRegionId);
     if (!archiveBuffer) throw new Error('No offline map archive stored on this device');
+    const region = state.regions.find(({ id }) => id === state.activeRegionId);
     const { createMapAdapter } = await import('./map/mapAdapter.js');
     return createMapAdapter({
       container: mapContainer,
       archiveBuffer,
       glyphsUrl: glyphsUrl(import.meta.env.BASE_URL),
+      // Raster regions get a wholly different style; the type travels with
+      // the region so it survives the manifest being unreachable.
+      tileType: region?.tileType ?? 'vector',
+      tileSize: region?.tileSize,
       onUserPan,
       // Map errors are diagnostics, not app failures: a missing tile must
       // never reach the fatal-error banner over a working capture page.
