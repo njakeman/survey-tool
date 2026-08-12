@@ -13,6 +13,9 @@ completed export), **Load session** (history detail → `reopenSession`, the del
 continuation path import is not: refuses while any session is open — an unguarded reopen would
 silently steal capture via `findOpenSession` — keeps the export stamps, and signals the
 always-mounted CapturePage through App's `sessionEpoch` bump, which also clears Undo),
+**session deletion** (`storage/sessionDelete.js`, one transaction over all six stores a session
+can reach; the service refuses the open session; the list's "Delete exported sessions" purges
+only what the badge predicate reads as fully exported; warn-don't-block on unexported data),
 the offline PMTiles basemap with multi-region storage, **feature layers**
 (the surveyor's own GeoJSON, tappable, with the amber selection highlight and "Record here" —
 which on a polygon records the centroid via `src/geo/centroid.js`), **OS grid references**
@@ -441,3 +444,10 @@ standalone })`, browser globals injected same as `probe/capabilities.js`, so it'
   surveyor chooses to reload, and an in-progress observation's note/photo (in-memory only until
   Save) can never be wiped by a surprise reload. `e2e/install.spec.js` guards the failure mode
   directly by asserting no same-origin resource 404s during a fresh load.
+- The fatal banner ignores **muted cross-origin errors** (`isMutedErrorEvent`,
+  `src/error-display.js`: null error object + no filename — WebKit's sanitized payload for
+  browser-internal/extension script, seen on iOS around the share sheet). They cannot be app
+  code (every app script is same-origin) and carry nothing actionable; real errors keep the
+  banner, which is the only diagnostics channel on an installed PWA. Guarded in
+  `e2e/install.spec.js` in both directions — do not "fix" a quiet console by removing the
+  filter, and do not widen it beyond the muted signature.

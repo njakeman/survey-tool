@@ -380,6 +380,12 @@ anything captured after loading honestly reads Not exported. While a session is 
 observation's note can also be edited in place from the list (the one post-save amendment; the
 history view stays read-only).
 
+Sessions can also be **deleted** — permanently and locally, observations, photos and voice notes
+together, behind a two-step confirm that states how many observations have never been exported
+before you commit. **Delete exported sessions** clears every session whose observations have all
+left the device (the same test the ✓ Exported badge uses), leaving anything unexported standing.
+There is no undo: export first if the data matters.
+
 ## Data
 
 Sessions live on the device and leave it only through export — there is no server, no token, and

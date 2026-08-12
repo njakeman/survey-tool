@@ -456,6 +456,28 @@ editing a saved observation's note.
       on a bare row; the history view offers no editing anywhere
 - [ ] An edited note survives the export/import round trip with the edited text
 
+## Muted-error banner fix and session deletion (2026-08-12)
+
+The intermittent red "Something went wrong loading the app: Script error. (:0:0)" around the
+share sheet was WebKit's sanitized cross-origin error payload reaching an unfiltered global
+handler — never app code. Muted events (null error, no filename) are now ignored with a console
+warning; real errors keep the banner, which remains the only diagnostics channel on an installed
+PWA.
+
+- [ ] Export/share a session several times, completing and dismissing the sheet — the red
+      banner never appears (a connected Web Inspector may log "Ignored muted cross-origin
+      error", which is the fix working, not a fault)
+- [ ] **Delete a session** that has photos and voice notes: two-step (Delete session → Delete
+      permanently), gone from the list, still gone after a force-quit relaunch, and device
+      storage actually shrinks (Settings → Safari or the probe page's estimate)
+- [ ] Deleting a never-exported session states "N observations have never been exported" before
+      the red commit; Keep session backs out without deleting
+- [ ] **Delete exported sessions** appears only when at least one session reads ✓ Exported;
+      the confirm tap names the count; unexported and partly exported sessions are left standing
+- [ ] Delete an imported copy — the original session (if still on the device) is untouched
+- [ ] With a session open, its row is absent from history as ever — confirm there is no route
+      to deleting the live session
+
 ## Later phases (fill in as each lands)
 
 - [ ] Phase 6 — app storage surviving 2+ weeks of non-use (requires waiting, or trusting
