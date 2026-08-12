@@ -6,9 +6,10 @@
 //
 //   node scripts/build-feature-layer-manifest.mjs
 //
-// Also runs automatically before `npm run build` (package.json `prebuild`),
-// alongside the basemap manifest. Commit the regenerated file so `npm run
-// dev`, which serves public/ without a build, shows the same list.
+// Also runs automatically before `npm run build` and `npm run dev`
+// (package.json `prebuild`/`predev`), alongside the basemap manifest — drop
+// a .geojson into public/feature-layers/ and either command picks it up.
+// Still commit the regenerated file, so the deployed manifest matches.
 //
 // Unlike the basemap archives, these files are read whole — which is the
 // point: a feature layer that is big enough for that to hurt is big enough to

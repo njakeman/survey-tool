@@ -102,8 +102,8 @@ what does and does not work.
 `--bbox` is `minLon,minLat,maxLon,maxLat`. The filename becomes the region's name in the app
 (`north-wiltshire.pmtiles` → "North Wiltshire"), and the manifest records each archive's real
 bounds, zooms and size by reading its header — so the published list can't drift from the files.
-The manifest is also regenerated automatically by `npm run build`; commit it so `npm run dev`,
-which serves `public/` without a build, shows the same list.
+The manifest is also regenerated automatically by `npm run build` and `npm run dev`; commit it
+so the deployed list matches what you saw locally.
 
 Once deployed, the app's map panel offers "Choose a region". The surveyor downloads what they
 need, and the app then suggests switching when their GPS fix falls inside a different downloaded
@@ -156,6 +156,9 @@ public/feature-layers/
 ```sh
 npm run layers:manifest   # regenerates public/feature-layers/manifest.json
 ```
+
+(`npm run build` and `npm run dev` also regenerate it automatically — dropping the files in and
+starting either is enough. Commit the regenerated manifest with the layer.)
 
 Every key of the sidecar is optional:
 

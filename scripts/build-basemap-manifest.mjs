@@ -4,10 +4,10 @@
 //
 //   node scripts/build-basemap-manifest.mjs
 //
-// Also runs automatically before `npm run build` (package.json `prebuild`),
-// so dropping a new .pmtiles into public/basemaps/ and deploying is enough —
-// there is no second step to forget. Commit the regenerated manifest too, so
-// `npm run dev`, which serves public/ without a build, shows the same list.
+// Also runs automatically before `npm run build` and `npm run dev`
+// (package.json `prebuild`/`predev`), so dropping a new .pmtiles into
+// public/basemaps/ is enough — there is no second step to forget. Still
+// commit the regenerated manifest, so the deployed list matches.
 //
 // Only headers are read, a few KB per archive, never whole files: see
 // FileHandleSource in src/map/manifest.js.

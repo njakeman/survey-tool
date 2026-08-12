@@ -5,6 +5,7 @@
   "type": "module",
   "description": "Offline-first field survey PWA — GPS, compass and photo observations synced to GitHub.",
   "scripts": {
+    "predev": "node scripts/build-basemap-manifest.mjs && node scripts/build-feature-layer-manifest.mjs",
     "dev": "vite",
     "basemaps:manifest": "node scripts/build-basemap-manifest.mjs",
     "layers:manifest": "node scripts/build-feature-layer-manifest.mjs",
