@@ -14,9 +14,4 @@ public/geodesy/
 # Build output and vendored binary assets.
 dist/
 public/fonts/
-
-# The design handoff, kept verbatim as received: inline-styled mockups and a
-# generated runtime from the tool that authored them. Reformatting it would
-# make it no longer the thing that was handed over.
-docs/design/
 *.geojson

@@ -1,22 +1,15 @@
 # Styling: the implemented design
 
-The stylesheet is no longer interim. It implements the mobile design pass in `docs/design/` — open
-`docs/design/mockups.dc.html` in a browser for the visual reference, and `docs/design/README.md`
-for the handoff brief it came with. The colours, type scale, spacing and border treatments here
-are the design's; where this document and the mockups disagree, the mockups are the intent and
-this file is what was built.
+The stylesheet is no longer interim, and this file is the design record: the palette, type
+scale, spacing, border treatments and every component's intent, in the order they were designed.
+Two passes produced it — the original mobile design pass, then a second covering the trace
+surfaces, **night mode**, the **locator marker** and the **app icon** (see _The second design
+pass_ below, including the one deliberate deviation).
 
-Two surfaces postdate the handoff and have no mockup: the **feature layer** rows in the picker
-view and the **feature sheet** under the map. Both were built from the design's existing
-vocabulary — the picker row shape, the surface/rule/accent-border treatment, the eyebrow — rather
-than inventing anything, so they should read as part of the same system. Nobody has checked that
-on a device.
-
-The **trace mode** surfaces were initially assembled from the existing vocabulary while awaiting
-a design pass (`docs/design/trace-modes-handoff.md` was the inventory sent out). That pass came
-back and was implemented on 2026-08-12 — `docs/design/mobile-design-pass-2.md` is its handoff,
-covering the redesigned trace surfaces, **night mode**, the **locator marker** and the **app
-icon**. See _The second design pass_ below for what was built and the one deliberate deviation.
+Two surfaces were built between the passes from the existing vocabulary alone — the **feature
+layer** rows in the picker view and the **feature sheet** under the map — using the picker row
+shape, the surface/rule/accent-border treatment and the eyebrow rather than inventing anything,
+so they should read as part of the same system. Nobody has checked that on a device.
 
 Everything lives in one file — `src/style.css`, imported once from `src/main.js`. There is no
 framework, no build step for CSS, and no component-scoped styles. Markup is
@@ -60,12 +53,11 @@ happened — and each is still binding on anything added later.
    2 (region suggestion, and the picking crosshair) and 3 (the picking confirm panel, which must
    stay tappable above the crosshair) — keep that ordering or the suggestion can be obscured.
 
-   The handoff specified **236px** and it was built at that. Marking a distant point broke it: the
+   The design specified **236px** and it was built at that. Marking a distant point broke it: the
    confirm panel takes the bottom ~94px, and a crosshair centred in 236px had its target _behind_
    that panel, with nothing to aim at. 300px, with the reticle a third of the way down, leaves
-   77px of clear map above and below it. This is a deliberate divergence from `docs/design/`,
-   which is kept verbatim as received — it is not a mockup that has been superseded so much as a
-   density the design could not have anticipated, since picking did not exist then.
+   77px of clear map above and below it. A deliberate divergence — a density the original design
+   could not have anticipated, since picking did not exist then.
 
    **Every control on the map lives in one flex row.** Pinned individually to left, centre and
    right, "Change map", "Mark a distant point" and "Re-centre" came to roughly 380px across a
@@ -103,7 +95,7 @@ palette to maintain.
 banner keep their light ground in both schemes, so they read as a slip of paper laid over the
 interface — which is what an alert is for. `.capture-map-suggestion` therefore pins its text
 colour to the light ink literal rather than the token, which would invert out from under it. This
-follows the handoff, and it is the one part of the palette worth a second look on a real device at
+is deliberate, and it is the one part of the palette worth a second look on a real device at
 night.
 
 ## Type
@@ -204,7 +196,7 @@ than only visible on a real archive. The colours are literals keyed to the map's
 flavour: MapLibre paints on a canvas and cannot read CSS custom properties, and the basemap style
 does not follow the OS colour scheme.
 
-The handoff specifies a **rotated square with a dashed stroke**. Neither is expressible in a
+The design drew a **rotated square with a dashed stroke**. Neither is expressible in a
 MapLibre circle layer — there is no dashed circle stroke, and a rotated square needs a symbol
 layer with two bundled sprite images, which would be new binary assets to vendor and precache.
 Fill-versus-hollow satisfies constraint 6 on its own, so the sprites are unbuilt. If the dash
@@ -226,12 +218,11 @@ turns out to matter at map scale over real imagery, that is the route.
 
 Honest gaps, not oversights:
 
-- **No install prompt.** The handoff designs one (`1k`) — a pinned card explaining Share → Add to
+- **No install prompt.** The design pass drew one — a pinned card explaining Share → Add to
   Home Screen, shown when `navigator.standalone` is false, with a persisted dismissal. It was the
-  pass's only new piece of state and was deliberately left out of scope. The design is there if it
-  is wanted.
+  pass's only new piece of state and was deliberately left out of scope.
 - **The probe page still runs at `--shell-wide`** while every other screen runs at `--shell`, so
-  switching to it changes the page width. The handoff excludes it from scope, and it is developer
+  switching to it changes the page width. Excluded from the design's scope, and it is developer
   diagnostics reached from a footer link.
 - **The dashed marker stroke**, above.
 - **Nothing here has been seen on a device.** Colour, contrast and touch comfort in sunlight are
@@ -239,10 +230,9 @@ Honest gaps, not oversights:
 
 ## The second design pass (2026-08-12)
 
-`docs/design/mobile-design-pass-2.md` (its mockups are in the zip at
-`docs/Mobile app design exploration.zip`) answered the trace-modes handoff and added night mode,
-the locator and the icon. All of it is implemented; the notes below are what the stylesheet now
-encodes and what is binding on later changes.
+The second pass redesigned the trace surfaces and added night mode, the locator and the icon.
+All of it is implemented; the notes below are what the stylesheet now encodes and what is
+binding on later changes.
 
 - **The one-accent rule.** At most one accent-filled button per surface, and it is always the
   action that moves the record toward being saved: Finish on a live trace strip, Resume on the

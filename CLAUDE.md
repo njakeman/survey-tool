@@ -4,44 +4,36 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-Phases 1–4 are complete: device capability probe verified on iOS 26, storage/data model layer,
-capture (GPS/compass readings, photo, save), session history + zip export, and the offline vector
-basemap — the app is field-usable offline as of Phase 3. Phase 4 needs a `public/basemap.pmtiles`
-the user produces themselves (README → Offline basemap) and has **not yet been signed off on
-device**: run the Phase 4 section of `docs/ios-manual-checklist.md`. Phase 5 was to be GitHub sync; it was **dropped entirely on 2026-08-11** (user decision — export
-to device covers the need) and replaced by **session import**: Session history → Import reads an
-exported zip (or bare session.geojson) back in, always as a copy under fresh ids, and the
-Pending/Synced badge became the **Exported** badge (`src/ui/ExportBadge.js`), derived from
-`lastExportedAt`/`lastExportCount` which a completed export stamps on the session. Do not propose
-or build sync, token storage, or the crypto envelope. **Voice notes** are built on the back of the
-2026-08-11 device probe (mic works in standalone: webm/opus, ~0.4 MB/min): record on the capture
-page, stored beside photos, in the export zip as `audio/<id>.webm|.m4a`, played back from the
-observations list. The mobile
-design pass is implemented — `docs/styling.md` describes what was built and the constraints any
-change has to keep, `docs/design/` holds the handoff and mockups it came from. **Feature layers**
-(the surveyor's own GeoJSON drawn over the basemap, toggled in "Maps and layers", tappable for
-attributes and "Record here"), **OS grid references** (OSTN15, offline), **marking a point the
-surveyor cannot reach** (a crosshair on the map, recorded as an ordinary observation with
-`positionSource: 'map'`) and **online aerial imagery** (Esri World Imagery as one more region in
-the picker — streamed, never stored, never suggested) are implemented and, like everything since
-Phase 3, **unverified on a device** — see the Feature layers and Grid references sections of `docs/ios-manual-checklist.md`. The **2026-08-12 map
-interaction pass** added the amber **selection highlight** (tapped/linked feature echoed on the
-map — `featureLayerStyle.js`'s highlight source/layers, geometry carried out of `featureQuery.js`),
-**"Record here" on a polygon records the polygon's centroid** through the marked-point path
-(`src/geo/centroid.js`), and **standard map gestures** (one-finger pan, pinch zoom; cooperative
-gestures were tried and failed in the field, and the viewport meta now pins `maximum-scale=1` so
-the interface itself can never pinch-zoom). **The stylesheet is
-no longer a placeholder**; do not restyle from scratch without reading `docs/styling.md` first.
-See `field-survey-pwa-prompt.md` for the original brief. The approved
-architecture corrected several of the brief's technical choices (raster tiles → PMTiles/MapLibre,
-download-as-primary-export → Web Share-as-primary) — read the plan history / recent commits before
-assuming the brief's map or export sections still describe the built app.
+Built and field-usable offline: capture (GPS/compass readings, photo, voice note, save), session
+history, zip export and **import** (always a copy under fresh ids; the **Exported** badge —
+`src/ui/ExportBadge.js` — derives from `lastExportedAt`/`lastExportCount`, stamped only by a
+completed export), the offline PMTiles basemap with multi-region storage, **feature layers**
+(the surveyor's own GeoJSON, tappable, with the amber selection highlight and "Record here" —
+which on a polygon records the centroid via `src/geo/centroid.js`), **OS grid references**
+(OSTN15, offline), **marking a point the surveyor cannot reach** (`positionSource: 'map'` — the
+accuracy figure is the map precision at the picked zoom, the only thing distinguishing measured
+from eyeballed), **online aerial imagery** (Esri, one never-suggested pseudo-region), **trace
+modes** (below), **night mode** (`data-mode="night"` via `src/app/displayMode.js`; an Auto|Night
+footer switch persisted in settings — never inferred from the OS), the **locator marker**
+(`src/map/locator.js`, a DOM marker whose beam width is the compass's uncertainty; stale goes
+hollow-and-dashed; the accuracy ring stays a circle layer) and the station-mark app icon
+(`public/icons/`, maskable entry included). Standard map gestures: one finger pans, pinch zooms,
+and the viewport meta pins `maximum-scale=1` so the interface itself can never pinch-zoom.
 
-**Trace modes are built (2026-08-12, unverified on device** — see the Trace modes section of
-`docs/ios-manual-checklist.md`; design spec in `docs/superpowers/specs/2026-08-12-trace-modes-design.md`**).**
-_Trace a path_ (walk, record a LineString — hedgerow, track, watercourse) and _trace a boundary_
-(walk a perimeter, closed into a Polygon). The shape of what was built, and the decisions that
-are settled:
+**There is no sync and there will be none** (dropped 2026-08-11, user decision — export/import
+covers the need). Do not propose or build sync, token storage, or the crypto envelope. The
+observation `synced`/`syncedAt` fields still exist in stored records, unused — leave them.
+
+**The stylesheet is not a placeholder.** `docs/styling.md` is the design record — tokens, every
+component's treatment, and the constraints binding on change; read it before restyling anything.
+The one-accent rule (at most one accent-filled button per surface, always the one that moves the
+record toward saved) holds everywhere except recording-with-a-good-fix, where Finish and Save
+each move their own record. Android is not a target; README → Android records the audit and the
+TODO list if that changes.
+
+**Trace modes**: _trace a path_ (walk, record a LineString — hedgerow, track, watercourse) and
+_trace a boundary_ (walk a perimeter, closed into a Polygon). The decisions below are settled —
+do not reopen them:
 
 - **Vertex capture is automatic**, thinned by `src/trace/recording.js` (pure reducer over the
   existing shared watch): accuracy gate 20 m, and a fix must move `max(5 m, its own accuracy)`
@@ -77,24 +69,15 @@ are settled:
   comes back as a straight segment, indistinguishable from a pause. Deliberately not coded
   around (no wake-lock); it is a checklist item.
 
-**The second design pass is implemented (2026-08-12, unverified on device** — checklist section
-"Second design pass"; handoff imported as `docs/design/mobile-design-pass-2.md`, mockups in
-`docs/Mobile app design exploration.zip`, as-built notes in `docs/styling.md` → "The second
-design pass"**).** In brief: the trace strip/chooser/recovery surfaces were redesigned (Finish
-wears the accent; the discard confirm _replaces_ the action row; the chooser and recovery are
-suggestion-ground panels; `src/ui/traceGlyphs.js` holds the path/boundary glyph pair), **Export
-moved from the capture-actions row to the page foot** (it acts on the session, not the
-observation being composed), every map trace line gained a **solid casing**
-(`traceCasingColor()` in `overlays.js` — flipped near-black at night via the adapter's
-`setNightMode`), **night mode** landed as a third `data-mode="night"` scheme
-(`src/app/displayMode.js`, Auto|Night footer switch persisted in settings, grayscale+red-multiply
-map filter — never inferred from the OS), the position dot became the **locator DOM marker**
-(`src/map/locator.js` + a maplibre `Marker`; beam width = compass uncertainty, no compass = no
-beam, stale = hollow/dashed; the accuracy ring stays a circle layer), and the **app icon** is
-now the station mark (`public/icons/`, maskable entry included, `apple-touch-icon-180.png` in
-`index.html`). One deliberate deviation from the design text: point capture (and photo/voice)
-stays live mid-trace per the settled capture-continues decision, so Finish and Save can both be
-accent in exactly that state. The one-accent rule holds everywhere else — keep it.
+A few pointers the styling record leans on: every map trace line rides a **solid casing**
+(`traceCasingColor()` in `overlays.js`, flipped near-black at night through the adapter's
+`setNightMode`); `src/ui/traceGlyphs.js` holds the path/boundary glyph pair used by the chooser
+and the list rows; **Export lives at the page foot**, not in the capture-actions row — it acts
+on the session, not the observation being composed.
+
+**Everything since the capture phase is unverified on a real device.**
+`docs/ios-manual-checklist.md` is the gate, unticked from Phase 3 onward, run against
+`https://survey.field.works/`.
 
 The local dev server needs HTTPS to test geolocation/compass permissions (secure-context gated) —
 `npm run dev -- --host` now serves HTTPS via `vite-plugin-mkcert`, reachable on the LAN. Plain `vite
@@ -227,10 +210,12 @@ standalone })`, browser globals injected same as `probe/capabilities.js`, so it'
   **only** module that imports `maplibre-gl`/`pmtiles`, and `main.js` is its only importer
   (dynamic `import()`, so ~1.5 MB of renderer stays out of the startup bundle) — same rule as
   `photo/encode.js`. Everything else is pure and node-tested: `style.js` (one font stack, no
-  sprite), `overlays.js` (position dot, accuracy-ring expression, marker FeatureCollection, and
-  the layer **paint** — the pending/synced markers are filled-vs-hollow rather than green/red, and
-  live here rather than in `mapAdapter.js` so that distinction is node-testable; deliberately
-  _not_ reusing `domain/geojson.js`, whose bytes sync depends on), `followMode.js`,
+  sprite), `overlays.js` (accuracy-ring expression, marker FeatureCollection, trace shape/casing
+  layers, and the layer **paint** — exported markers are filled-vs-hollow and trace lines
+  solid-vs-dashed rather than colour-coded, and it all lives here rather than in `mapAdapter.js`
+  so those distinctions are node-testable; deliberately _not_ reusing `domain/geojson.js`, whose
+  bytes the export depends on), `locator.js` (the live-fix station mark: beam maths and SVG,
+  pure — the adapter owns the DOM marker it feeds), `followMode.js`,
   `viewport.js`, `basemapSelection.js` (which region is active, and which merely _suggested_),
   `pmtilesSource.js` (an `ArrayBuffer`-backed pmtiles `Source`), `glyphs.js`, `manifest.js`
   (Node-only, for the generator script). `src/ui/CaptureMap.js` receives an injected `createMap`
@@ -277,7 +262,8 @@ standalone })`, browser globals injected same as `probe/capabilities.js`, so it'
 ## Platform constraints
 
 - Target is iOS Safari installed to the home screen, portrait only. Don't add Android compatibility
-  code, but don't actively block Android either.
+  code, but don't actively block Android either — README → Android holds the audit and TODO list
+  should support ever be wanted.
 - Offline-first: launching the app, showing the map, taking GPS/compass readings, capturing photos,
   and saving observations must all work with no network. Network is only required for sync.
 - No backend — static hosting (GitHub Pages) plus the GitHub API only. The app repo

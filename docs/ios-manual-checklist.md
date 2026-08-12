@@ -395,8 +395,8 @@ force-quit recovery path.
 
 ## Second design pass — trace polish, night mode, locator, icon
 
-Implemented 2026-08-12 from `docs/design/mobile-design-pass-2.md`; everything below is styled
-state, so only eyes on the real screen can sign it off.
+Implemented 2026-08-12 (`docs/styling.md` → "The second design pass"); everything below is
+styled state, so only eyes on the real screen can sign it off.
 
 - [ ] **Trace strip in sunlight, gloved:** the walked total reads at arm's length; Finish is
       unmistakably the primary action; the discard confirm replaces the row without anything

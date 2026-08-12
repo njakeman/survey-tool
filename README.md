@@ -6,8 +6,8 @@ sheet as a zip export and comes back through import — no server, no accounts, 
 Built for iOS Safari, installed to the home screen. Live at
 [survey.field.works](https://survey.field.works/).
 
-See [`field-survey-pwa-prompt.md`](./field-survey-pwa-prompt.md) for the original brief and
-[`CLAUDE.md`](./CLAUDE.md) for constraints that bind the implementation.
+See [`CLAUDE.md`](./CLAUDE.md) for the constraints that bind the implementation and
+[`docs/styling.md`](./docs/styling.md) for the design system.
 
 ## Status
 
@@ -39,11 +39,13 @@ map panel simply offers to pick a region.
 Nothing since the capture phase has been verified on a real iPhone. `docs/ios-manual-checklist.md`
 is the gate, and it is unticked from Phase 3 onward.
 
-**Planned next: trace modes.** Two ways to record a shape by walking it, both building on the
-existing GPS watch. _Trace a path_ maps a series of fixes into a line (a hedgerow, a track, a
-watercourse); _trace a boundary_ walks a perimeter and closes it into a polygon (a parcel, a
-habitat patch). Neither is designed yet — see CLAUDE.md's Project status for the constraints any
-design has to respect before this is built.
+**Trace modes** record a shape by walking it: _trace a path_ turns the walk into a line (a
+hedgerow, a track, a watercourse); _trace a boundary_ walks a perimeter and closes it into a
+polygon. Vertices are captured automatically from the GPS watch (accuracy-gated and
+distance-thinned), the walk survives a force-quit, and a finished trace saves as an ordinary
+observation — note, photo, voice note and feature link all attach as usual. The app also has a
+**night mode** (a single-hue red scheme that preserves dark adaptation, map included) and draws
+the live fix as a station-mark locator whose compass beam widens with the heading's uncertainty.
 
 ## Develop
 
@@ -306,14 +308,42 @@ Both are [OFL 1.1](https://openfontlicense.org/) and both are committed — the 
 hand, not on install. Adding any asset means checking the precache count in the build output:
 something unprecached is invisible on a laptop and missing in a field.
 
-The interface implements the design pass in [`docs/design/`](./docs/design/) (open
-`mockups.dc.html` in a browser). [`docs/styling.md`](./docs/styling.md) is the reference for what
-was built, the tokens, and the constraints any future change has to keep.
+[`docs/styling.md`](./docs/styling.md) is the design record: the tokens, the type scale, every
+component's treatment, and the constraints any future change has to keep.
 
 ## Manual verification
 
 Playwright's WebKit is not Safari and not iOS. Before signing off any phase, run through
 [`docs/ios-manual-checklist.md`](./docs/ios-manual-checklist.md) on a real iPhone.
+
+## Android
+
+iOS Safari is the target, but the app is deliberately web-standard and the automated browser
+tests already run Chromium — the engine Android Chrome ships — so almost everything works there
+today. The audit found the manifest (standalone display, portrait, a maskable icon), storage
+(IndexedDB as ArrayBuffers, `persist()`), photo capture, voice notes (webm/opus is Chrome's
+native recording format), Web Share with a download fallback, and the whole map stack need no
+changes at all. What remains before Android could be called supported:
+
+- [ ] **Compass.** `src/sensors/heading.js` listens only to `deviceorientation`; Android Chrome
+      delivers absolute headings on the separate `deviceorientationabsolute` event (its plain
+      event is relative), so the compass currently times out into "Position only — no compass".
+      Fix: feature-detect `'ondeviceorientationabsolute' in window` and subscribe to that event —
+      `toHeadingReading`'s existing `absolute` + `alpha` branch already converts the reading.
+      Node tests via the file's existing fake-target pattern.
+- [ ] **Standalone detection.** `src/main.js` passes bare `navigator.standalone` (an iOS-only
+      flag) into the offline-status subscription, so an installed Android app reports
+      `standalone: false` on the probe page. Use the existing `isStandalone()` from
+      `src/probe/capabilities.js`, which already checks the standard
+      `(display-mode: standalone)` media query.
+- [ ] **A device pass.** An Android section in `docs/ios-manual-checklist.md`: install from
+      Chrome's menu (the maskable icon should render uncropped), compass shows a heading after
+      Start with no permission prompt, share-sheet export flips the Exported badge, the app
+      launches offline from the icon, a screen-lock mid-trace comes back as one straight
+      segment, voice notes record and play back.
+- [ ] **A known cosmetic difference to accept.** Android reports no compass accuracy figure, so
+      the locator deliberately draws its widest, faintest beam — the designed treatment for an
+      unknown uncertainty, not a bug.
 
 ## Deploy
 

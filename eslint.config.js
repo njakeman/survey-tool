@@ -124,9 +124,6 @@ export default [
     },
   },
   {
-    // docs/design/ is the design handoff as received — inline-styled mockups
-    // and the generated runtime from the tool that authored them. Not our
-    // code, and not code that ships.
-    ignores: ['dist/', 'dev-dist/', 'node_modules/', 'docs/design/'],
+    ignores: ['dist/', 'dev-dist/', 'node_modules/'],
   },
 ];

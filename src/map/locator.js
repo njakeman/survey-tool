@@ -10,7 +10,7 @@
 // part of the mark: it stays the existing position-accuracy circle layer,
 // where the metres-to-pixels scaling already works and is already tested.
 //
-// Geometry is the design bundle's icons/locator.svg verbatim: 160×160
+// Geometry is docs/locator.svg verbatim: 160×160
 // viewBox, fix r9.5, ring r22 at 3px, four cardinal ticks r26→35 with round
 // caps, and every stroke sitting on a 6px half-opacity casing drawn first —
 // the same trick as the trace-line casings, and what makes the mark hold on
