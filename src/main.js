@@ -16,6 +16,8 @@ import { zipEntries } from './export/zip.js';
 import { shareOrDownload } from './export/share.js';
 import { importSessionExport } from './import/importSession.js';
 import { subscribeOfflineStatus } from './app/offlineStatus.js';
+import { applyDisplayMode } from './app/displayMode.js';
+import { getSetting, putSetting } from './storage/settingsStore.js';
 import { createBasemapService } from './app/basemapService.js';
 import { createFeatureLayerService } from './app/featureLayerService.js';
 import { deleteLegacyBasemap } from './storage/basemapStore.js';
@@ -263,6 +265,20 @@ async function main() {
     applySelection();
   }
 
+  // Night mode is a persisted, deliberate choice — never inferred from the
+  // OS (that's what auto's prefers-color-scheme handling is for). Applied to
+  // <html data-mode> before first render so a night launch never flashes the
+  // daylight palette at a dark-adapted eye.
+  const storedDisplayMode = (await getSetting(db, 'displayMode')) ?? 'auto';
+  applyDisplayMode(storedDisplayMode, document);
+
+  async function setDisplayMode(mode) {
+    state.displayMode = mode;
+    applyDisplayMode(mode, document);
+    renderApp();
+    await putSetting(db, 'displayMode', mode);
+  }
+
   const container = document.getElementById('app');
 
   // Mutable render state, re-rendered in place (Preact diffs) rather than a
@@ -303,6 +319,7 @@ async function main() {
     featureLayerCatalogue: [],
     featureLayersAvailable: false,
     featureLayers: [],
+    displayMode: storedDisplayMode,
   };
 
   function renderApp() {
@@ -335,6 +352,8 @@ async function main() {
         onDisableLayer=${disableLayer}
         onRemoveLayer=${removeLayer}
         gridRef=${gridRef}
+        displayMode=${state.displayMode}
+        onSetDisplayMode=${setDisplayMode}
       />`,
       container,
     );

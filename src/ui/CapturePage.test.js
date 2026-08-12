@@ -49,6 +49,8 @@ function renderPage({
   onOpenHistory = vi.fn(),
   offlineStatus,
   recordAudio,
+  displayMode = 'auto',
+  onSetDisplayMode = vi.fn(),
 } = {}) {
   return render(
     html`<${CapturePage}
@@ -59,6 +61,8 @@ function renderPage({
       onOpenHistory=${onOpenHistory}
       offlineStatus=${offlineStatus}
       recordAudio=${recordAudio}
+      displayMode=${displayMode}
+      onSetDisplayMode=${onSetDisplayMode}
     />`,
   );
 }
@@ -987,6 +991,33 @@ describe('CapturePage — saving against a point marked on the map', () => {
     fireEvent.click(await screen.findByRole('button', { name: /use this point/i }));
 
     expect(screen.getByLabelText(/note/i)).toHaveValue('far gate');
+  });
+});
+
+describe('CapturePage — display mode', () => {
+  test('the footer offers Auto and Night, and Night is a deliberate tap', async () => {
+    const service = createFakeService({ openSession: null });
+    const { sensors } = createFakeSensors();
+    const onSetDisplayMode = vi.fn();
+    renderPage({ service, sensors, onSetDisplayMode });
+    await screen.findByLabelText(/session name/i);
+
+    const night = screen.getByRole('button', { name: 'Night' });
+    expect(night.getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByRole('button', { name: 'Auto' }).getAttribute('aria-pressed')).toBe('true');
+
+    fireEvent.click(night);
+    expect(onSetDisplayMode).toHaveBeenCalledWith('night');
+  });
+
+  test('night shows as the pressed state', async () => {
+    const service = createFakeService({ openSession: null });
+    const { sensors } = createFakeSensors();
+    renderPage({ service, sensors, displayMode: 'night' });
+    await screen.findByLabelText(/session name/i);
+
+    expect(screen.getByRole('button', { name: 'Night' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Auto' }).getAttribute('aria-pressed')).toBe('false');
   });
 });
 

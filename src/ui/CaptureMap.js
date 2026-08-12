@@ -49,6 +49,7 @@ export function CaptureMap({
   canPick = true,
   gridRef,
   visible,
+  night = false,
 }) {
   const containerRef = useRef(null);
   const adapterRef = useRef(null);
@@ -187,6 +188,12 @@ export function CaptureMap({
     // visible while its sheet is open and until Record here is saved.
     guarded(() => adapterRef.current?.setHighlight(selectedFeature ?? null));
   }, [selectedFeature, adapterReady]);
+
+  useEffect(() => {
+    // The CSS filter handles the tiles; the canvas-drawn trace casings need
+    // their colour flipped to hold against the dimmed ground.
+    guarded(() => adapterRef.current?.setNightMode?.(night));
+  }, [night, adapterReady]);
 
   useEffect(() => {
     const adapter = adapterRef.current;

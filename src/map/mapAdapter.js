@@ -16,6 +16,7 @@ import {
   traceShapeLayers,
   activeTraceData,
   activeTraceLayers,
+  traceCasingColor,
   OBSERVATION_SHAPES_SOURCE_ID,
   ACTIVE_TRACE_SOURCE_ID,
 } from './overlays.js';
@@ -202,6 +203,7 @@ export async function createMapAdapter({
   let pendingPickedPoint;
   let pendingHighlight;
   let pendingActiveTrace;
+  let pendingNightMode;
 
   function featureLayersBefore() {
     // beforeId only once the target layers exist. During the initial load
@@ -351,6 +353,10 @@ export async function createMapAdapter({
         setActiveTrace(pendingActiveTrace);
         pendingActiveTrace = undefined;
       }
+      if (pendingNightMode !== undefined) {
+        setNightMode(pendingNightMode);
+        pendingNightMode = undefined;
+      }
       // Last, so the accuracy ring's paint is applied over a layer stack that
       // is already complete.
       if (pendingPosition !== undefined) {
@@ -399,6 +405,24 @@ export async function createMapAdapter({
       return;
     }
     map.getSource(ACTIVE_TRACE_SOURCE_ID)?.setData(activeTraceData(coordinates));
+  }
+
+  // Night mode reaches the canvas as one flipped colour: the CSS filter dims
+  // everything canvas-drawn, and against that ground the trace-line casings
+  // need to go dark instead of pale (overlays.js traceCasingColor). The
+  // layer structure is untouched — one paint property per casing.
+  function setNightMode(night) {
+    if (!styleLoaded) {
+      pendingNightMode = night;
+      return;
+    }
+    for (const id of [
+      'trace-line-exported-casing',
+      'trace-line-pending-casing',
+      'active-trace-line-casing',
+    ]) {
+      map.setPaintProperty(id, 'line-color', traceCasingColor(Boolean(night)));
+    }
   }
 
   // The provisional mark. Same stash-until-loaded discipline as the others.
@@ -527,6 +551,7 @@ export async function createMapAdapter({
     setPickedPoint,
     setHighlight,
     setActiveTrace,
+    setNightMode,
     getPointAtFraction,
     getZoom,
     onMove,

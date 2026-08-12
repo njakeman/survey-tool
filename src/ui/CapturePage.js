@@ -52,6 +52,8 @@ export function CapturePage({
   onDismissSuggestion,
   onOpenPicker,
   visible,
+  displayMode,
+  onSetDisplayMode,
 }) {
   const [session, setSession] = useState(null);
   const [observations, setObservations] = useState([]);
@@ -536,6 +538,7 @@ export function CapturePage({
         canPick=${!pendingTrace}
         gridRef=${gridRef}
         visible=${visible}
+        night=${displayMode === 'night'}
       />
       ${
         // Not a readout of something happening now — the app asking an
@@ -788,6 +791,24 @@ export function CapturePage({
       }
       <button type="button" class="link" onClick=${onOpenHistory}>Session history</button>
       <button type="button" class="link" onClick=${onOpenProbe}>Device probe</button>
+      <div class="mode-switch" role="group" aria-label="Display mode">
+        <button
+          type="button"
+          class="mode-switch-option"
+          aria-pressed=${displayMode !== 'night'}
+          onClick=${() => onSetDisplayMode?.('auto')}
+        >
+          Auto
+        </button>
+        <button
+          type="button"
+          class="mode-switch-option"
+          aria-pressed=${displayMode === 'night'}
+          onClick=${() => onSetDisplayMode?.('night')}
+        >
+          Night
+        </button>
+      </div>
       ${
         // Grid references come from Ordnance Survey's OSTN15 transformation,
         // which is OS data and wants acknowledging where it is used. One

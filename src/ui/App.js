@@ -38,6 +38,8 @@ export function App({
   onDisableLayer,
   onRemoveLayer,
   gridRef,
+  displayMode,
+  onSetDisplayMode,
 }) {
   const [view, setView] = useState('capture');
 
@@ -117,6 +119,8 @@ export function App({
           visible=${view === 'capture'}
           onOpenProbe=${() => setView('probe')}
           onOpenHistory=${() => setView('history')}
+          displayMode=${displayMode}
+          onSetDisplayMode=${onSetDisplayMode}
         />
       </div>
       ${overlay}

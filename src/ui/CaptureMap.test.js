@@ -15,6 +15,7 @@ function fakeAdapter() {
     setPickedPoint: vi.fn(),
     setHighlight: vi.fn(),
     setActiveTrace: vi.fn(),
+    setNightMode: vi.fn(),
     centreOn: vi.fn(),
     resize: vi.fn(),
     destroy: vi.fn(),
@@ -111,6 +112,17 @@ describe('CaptureMap — showing a region', () => {
     fireEvent.click(screen.getByRole('button', { name: /change map/i }));
 
     expect(onOpenPicker).toHaveBeenCalled();
+  });
+
+  test('night mode reaches the adapter, so the casings can flip', async () => {
+    const adapter = fakeAdapter();
+    const createMap = vi.fn().mockResolvedValue(adapter);
+    const { rerender } = renderMap({ createMap });
+    await waitFor(() => expect(adapter.setNightMode).toHaveBeenCalledWith(false));
+
+    rerender({ night: true });
+
+    await waitFor(() => expect(adapter.setNightMode).toHaveBeenCalledWith(true));
   });
 
   test('resizes when the capture view becomes visible again', async () => {

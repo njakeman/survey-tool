@@ -134,6 +134,115 @@
      match. */
 }
 
+/* Night mode: a third mode, not a darker dark (design pass 3). Dark mode is
+   for a dim room; night mode keeps dark adaptation intact — 20–30 minutes
+   to rebuild, destroyed by seconds of short-wavelength light. One hue at
+   four brightnesses: accent is not a different colour from ink here, it is
+   BRIGHTER ink, and it is the brightest thing permitted on screen. Nothing
+   is white. Survivable only because every state already carries a word and
+   a shape — night mode is the case those rules were written for.
+
+   Set via <html data-mode="night"> (src/app/displayMode.js). The attribute
+   selector on :root outweighs the media-block :root above, so night wins
+   whichever way the OS scheme points. */
+:root[data-mode='night'] {
+  --paper: #0b0604;
+  --surface: #170c07;
+  --ink: #e8663d;
+
+  --accent: #ff5a2b;
+  --accent-ink: #ff5a2b;
+  --accent-deep: #8f3a1c;
+  --on-accent: #0b0604;
+
+  --map-backdrop: #140a06;
+
+  --rule: rgba(232, 102, 61, 0.2);
+  --rule-faint: rgba(232, 102, 61, 0.12);
+  --control-rule: rgba(232, 102, 61, 0.35);
+  --text-secondary: rgba(232, 102, 61, 0.62);
+  --text-muted: rgba(232, 102, 61, 0.55);
+}
+
+/* The alert-surface exception reverses at night: a slip of white paper is
+   exactly what must not happen at 2am. Every light-ground panel goes dark
+   with an accent border — the shape (border, ✕, triangle, wording) still
+   carries the state. */
+[data-mode='night'] .panel-danger {
+  background: transparent;
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+[data-mode='night'] .capture-map-suggestion,
+[data-mode='night'] .trace-chooser,
+[data-mode='night'] .trace-recovery {
+  background: var(--surface);
+  color: var(--ink);
+}
+
+[data-mode='night'] .trace-chooser .link,
+[data-mode='night'] .trace-recovery .link {
+  color: var(--accent);
+}
+
+[data-mode='night'] .trace-chooser-desc {
+  color: var(--text-secondary);
+}
+
+[data-mode='night'] .trace-recovery .button-surface {
+  background: var(--surface);
+  color: var(--ink);
+  border-color: var(--control-rule);
+}
+
+/* A full-width lit bar is the single worst thing that could appear at 2am:
+   the update offer drops from an accent fill to an accent hairline. */
+[data-mode='night'] .update-banner {
+  background: transparent;
+  border-bottom: 1px solid var(--accent);
+  color: var(--accent);
+}
+
+[data-mode='night'] .button-inverse {
+  background: transparent;
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* The saving state's 80% white label must not be white at night. */
+[data-mode='night'] .save-button-saving {
+  color: rgba(232, 102, 61, 0.8);
+}
+
+/* The crosshair arms' pale outline is white by day; at night the contrast a
+   mark needs is downward, like the trace-line casings. */
+[data-mode='night'] .capture-map-crosshair::before,
+[data-mode='night'] .capture-map-crosshair::after {
+  outline-color: rgb(11 6 4 / 0.7);
+}
+
+/* The map is the largest lit area in the app, which is why night cannot be
+   a palette swap: grayscale, dim to 42%, then a full-red multiply — the
+   output has no blue channel and almost no green, still readable as
+   terrain, and emits nothing that resets dark adaptation. No style fork,
+   no second archive. The overlay is z-index auto: over the canvas, under
+   every z-indexed control. Canvas-drawn overlays (trace lines, markers)
+   are dimmed with the tiles — the casings' night colour is what keeps the
+   lines legible (map/overlays.js traceCasingColor). */
+[data-mode='night'] .capture-map-canvas {
+  filter: grayscale(1) contrast(0.85) brightness(0.42);
+}
+
+[data-mode='night'] .capture-map::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: #ff2a00;
+  mix-blend-mode: multiply;
+  pointer-events: none;
+}
+
 html {
   /* Belt to the viewport meta's braces: no double-tap zoom (and no 300ms
      tap delay with it) anywhere in the interface. Pan and the map's own
@@ -1482,6 +1591,33 @@ button {
   margin: 0 0 0 auto;
   font-size: var(--type-title);
   font-weight: 700;
+}
+
+/* Auto | Night, in the footer with the other twice-a-day controls. Two
+   controls, not three: Auto follows the OS between light and dark, which is
+   what prefers-color-scheme is for; Night can never be inferred — a dark
+   room at midday is not a dark field at midnight, and being dropped into
+   red because the OS switched itself would be alarming. */
+.mode-switch {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.mode-switch-option {
+  background: transparent;
+  color: inherit;
+  border: 1px solid var(--control-rule);
+  border-radius: var(--radius);
+  font-size: var(--type-small);
+  padding: 0 14px;
+}
+
+/* The in-use treatment: a fill and the pressed state, not colour alone. */
+.mode-switch-option[aria-pressed='true'] {
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
 }
 
 /* Footer navigation. Visually a link, but still a real button with a real
