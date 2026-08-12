@@ -133,6 +133,25 @@ describe('mapAdapter against real MapLibre', () => {
     expect(await adapter.getSourceFeatureCount('observations')).toBe(2);
   });
 
+  test('attribution starts collapsed to its toggle, expanding only on tap', async () => {
+    // MapLibre's compact attribution deliberately opens itself on load
+    // (_updateCompact adds maplibregl-compact-show). On a phone-sized map
+    // that pill covers the bottom corner of the ground the surveyor is
+    // reading, so the adapter collapses it after load. The toggle must keep
+    // working — collapsed by default, not removed.
+    const adapter = await createAdapter();
+    await adapter.ready;
+
+    const attrib = adapter.container.querySelector('.maplibregl-ctrl-attrib');
+    expect(attrib).toBeTruthy();
+    expect(attrib.classList.contains('maplibregl-compact')).toBe(true);
+    expect(attrib.classList.contains('maplibregl-compact-show')).toBe(false);
+
+    attrib.querySelector('.maplibregl-ctrl-attrib-button').click();
+
+    expect(attrib.classList.contains('maplibregl-compact-show')).toBe(true);
+  });
+
   test('clearing the position empties the layer rather than leaving a stale dot', async () => {
     const adapter = await createAdapter();
     await adapter.ready;

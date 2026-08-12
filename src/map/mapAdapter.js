@@ -167,6 +167,8 @@ export async function createMapAdapter({
     // failed in the field — two-finger pan is unwieldy in gloves, and the
     // stray second touch pinch-zoomed the interface instead of the map. The
     // page scrolls from outside the map panel.
+    // Compact: the ⓘ toggle, not the full-width bar. It still starts itself
+    // expanded on load; the load handler below collapses it.
     attributionControl: { compact: true },
     fadeDuration: 0,
   });
@@ -363,6 +365,18 @@ export async function createMapAdapter({
       if (pendingPosition !== undefined) {
         setPosition(pendingPosition);
         pendingPosition = undefined;
+      }
+
+      // MapLibre's compact attribution opens itself on load (_updateCompact).
+      // Collapse it to its toggle: on a phone-sized map the expanded pill
+      // covers the bottom corner of the ground. Mirrors the control's own
+      // collapse branch (open set, compact-show removed), so the toggle keeps
+      // working. Once maplibregl-compact is present, later attribution
+      // updates never re-add compact-show, so once is enough.
+      const attrib = container.querySelector('.maplibregl-ctrl-attrib');
+      if (attrib) {
+        attrib.setAttribute('open', '');
+        attrib.classList.remove('maplibregl-compact-show');
       }
 
       container.dataset.mapLoaded = 'true';
