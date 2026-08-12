@@ -288,7 +288,9 @@ describe('mapAdapter against real MapLibre', () => {
     );
     expect(await adapter.getSourceFeatureCount('feature-highlight')).toBe(1);
     expect(order.indexOf('feature-highlight-fill')).toBeGreaterThan(lastFeatureLayer);
-    expect(order.indexOf('feature-highlight-line')).toBeLessThan(order.indexOf('position-accuracy'));
+    expect(order.indexOf('feature-highlight-line')).toBeLessThan(
+      order.indexOf('position-accuracy'),
+    );
     expect(order.indexOf('feature-highlight-line')).toBeLessThan(order.indexOf('position-dot'));
   });
 

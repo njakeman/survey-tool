@@ -174,8 +174,11 @@ standalone })`, browser globals injected same as `probe/capabilities.js`, so it'
   basemap and tappable. Called _feature layers_ everywhere, never "overlays" — `map/overlays.js`
   already owns that word for the position dot, accuracy ring and observation markers.
   `featureLayerStyle.js` (a style declaration + GeoJSON → one source and up to four
-  geometry-filtered layers; also holds `DEFAULT_STYLE`) and `featureQuery.js` (a
-  `queryRenderedFeatures` result → the one tapped feature, described) are pure and node-tested;
+  geometry-filtered layers; also holds `DEFAULT_STYLE` and the amber selection-highlight
+  source/layers the adapter keeps above the feature layers, below the markers) and
+  `featureQuery.js` (a `queryRenderedFeatures` result → the one tapped feature, described, with
+  its geometry resolved from the layer's stored GeoJSON because rendered polygons come back
+  tile-clipped) are pure and node-tested;
   `featureLayerManifest.js` is **Node-only** like `manifest.js`. `storage/featureLayerStore.js`
   holds the GeoJSON as a **string** (never a parsed object, never a Blob),
   `app/featureLayerService.js` mirrors `basemapService.js`, and `ui/FeatureLayerPanel.js` /
@@ -187,6 +190,8 @@ standalone })`, browser globals injected same as `probe/capabilities.js`, so it'
   `scripts/fetch-ostn15.mjs`, which also saves OS's 115 published test points to
   `src/geo/fixtures/` — `osgb.test.js` matches every one to within a millimetre. `distance.js` has
   haversine, bearing, and the metres-per-pixel figure behind a picked point's accuracy.
+  `centroid.js` has the area-weighted polygon centroid (and its farthest-vertex reach) behind
+  "Record here" on a polygon.
 - `src/probe/` — the Phase 1 device-capability probe, still reachable via a footer link in the
   capture UI. Findings recorded in `docs/ios-manual-checklist.md`.
 - Test tiers (`vitest.config.js`): `node` for domain/storage logic (real WebCrypto; jsdom is
@@ -336,7 +341,11 @@ standalone })`, browser globals injected same as `probe/capabilities.js`, so it'
   zoom it was picked at**, not a fix accuracy. That field is the only thing distinguishing
   ±12 m measured from ±12 m eyeballed from 300 m away, so don't drop it and don't infer it.
   `fixAt` and the heading still come from the surveyor's own fix; altitude is deliberately nulled,
-  because the far side of a valley is not at the height you are standing at.
+  because the far side of a valley is not at the height you are standing at. **"Record here" on a
+  polygon feature rides this same path**: it marks the polygon's centroid (`src/geo/centroid.js`)
+  as the picked point, with `gpsAccuracyM` = the polygon's reach from that centroid — the
+  observation stands for the whole parcel, and the figure says so. Points and lines keep the live
+  fix.
 - **what3words was investigated and rejected — don't revisit it.** No offline JS/WASM build exists
   (the offline SDKs are native only), so it cannot work at capture time; and API licence clause
   6.3(b) forbids displaying or sharing a 3-word address alongside its coordinates, which is

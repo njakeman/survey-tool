@@ -220,9 +220,21 @@ legibility and the label halo — all of them things a passing test says nothing
 - [ ] Attribute values that are long (a full address, a description) wrap rather than overflow
 - [ ] A tap does not fire while panning — a drag that ends over a feature should not open the sheet
 
+**Selection highlight (added 2026-08-12)**
+
+- [ ] Tapping a feature highlights it on the map in amber — fill and rim for a polygon, a ring
+      for a point — while its sheet is open
+- [ ] The highlight survives "Record here" (stays on the linked feature until Save or Unlink)
+      and clears on both
+- [ ] The highlight never covers the position dot, the accuracy ring, or observation markers
+
 **Record here**
 
 - [ ] "Record here" prefills an empty note and shows the linked-feature strip above Save
+- [ ] "Record here" on a **polygon** shows the "Marked on the map" strip: the saved observation
+      sits at the polygon's centroid, not where you are standing, with `positionSource: "map"`
+      and an accuracy spanning the polygon. "Use my position" before Save reverts to the fix
+- [ ] "Record here" on a **point** feature records your own position, as before
 - [ ] With a note already typed, the note is **not** overwritten
 - [ ] The link survives typing, taking a photo, and dismissing the sheet
 - [ ] Unlink removes the link and leaves the note and photo alone

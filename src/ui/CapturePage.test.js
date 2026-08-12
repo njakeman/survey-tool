@@ -723,6 +723,65 @@ describe('CapturePage — recording against a map feature', () => {
     expect(screen.queryByRole('heading', { name: 'SU1408 3921' })).not.toBeInTheDocument();
   });
 
+  test('Record here on a polygon marks its centroid, not the spot the surveyor stands on', async () => {
+    // The surveyor is at the gate; the parcel is the thing being recorded.
+    const polygon = {
+      ...FEATURE,
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [-0.15, 50.86],
+            [-0.14, 50.86],
+            [-0.14, 50.87],
+            [-0.15, 50.87],
+            [-0.15, 50.86],
+          ],
+        ],
+      },
+    };
+    const { service, tapFeature } = await armedPage();
+    tapFeature(polygon);
+
+    fireEvent.click(await screen.findByRole('button', { name: /record here/i }));
+
+    // Goes through the marked-point path, visibly: same strip, same
+    // "Use my position" way out.
+    expect(await screen.findByText(/Marked on the map/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /save observation/i }));
+    await waitFor(() =>
+      expect(service.saveObservation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          feature: expect.objectContaining({ featureId: 'P-42' }),
+          pickedPoint: expect.objectContaining({
+            lat: expect.closeTo(50.865, 5),
+            lon: expect.closeTo(-0.145, 5),
+            // The polygon's reach from its centroid — the observation stands
+            // for all of it — never a GPS figure.
+            accuracyM: expect.any(Number),
+          }),
+        }),
+      ),
+    );
+  });
+
+  test('Record here on anything that is not a polygon keeps the live fix', async () => {
+    const point = { ...FEATURE, geometry: { type: 'Point', coordinates: [-0.145, 50.865] } };
+    const { service, tapFeature } = await armedPage();
+    tapFeature(point);
+
+    fireEvent.click(await screen.findByRole('button', { name: /record here/i }));
+
+    expect(screen.queryByText(/Marked on the map/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /save observation/i }));
+    await waitFor(() =>
+      expect(service.saveObservation).toHaveBeenCalledWith(
+        expect.objectContaining({ pickedPoint: null }),
+      ),
+    );
+  });
+
   test('never overwrites a note already typed', async () => {
     // The link is recorded structurally either way, so the note text is a
     // convenience — not worth discarding work the surveyor cannot get back.

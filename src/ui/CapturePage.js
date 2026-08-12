@@ -13,6 +13,7 @@ import { FeatureSheet } from './FeatureSheet.js';
 import { formatLatLon } from '../sensors/format.js';
 import { chooseActive } from '../map/basemapSelection.js';
 import { isExported } from '../domain/session.js';
+import { polygonCentroid, polygonExtentM } from '../geo/centroid.js';
 
 function todayDateString() {
   return new Date().toISOString().slice(0, 10);
@@ -197,6 +198,16 @@ export function CapturePage({
     // structurally regardless, so the note text is a convenience, not the
     // record.
     setNote((current) => (current.trim() ? current : feature.title));
+    // Recording a polygon records the polygon's place, not the gateway the
+    // surveyor happens to be standing in: its centroid goes through the
+    // marked-point path (positionSource 'map', altitude nulled), with the
+    // polygon's own reach as the accuracy — visible above Save on the usual
+    // strip, and "Use my position" reverts it. Points and lines keep the
+    // live fix: the surveyor is presumed at them.
+    const centre = polygonCentroid(feature.geometry);
+    if (centre) {
+      setPickedPoint({ ...centre, accuracyM: polygonExtentM(feature.geometry, centre) });
+    }
   }
 
   // Lets a surveyor export the current session before tapping End — the
