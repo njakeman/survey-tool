@@ -4,8 +4,10 @@ import {
   formatAccuracy,
   formatHeading,
   formatTime,
+  formatDistance,
   accuracyQuality,
 } from '../sensors/format.js';
+import { lineLengthM } from '../geo/lineMetrics.js';
 import { useEffect, useState } from 'preact/hooks';
 import { ExportBadge } from './ExportBadge.js';
 
@@ -85,6 +87,19 @@ export function ObservationsList({ observations, gridRef, loadAudio }) {
         // grid reference is the part a surveyor reads out or copies into a
         // report, and it should not need picking out of a list.
         const gridReference = gridRef?.(obs.lat, obs.lon) ?? null;
+        // One string for the same htm-whitespace reason as `meta`. The
+        // lat/lon above is a representative point; the record is the walked
+        // line — say so, with how much of it there is.
+        const traced =
+          obs.positionSource === 'trace' && obs.geometry
+            ? `Traced ${obs.geometry.type === 'Polygon' ? 'boundary' : 'path'} · ${formatDistance(
+                lineLengthM(
+                  obs.geometry.type === 'Polygon'
+                    ? obs.geometry.coordinates[0]
+                    : obs.geometry.coordinates,
+                ),
+              )}`
+            : null;
         return html`
           <li key=${obs.id} class="observations-row">
             <p class="observations-row-head">
@@ -120,6 +135,7 @@ export function ObservationsList({ observations, gridRef, loadAudio }) {
                 ? html`<p class="observations-picked">Marked on the map, not measured</p>`
                 : null
             }
+            ${traced ? html`<p class="observations-traced">${traced}</p>` : null}
           </li>
         `;
       })}

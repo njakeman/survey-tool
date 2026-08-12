@@ -175,3 +175,57 @@ describe('ObservationsList — how the position was obtained', () => {
     expect(screen.queryByText(/marked on the map/i)).not.toBeInTheDocument();
   });
 });
+
+describe('ObservationsList - traced observations', () => {
+  const TRACED_PATH = {
+    id: 'obs-t',
+    recordedAt: '2026-08-06T10:10:00.000Z',
+    fixAt: '2026-08-06T09:40:00.000Z',
+    lat: 51.5005,
+    lon: -0.14,
+    gpsAccuracyM: 12,
+    headingDeg: null,
+    note: 'north hedgerow',
+    photoId: null,
+    positionSource: 'trace',
+    geometry: {
+      type: 'LineString',
+      coordinates: [
+        [-0.14, 51.5],
+        [-0.14, 51.501],
+      ],
+    },
+  };
+
+  test('a traced path says so, with its walked length', () => {
+    render(html`<${ObservationsList} observations=${[TRACED_PATH]} />`);
+
+    // ~111 m of northing.
+    expect(screen.getByText(/Traced path · 111 m/)).toBeInTheDocument();
+  });
+
+  test('a traced boundary reports its perimeter', () => {
+    const ring = [
+      [-0.14, 51.5],
+      [-0.1386, 51.5],
+      [-0.1386, 51.501],
+      [-0.14, 51.501],
+      [-0.14, 51.5],
+    ];
+    render(
+      html`<${ObservationsList}
+        observations=${[
+          { ...TRACED_PATH, geometry: { type: 'Polygon', coordinates: [ring] } },
+        ]}
+      />`,
+    );
+
+    expect(screen.getByText(/Traced boundary · \d+ m/)).toBeInTheDocument();
+  });
+
+  test('a point observation carries no traced line', () => {
+    render(html`<${ObservationsList} observations=${[OBS_NO_PHOTO]} />`);
+
+    expect(screen.queryByText(/Traced/)).toBeNull();
+  });
+});
