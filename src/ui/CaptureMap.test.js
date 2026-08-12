@@ -12,6 +12,8 @@ function fakeAdapter() {
     setPosition: vi.fn(),
     setObservations: vi.fn(),
     setFeatureLayers: vi.fn(),
+    setPickedPoint: vi.fn(),
+    setHighlight: vi.fn(),
     centreOn: vi.fn(),
     resize: vi.fn(),
     destroy: vi.fn(),
@@ -134,6 +136,19 @@ describe('CaptureMap — showing a region', () => {
     rerender({ featureLayers: both });
 
     await waitFor(() => expect(adapter.setFeatureLayers).toHaveBeenCalledWith(both));
+  });
+
+  test('echoes the selected feature to the map, and clears it on deselection', async () => {
+    const adapter = fakeAdapter();
+    const createMap = vi.fn().mockResolvedValue(adapter);
+    const selected = { layerId: 'parcels', featureId: 'P-42', geometry: { type: 'Point' } };
+    const { rerender } = renderMap({ createMap, selectedFeature: selected });
+
+    await waitFor(() => expect(adapter.setHighlight).toHaveBeenCalledWith(selected));
+
+    rerender({ selectedFeature: null });
+
+    await waitFor(() => expect(adapter.setHighlight).toHaveBeenCalledWith(null));
   });
 
   test('relays a tap through the latest handler, not the one the map was built with', async () => {

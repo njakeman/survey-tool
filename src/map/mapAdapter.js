@@ -18,6 +18,9 @@ import {
   featureLayerLayers,
   featureLayerSource,
   featureLayerSourceId,
+  HIGHLIGHT_SOURCE_ID,
+  highlightLayers,
+  highlightSourceData,
 } from './featureLayerStyle.js';
 import { describeTappedFeature } from './featureQuery.js';
 import { initialZoomFromHeader, maxBoundsFromHeader, minZoomFromHeader } from './viewport.js';
@@ -71,6 +74,10 @@ const SURVEY_ZOOM = 16;
 // Feature layers are inserted before this, so nothing the surveyor's own GIS
 // data draws can ever cover the live fix or a saved observation.
 const MARKERS_START_AT = 'position-accuracy';
+
+// …and before this first, so the selection highlight always draws *over* the
+// layer it highlights while itself staying under the markers.
+const FEATURE_LAYERS_END_AT = `${HIGHLIGHT_SOURCE_ID}-fill`;
 
 // A tap is a box, not a point. One pixel of tolerance is unusable through a
 // glove on a wet screen, and a boundary line is two pixels wide.
@@ -187,13 +194,20 @@ export async function createMapAdapter({
   let pendingPosition;
   let pendingObservations;
   let pendingPickedPoint;
+  let pendingHighlight;
+
+  function featureLayersBefore() {
+    // beforeId only once the target layers exist. During the initial load
+    // they do not yet, and MapLibre throws on an unknown beforeId.
+    if (map.getLayer(FEATURE_LAYERS_END_AT)) return FEATURE_LAYERS_END_AT;
+    if (map.getLayer(MARKERS_START_AT)) return MARKERS_START_AT;
+    return undefined;
+  }
 
   function addFeatureLayer(layer) {
     map.addSource(featureLayerSourceId(layer.id), featureLayerSource(layer));
     for (const definition of featureLayerLayers(layer)) {
-      // beforeId only once the marker layers exist. During the initial load
-      // they do not yet, and MapLibre throws on an unknown beforeId.
-      map.addLayer(definition, map.getLayer(MARKERS_START_AT) ? MARKERS_START_AT : undefined);
+      map.addLayer(definition, featureLayersBefore());
     }
   }
 
@@ -257,6 +271,15 @@ export async function createMapAdapter({
       map.addSource('observations', { type: 'geojson', data: EMPTY_COLLECTION });
       map.addSource('picked', { type: 'geojson', data: EMPTY_COLLECTION });
 
+      // The selection highlight, added before the marker layers so it stays
+      // beneath them; feature layers are in turn inserted before its first
+      // layer (FEATURE_LAYERS_END_AT), completing the order basemap →
+      // feature layers → highlight → markers.
+      map.addSource(HIGHLIGHT_SOURCE_ID, { type: 'geojson', data: highlightSourceData(null) });
+      for (const definition of highlightLayers()) {
+        map.addLayer(definition);
+      }
+
       // The paint lives in overlays.js with the rest of the pure marker
       // logic, so the pending/synced distinction is node-testable rather
       // than only visible on a real map.
@@ -300,6 +323,10 @@ export async function createMapAdapter({
       if (pendingPickedPoint !== undefined) {
         setPickedPoint(pendingPickedPoint);
         pendingPickedPoint = undefined;
+      }
+      if (pendingHighlight !== undefined) {
+        setHighlight(pendingHighlight);
+        pendingHighlight = undefined;
       }
       // Last, so the accuracy ring's paint is applied over a layer stack that
       // is already complete.
@@ -358,6 +385,16 @@ export async function createMapAdapter({
           }
         : EMPTY_COLLECTION,
     );
+  }
+
+  // The selection: a described tap result (featureQuery.js) or null. Only
+  // its geometry is drawn — the highlight is a shape, not a marker.
+  function setHighlight(feature) {
+    if (!styleLoaded) {
+      pendingHighlight = feature;
+      return;
+    }
+    map.getSource(HIGHLIGHT_SOURCE_ID)?.setData(highlightSourceData(feature?.geometry ?? null));
   }
 
   // What is on the ground under a given fraction of the canvas. Read on
@@ -452,6 +489,7 @@ export async function createMapAdapter({
     setObservations,
     setFeatureLayers,
     setPickedPoint,
+    setHighlight,
     getPointAtFraction,
     getZoom,
     onMove,

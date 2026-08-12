@@ -273,6 +273,36 @@ describe('mapAdapter against real MapLibre', () => {
     expect(lastFeatureLayer).toBeLessThan(order.indexOf('position-dot'));
   });
 
+  test('the selection highlight sits above the feature layers and below the markers', async () => {
+    // Above the layer it highlights, or the layer's own fill covers it;
+    // below the fix and the markers, which nothing may ever cover.
+    const adapter = await createAdapter();
+    await adapter.ready;
+
+    adapter.setFeatureLayers([PARCELS]);
+    adapter.setHighlight({ geometry: PARCELS.geojson.features[0].geometry });
+    const order = adapter.getLayerOrder();
+
+    const lastFeatureLayer = Math.max(
+      ...order.map((id, index) => (id.startsWith('feature-layer-') ? index : -1)),
+    );
+    expect(await adapter.getSourceFeatureCount('feature-highlight')).toBe(1);
+    expect(order.indexOf('feature-highlight-fill')).toBeGreaterThan(lastFeatureLayer);
+    expect(order.indexOf('feature-highlight-line')).toBeLessThan(order.indexOf('position-accuracy'));
+    expect(order.indexOf('feature-highlight-line')).toBeLessThan(order.indexOf('position-dot'));
+  });
+
+  test('clearing the selection empties the highlight, and setting it pre-load is not dropped', async () => {
+    const adapter = await createAdapter();
+    adapter.setHighlight({ geometry: { type: 'Point', coordinates: [-0.14, 50.86] } });
+
+    await adapter.ready;
+    expect(await adapter.getSourceFeatureCount('feature-highlight')).toBe(1);
+
+    adapter.setHighlight(null);
+    expect(await adapter.getSourceFeatureCount('feature-highlight')).toBe(0);
+  });
+
   test('a real MapLibre style accepts the generated layers, filters and all', async () => {
     // featureLayerStyle.js is node-tested against its own output. Only the
     // renderer can say whether the expressions in it are actually valid.

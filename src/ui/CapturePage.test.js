@@ -646,6 +646,8 @@ describe('CapturePage — recording against a map feature', () => {
       setPosition: vi.fn(),
       setObservations: vi.fn(),
       setFeatureLayers: vi.fn(),
+      setPickedPoint: vi.fn(),
+      setHighlight: vi.fn(),
       centreOn: vi.fn(),
       resize: vi.fn(),
       destroy: vi.fn(),
@@ -665,7 +667,7 @@ describe('CapturePage — recording against a map feature', () => {
         visible=${true}
       />`,
     );
-    return { tapFeature: (feature) => act(() => tap(feature)) };
+    return { adapter, tapFeature: (feature) => act(() => tap(feature)) };
   }
 
   async function armedPage() {
@@ -690,6 +692,22 @@ describe('CapturePage — recording against a map feature', () => {
     await waitFor(() =>
       expect(screen.queryByRole('heading', { name: 'SU1408 3921' })).not.toBeInTheDocument(),
     );
+  });
+
+  test('the selection is highlighted on the map while the sheet is open, linked, and until unlinked', async () => {
+    const { adapter, tapFeature } = await armedPage();
+
+    tapFeature(FEATURE);
+    await waitFor(() => expect(adapter.setHighlight).toHaveBeenCalledWith(FEATURE));
+
+    // Record here closes the sheet but keeps the link — the highlight must
+    // survive with it, or "this one" vanishes the moment it matters.
+    adapter.setHighlight.mockClear();
+    fireEvent.click(await screen.findByRole('button', { name: /record here/i }));
+    expect(adapter.setHighlight).not.toHaveBeenCalledWith(null);
+
+    fireEvent.click(screen.getByRole('button', { name: /unlink/i }));
+    await waitFor(() => expect(adapter.setHighlight).toHaveBeenCalledWith(null));
   });
 
   test('Record here links the feature and prefills the note', async () => {

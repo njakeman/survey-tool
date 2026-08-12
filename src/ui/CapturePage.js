@@ -309,6 +309,11 @@ export function CapturePage({
         observations=${decoratedObservations}
         featureLayers=${featureLayers}
         onFeatureTap=${setTappedFeature}
+        ${
+          '' /* Highlighted while its sheet is open, and kept while linked by
+             Record here so "this one" stays visible until Save or dismiss. */
+        }
+        selectedFeature=${tappedFeature ?? linkedFeature}
         pickedPoint=${pickedPoint}
         onPickPoint=${setPickedPoint}
         gridRef=${gridRef}

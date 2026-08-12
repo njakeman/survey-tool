@@ -5,6 +5,9 @@ import {
   featureLayerSource,
   featureLayerLayers,
   featureLayerIds,
+  HIGHLIGHT_SOURCE_ID,
+  highlightSourceData,
+  highlightLayers,
 } from './featureLayerStyle.js';
 
 const GEOJSON = { type: 'FeatureCollection', features: [] };
@@ -125,5 +128,55 @@ describe('featureLayerIds', () => {
       'feature-layer-parcels-circle',
       'feature-layer-parcels-label',
     ]);
+  });
+});
+
+describe('the selection highlight', () => {
+  test('covers every geometry family, filtered like the layers it echoes', () => {
+    const layers = byId(highlightLayers());
+
+    expect(highlightLayers().map((l) => l.type)).toEqual(['fill', 'line', 'circle']);
+    expect(layers[`${HIGHLIGHT_SOURCE_ID}-fill`].filter).toEqual([
+      '==',
+      ['geometry-type'],
+      'Polygon',
+    ]);
+    expect(layers[`${HIGHLIGHT_SOURCE_ID}-circle`].filter).toEqual([
+      '==',
+      ['geometry-type'],
+      'Point',
+    ]);
+    expect(highlightLayers().every((l) => l.source === HIGHLIGHT_SOURCE_ID)).toBe(true);
+  });
+
+  test('reads as selection, not as another layer and never as the live fix', () => {
+    const layers = byId(highlightLayers());
+    const lineColour = layers[`${HIGHLIGHT_SOURCE_ID}-line`].paint['line-color'];
+
+    // '#c2611f' is the live fix and the marks; DEFAULT_STYLE.colour is what
+    // an unstyled layer already looks like. The selection must be neither.
+    expect(lineColour).not.toBe('#c2611f');
+    expect(lineColour).not.toBe(DEFAULT_STYLE.colour);
+    // Wider and heavier than the thing it highlights, or it disappears
+    // against the layer's own outline.
+    expect(layers[`${HIGHLIGHT_SOURCE_ID}-line`].paint['line-width']).toBeGreaterThan(
+      DEFAULT_STYLE.lineWidth,
+    );
+    expect(layers[`${HIGHLIGHT_SOURCE_ID}-fill`].paint['fill-opacity']).toBeGreaterThan(
+      DEFAULT_STYLE.fillOpacity,
+    );
+    expect(layers[`${HIGHLIGHT_SOURCE_ID}-circle`].paint['circle-radius']).toBeGreaterThan(
+      DEFAULT_STYLE.circleRadius,
+    );
+  });
+
+  test('wraps a geometry as the source data, and empties without one', () => {
+    const geometry = { type: 'Point', coordinates: [-0.14, 50.86] };
+
+    expect(highlightSourceData(geometry)).toEqual({
+      type: 'FeatureCollection',
+      features: [{ type: 'Feature', properties: {}, geometry }],
+    });
+    expect(highlightSourceData(null)).toEqual({ type: 'FeatureCollection', features: [] });
   });
 });

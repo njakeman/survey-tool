@@ -134,3 +134,59 @@ export function featureLayerLayers(layer) {
 export function featureLayerIds(layer) {
   return featureLayerLayers(layer).map((mapLayer) => mapLayer.id);
 }
+
+// The selection highlight: one persistent source holding the currently
+// selected feature (or nothing), echoed in every geometry family the layers
+// draw. The paint lives here with the rest of the feature-layer visual
+// language so "selection reads as selection" is node-testable.
+export const HIGHLIGHT_SOURCE_ID = 'feature-highlight';
+
+// Not '#c2611f' (the live fix and the marks — see DEFAULT_STYLE above) and
+// not the layer default blue: the selection has to read as "this one", over
+// pale paper and dark imagery both. Amber is the one hue neither ground nor
+// any sane layer style uses.
+const HIGHLIGHT_COLOUR = '#eab308';
+
+export function highlightSourceData(geometry) {
+  // Always a FeatureCollection — empty is "no selection", never a missing
+  // source — so the map's source can be set unconditionally.
+  return {
+    type: 'FeatureCollection',
+    features: geometry ? [{ type: 'Feature', properties: {}, geometry }] : [],
+  };
+}
+
+export function highlightLayers() {
+  const source = HIGHLIGHT_SOURCE_ID;
+  return [
+    {
+      id: `${source}-fill`,
+      type: 'fill',
+      source,
+      filter: ['==', ['geometry-type'], 'Polygon'],
+      paint: { 'fill-color': HIGHLIGHT_COLOUR, 'fill-opacity': 0.3 },
+    },
+    {
+      id: `${source}-line`,
+      type: 'line',
+      source,
+      filter: ['match', ['geometry-type'], ['LineString', 'Polygon'], true, false],
+      // Wider than any layer's own outline, so the selection shows as a rim
+      // around the feature rather than vanishing behind its stroke.
+      paint: { 'line-color': HIGHLIGHT_COLOUR, 'line-width': 5 },
+    },
+    {
+      id: `${source}-circle`,
+      type: 'circle',
+      source,
+      filter: ['==', ['geometry-type'], 'Point'],
+      paint: {
+        'circle-radius': 9,
+        // A ring, not a dot: the layer's own point stays visible inside it.
+        'circle-color': 'transparent',
+        'circle-stroke-width': 4,
+        'circle-stroke-color': HIGHLIGHT_COLOUR,
+      },
+    },
+  ];
+}

@@ -73,5 +73,20 @@ export function describeTappedFeature(features, layers) {
     featureId,
     title: !isEmpty(declaredTitle) ? asString(declaredTitle) : (featureId ?? layer.name),
     fields: orderFields(properties, style.fieldOrder),
+    geometry: sourceGeometry(layer, style, featureId) ?? feature.geometry ?? null,
   };
+}
+
+// The feature's whole geometry, from the layer's stored GeoJSON.
+// queryRenderedFeatures returns geometry clipped to tile boundaries — half a
+// parcel, for a parcel that crosses one — so the rendered shape is only the
+// fallback for features nothing identifies.
+function sourceGeometry(layer, style, featureId) {
+  if (featureId === null) return null;
+  const features = layer.geojson?.features ?? [];
+  const match = features.find((candidate) => {
+    const id = style.idProperty ? candidate.properties?.[style.idProperty] : candidate.id;
+    return !isEmpty(id) && asString(id) === featureId;
+  });
+  return match?.geometry ?? null;
 }

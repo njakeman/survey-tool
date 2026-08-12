@@ -139,4 +139,73 @@ describe('describeTappedFeature', () => {
 
     expect(describeTappedFeature([bare], LAYERS).fields).toEqual([]);
   });
+
+  describe('geometry, for the highlight and the centroid', () => {
+    const RING = [
+      [-0.15, 50.86],
+      [-0.14, 50.86],
+      [-0.14, 50.87],
+      [-0.15, 50.87],
+      [-0.15, 50.86],
+    ];
+    const sourceGeometry = { type: 'Polygon', coordinates: [RING] };
+    const layersWithData = [
+      {
+        ...LAYERS[0],
+        geojson: {
+          type: 'FeatureCollection',
+          features: [
+            { type: 'Feature', properties: { parcel_id: 'P-41' }, geometry: null },
+            { type: 'Feature', properties: { parcel_id: 'P-42' }, geometry: sourceGeometry },
+          ],
+        },
+      },
+      LAYERS[1],
+    ];
+
+    test('carries the source geometry, not the tile-clipped rendered one', () => {
+      // queryRenderedFeatures returns geometry clipped to tile boundaries —
+      // half a parcel, for a parcel that crosses one. The stored GeoJSON has
+      // the whole feature, so an id match must win over the rendered shape.
+      const clipped = { type: 'Polygon', coordinates: [RING.slice(0, 3)] };
+      const result = describeTappedFeature([hit({ geometry: clipped })], layersWithData);
+
+      expect(result.geometry).toEqual(sourceGeometry);
+    });
+
+    test("matches through the feature's own id when no id property is declared", () => {
+      const layers = [
+        {
+          ...LAYERS[1],
+          geojson: {
+            type: 'FeatureCollection',
+            features: [{ type: 'Feature', id: 7, properties: {}, geometry: sourceGeometry }],
+          },
+        },
+      ];
+      const rendered = hit({
+        source: 'feature-layer-designations',
+        layer: { id: 'feature-layer-designations-fill' },
+        id: 7,
+        properties: { name: 'SSSI' },
+        geometry: { type: 'Polygon', coordinates: [RING.slice(0, 3)] },
+      });
+
+      expect(describeTappedFeature([rendered], layers).geometry).toEqual(sourceGeometry);
+    });
+
+    test('falls back to the rendered geometry when the source has no match', () => {
+      const clipped = { type: 'Polygon', coordinates: [RING.slice(0, 3)] };
+      const unmatched = hit({
+        properties: { parcel_id: 'P-99' },
+        geometry: clipped,
+      });
+
+      expect(describeTappedFeature([unmatched], layersWithData).geometry).toEqual(clipped);
+    });
+
+    test('has null geometry when there is nothing to offer', () => {
+      expect(describeTappedFeature([hit()], LAYERS).geometry).toBeNull();
+    });
+  });
 });

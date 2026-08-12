@@ -42,6 +42,7 @@ export function CaptureMap({
   observations,
   featureLayers,
   onFeatureTap,
+  selectedFeature,
   pickedPoint,
   onPickPoint,
   gridRef,
@@ -172,6 +173,12 @@ export function CaptureMap({
   useEffect(() => {
     guarded(() => adapterRef.current?.setPickedPoint(pickedPoint ?? null));
   }, [pickedPoint, adapterReady]);
+
+  useEffect(() => {
+    // The tapped (or linked) feature, echoed on the map so "this one" is
+    // visible while its sheet is open and until Record here is saved.
+    guarded(() => adapterRef.current?.setHighlight(selectedFeature ?? null));
+  }, [selectedFeature, adapterReady]);
 
   useEffect(() => {
     const adapter = adapterRef.current;
