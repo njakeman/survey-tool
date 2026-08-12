@@ -171,7 +171,12 @@ describe('finishTrace — path', () => {
 
 describe('finishTrace — boundary', () => {
   // A rough square walked ~100 m on a side.
-  const squareWalk = [fix(0), fix(100), { ...fix(100), lon: 100 / DEGREE_M }, { ...fix(0), lon: 100 / DEGREE_M }];
+  const squareWalk = [
+    fix(0),
+    fix(100),
+    { ...fix(100), lon: 100 / DEGREE_M },
+    { ...fix(0), lon: 100 / DEGREE_M },
+  ];
 
   test('closes the ring back to the first vertex', () => {
     const { state } = walk(createTraceState({ mode: 'boundary' }), squareWalk);

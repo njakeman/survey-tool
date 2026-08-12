@@ -9,9 +9,20 @@ import {
   putTraceDraft,
 } from './traceDraftStore.js';
 
-const DRAFT = { id: 'draft-1', sessionId: 'sess-1', mode: 'path', startedAt: '2026-08-12T09:00:00.000Z' };
+const DRAFT = {
+  id: 'draft-1',
+  sessionId: 'sess-1',
+  mode: 'path',
+  startedAt: '2026-08-12T09:00:00.000Z',
+};
 
-const vertex = (seq) => ({ seq, lat: seq * 0.0001, lon: 0, accuracyM: 5, fixAt: '2026-08-12T09:00:00.000Z' });
+const vertex = (seq) => ({
+  seq,
+  lat: seq * 0.0001,
+  lon: 0,
+  accuracyM: 5,
+  fixAt: '2026-08-12T09:00:00.000Z',
+});
 
 let db;
 let counter = 0;

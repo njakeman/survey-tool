@@ -563,8 +563,20 @@ describe('trace drafts', () => {
     const draft = await service.startTraceDraft({ mode: 'boundary' });
     expect(draft).toMatchObject({ mode: 'boundary', startedAt: FIXED_NOW });
 
-    await service.appendTraceVertex(draft.id, { seq: 0, lat: 51.5, lon: -0.14, accuracyM: 5, fixAt: 't0' });
-    await service.appendTraceVertex(draft.id, { seq: 1, lat: 51.501, lon: -0.14, accuracyM: 7, fixAt: 't1' });
+    await service.appendTraceVertex(draft.id, {
+      seq: 0,
+      lat: 51.5,
+      lon: -0.14,
+      accuracyM: 5,
+      fixAt: 't0',
+    });
+    await service.appendTraceVertex(draft.id, {
+      seq: 1,
+      lat: 51.501,
+      lon: -0.14,
+      accuracyM: 7,
+      fixAt: 't1',
+    });
 
     const recovered = await service.getTraceDraft();
     expect(recovered.draft).toEqual(draft);
@@ -581,7 +593,13 @@ describe('trace drafts', () => {
     const service = await makeService('capture-trace-discard');
     await service.startSession('Ashton Keynes');
     const draft = await service.startTraceDraft({ mode: 'path' });
-    await service.appendTraceVertex(draft.id, { seq: 0, lat: 51.5, lon: -0.14, accuracyM: 5, fixAt: 't0' });
+    await service.appendTraceVertex(draft.id, {
+      seq: 0,
+      lat: 51.5,
+      lon: -0.14,
+      accuracyM: 5,
+      fixAt: 't0',
+    });
 
     await service.discardTraceDraft(draft.id);
 
@@ -617,9 +635,20 @@ describe('trace drafts', () => {
     const service = await makeService('capture-trace-save-clears');
     await service.startSession('Ashton Keynes');
     const draft = await service.startTraceDraft({ mode: 'path' });
-    await service.appendTraceVertex(draft.id, { seq: 0, lat: 51.5, lon: -0.14, accuracyM: 5, fixAt: 't0' });
+    await service.appendTraceVertex(draft.id, {
+      seq: 0,
+      lat: 51.5,
+      lon: -0.14,
+      accuracyM: 5,
+      fixAt: 't0',
+    });
 
-    await service.saveObservation({ reading: READING, heading: null, note: '', trace: { ...TRACE, draftId: draft.id } });
+    await service.saveObservation({
+      reading: READING,
+      heading: null,
+      note: '',
+      trace: { ...TRACE, draftId: draft.id },
+    });
 
     expect(await service.getTraceDraft()).toBeNull();
   });

@@ -214,9 +214,7 @@ describe('ObservationsList - traced observations', () => {
     ];
     render(
       html`<${ObservationsList}
-        observations=${[
-          { ...TRACED_PATH, geometry: { type: 'Polygon', coordinates: [ring] } },
-        ]}
+        observations=${[{ ...TRACED_PATH, geometry: { type: 'Polygon', coordinates: [ring] } }]}
       />`,
     );
 

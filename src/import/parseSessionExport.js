@@ -77,9 +77,7 @@ function observationFrom(feature, index, sessionId) {
   // what it always was — a duplicate of lat/lon for GIS consumers.
   const traced = Boolean(geometry) && geometry.type !== 'Point';
   const coords = geometry?.coordinates ?? [];
-  const fallback = traced
-    ? representativeFrom(geometry)
-    : { lat: coords[1], lon: coords[0] };
+  const fallback = traced ? representativeFrom(geometry) : { lat: coords[1], lon: coords[0] };
   try {
     return createObservation({
       id: props.obs_id ?? `feature-${index + 1}`,

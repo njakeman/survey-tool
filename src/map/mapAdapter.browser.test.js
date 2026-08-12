@@ -592,7 +592,12 @@ describe('trace layers against real MapLibre', () => {
     await adapter.ready;
 
     const order = adapter.getLayerOrder();
-    for (const id of ['trace-fill', 'trace-line-exported', 'trace-line-pending', 'active-trace-line']) {
+    for (const id of [
+      'trace-fill',
+      'trace-line-exported',
+      'trace-line-pending',
+      'active-trace-line',
+    ]) {
       expect(order.indexOf(id)).toBeGreaterThan(order.indexOf('feature-highlight-line'));
       expect(order.indexOf(id)).toBeLessThan(order.indexOf('position-accuracy'));
       expect(order.indexOf(id)).toBeLessThan(order.indexOf('position-dot'));

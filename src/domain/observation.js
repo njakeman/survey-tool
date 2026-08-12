@@ -13,14 +13,15 @@
 export const POSITION_SOURCE_GPS = 'gps';
 export const POSITION_SOURCE_MAP = 'map';
 export const POSITION_SOURCE_TRACE = 'trace';
-const POSITION_SOURCES = new Set([
-  POSITION_SOURCE_GPS,
-  POSITION_SOURCE_MAP,
-  POSITION_SOURCE_TRACE,
-]);
+const POSITION_SOURCES = new Set([POSITION_SOURCE_GPS, POSITION_SOURCE_MAP, POSITION_SOURCE_TRACE]);
 
 const inRange = ([lon, lat]) =>
-  Number.isFinite(lat) && lat >= -90 && lat <= 90 && Number.isFinite(lon) && lon >= -180 && lon <= 180;
+  Number.isFinite(lat) &&
+  lat >= -90 &&
+  lat <= 90 &&
+  Number.isFinite(lon) &&
+  lon >= -180 &&
+  lon <= 180;
 
 // A traced geometry: the LineString of a walked path or the single-ring
 // Polygon of a walked boundary. Point is deliberately absent — a point
@@ -56,7 +57,9 @@ function validateGeometry(geometry) {
     const [firstLon, firstLat] = ring[0];
     const [lastLon, lastLat] = ring[ring.length - 1];
     if (firstLon !== lastLon || firstLat !== lastLat) {
-      throw new Error('createObservation: a Polygon ring must close — first position repeated last');
+      throw new Error(
+        'createObservation: a Polygon ring must close — first position repeated last',
+      );
     }
     for (const position of ring) {
       if (!inRange(position)) {

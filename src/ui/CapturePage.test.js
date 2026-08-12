@@ -29,14 +29,12 @@ function createFakeService({ openSession = null, observations = [], traceDraft =
     countObservations: vi.fn().mockResolvedValue(observations.length),
     listObservations: vi.fn().mockResolvedValue(observations),
     deleteObservation: vi.fn().mockResolvedValue(undefined),
-    startTraceDraft: vi
-      .fn()
-      .mockImplementation(async ({ mode }) => ({
-        id: 'draft-1',
-        sessionId: 'sess-1',
-        mode,
-        startedAt: '2026-08-12T09:00:00.000Z',
-      })),
+    startTraceDraft: vi.fn().mockImplementation(async ({ mode }) => ({
+      id: 'draft-1',
+      sessionId: 'sess-1',
+      mode,
+      startedAt: '2026-08-12T09:00:00.000Z',
+    })),
     appendTraceVertex: vi.fn().mockResolvedValue(undefined),
     getTraceDraft: vi.fn().mockResolvedValue(traceDraft),
     discardTraceDraft: vi.fn().mockResolvedValue(undefined),
@@ -1042,7 +1040,9 @@ describe('CapturePage - trace modes', () => {
   test('a boundary that cannot close yet errors on the strip and keeps recording', async () => {
     const service = createFakeService({ openSession: OPEN_SESSION });
     const fakes = createFakeSensors();
-    render(html`<${CapturePage} service=${service} sensors=${fakes.sensors} downscale=${vi.fn()} />`);
+    render(
+      html`<${CapturePage} service=${service} sensors=${fakes.sensors} downscale=${vi.fn()} />`,
+    );
     await screen.findByText('Ashton Keynes');
     fakes.pushPosition(POSITION);
 
@@ -1098,7 +1098,12 @@ describe('CapturePage - trace modes', () => {
     const service = createFakeService({
       openSession: OPEN_SESSION,
       traceDraft: {
-        draft: { id: 'draft-9', sessionId: 'sess-1', mode: 'path', startedAt: '2026-08-12T08:00:00.000Z' },
+        draft: {
+          id: 'draft-9',
+          sessionId: 'sess-1',
+          mode: 'path',
+          startedAt: '2026-08-12T08:00:00.000Z',
+        },
         vertices: [
           { draftId: 'draft-9', seq: 0, lat: 51.5, lon: -0.14, accuracyM: 5, fixAt: 't0' },
           { draftId: 'draft-9', seq: 1, lat: 51.5002, lon: -0.14, accuracyM: 6, fixAt: 't1' },
@@ -1106,7 +1111,9 @@ describe('CapturePage - trace modes', () => {
       },
     });
     const fakes = createFakeSensors();
-    render(html`<${CapturePage} service=${service} sensors=${fakes.sensors} downscale=${vi.fn()} />`);
+    render(
+      html`<${CapturePage} service=${service} sensors=${fakes.sensors} downscale=${vi.fn()} />`,
+    );
 
     await screen.findByText(/unfinished trace/i);
     fireEvent.click(screen.getByRole('button', { name: 'Resume' }));

@@ -195,7 +195,12 @@ describe('traceShapeLayers', () => {
     // Solid-versus-dashed is the line-scale analogue of the markers
     // filled-versus-hollow: it must survive greyscale. Two layers rather
     // than a data-driven dasharray, which MapLibre does not support.
-    const exported = lines.find((l) => l.filter && JSON.stringify(l.filter).includes('"get","exported"') && !JSON.stringify(l.filter).includes('"!"'));
+    const exported = lines.find(
+      (l) =>
+        l.filter &&
+        JSON.stringify(l.filter).includes('"get","exported"') &&
+        !JSON.stringify(l.filter).includes('"!"'),
+    );
     const pending = lines.find((l) => JSON.stringify(l.filter).includes('"!"'));
     expect(exported.paint['line-dasharray']).toBeUndefined();
     expect(pending.paint['line-dasharray']).toBeDefined();

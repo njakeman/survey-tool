@@ -28,9 +28,7 @@ export function ringSelfIntersects(coordinates) {
       // The first and last segments are adjacent through the closure vertex,
       // not a crossing — a naive all-pairs test flags every closed ring.
       if (i === 0 && j === segments - 1) continue;
-      if (
-        properlyCross(coordinates[i], coordinates[i + 1], coordinates[j], coordinates[j + 1])
-      ) {
+      if (properlyCross(coordinates[i], coordinates[i + 1], coordinates[j], coordinates[j + 1])) {
         return true;
       }
     }

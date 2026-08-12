@@ -553,7 +553,11 @@ export function CapturePage({
                 </button>
                 ${
                   confirmingRecoveredDiscard
-                    ? html`<button type="button" class="button-outline" onClick=${handleDiscardRecovered}>
+                    ? html`<button
+                          type="button"
+                          class="button-outline"
+                          onClick=${handleDiscardRecovered}
+                        >
                           Discard trace
                         </button>
                         <button

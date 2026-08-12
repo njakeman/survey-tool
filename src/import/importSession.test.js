@@ -373,7 +373,12 @@ describe('traced observations through the round trip', () => {
               [0, 2],
             ],
           },
-          properties: { obs_id: 'o1', recorded_at: FIXED_NOW, fix_at: FIXED_NOW, gps_accuracy_m: 5 },
+          properties: {
+            obs_id: 'o1',
+            recorded_at: FIXED_NOW,
+            fix_at: FIXED_NOW,
+            gps_accuracy_m: 5,
+          },
         },
       ],
     });
@@ -401,7 +406,12 @@ describe('traced observations through the round trip', () => {
         {
           type: 'Feature',
           geometry: { type: 'Polygon', coordinates: [ring] },
-          properties: { obs_id: 'o1', recorded_at: FIXED_NOW, fix_at: FIXED_NOW, gps_accuracy_m: 5 },
+          properties: {
+            obs_id: 'o1',
+            recorded_at: FIXED_NOW,
+            fix_at: FIXED_NOW,
+            gps_accuracy_m: 5,
+          },
         },
       ],
     });

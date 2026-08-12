@@ -126,7 +126,11 @@ describe('openDatabase', () => {
         db.createObjectStore('audio', { keyPath: 'id' });
       },
     });
-    await v5.put('audio', { id: 'obs-1', arrayBuffer: new ArrayBuffer(6), contentType: 'audio/webm' });
+    await v5.put('audio', {
+      id: 'obs-1',
+      arrayBuffer: new ArrayBuffer(6),
+      contentType: 'audio/webm',
+    });
     v5.close();
 
     const db = await openDatabase('db-test-upgrade-v6');

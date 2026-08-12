@@ -76,7 +76,13 @@ describe('saveObservationWithPhoto', () => {
     // observation — never both, never neither.
     const db = await openDatabase('capture-write-trace-draft');
     await putTraceDraft(db, { id: 'draft-1', sessionId: 'sess-1', mode: 'path', startedAt: 't' });
-    await appendTraceVertex(db, 'draft-1', { seq: 0, lat: 51.5, lon: -0.14, accuracyM: 5, fixAt: 't' });
+    await appendTraceVertex(db, 'draft-1', {
+      seq: 0,
+      lat: 51.5,
+      lon: -0.14,
+      accuracyM: 5,
+      fixAt: 't',
+    });
     const observation = makeObservation({
       positionSource: 'trace',
       geometry: {
