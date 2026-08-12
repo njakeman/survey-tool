@@ -305,3 +305,138 @@ describe('importSessionExport (the whole flow, from bytes)', () => {
     ).rejects.toThrow(/holiday-photos\.zip/);
   });
 });
+
+describe('traced observations through the round trip', () => {
+  const TRACE_GEOMETRY = {
+    type: 'LineString',
+    coordinates: [
+      [-0.14, 51.5],
+      [-0.1405, 51.5005],
+      [-0.141, 51.501],
+    ],
+  };
+
+  test('a traced path survives export, parse and import intact', async () => {
+    const db = await openDatabase('roundtrip-trace-source');
+    const service = createCaptureService({
+      db,
+      newId: fakeIdGenerator('orig'),
+      nowIso: () => FIXED_NOW,
+    });
+    await service.startSession('Hedgerow survey');
+    const draft = await service.startTraceDraft({ mode: 'path' });
+    await service.saveObservation({
+      reading: null,
+      heading: null,
+      note: 'north hedgerow',
+      trace: {
+        draftId: draft.id,
+        geometry: TRACE_GEOMETRY,
+        representative: { lat: 51.5005, lon: -0.1405 },
+        gpsAccuracyM: 11,
+        fixAt: '2026-08-06T09:40:00.000Z',
+      },
+    });
+
+    const [sourceSession] = await listSessions(db);
+    const { entries } = await buildSessionExport(db, {
+      sessionId: sourceSession.id,
+      appVersion: '0.9.0',
+    });
+    const parsed = parseSessionExport(await toReaderEntries(entries));
+
+    const targetDb = await openDatabase('roundtrip-trace-target');
+    await writeImportedSession(targetDb, parsed, { newId: fakeIdGenerator('copy') });
+    const [imported] = await listSessions(targetDb);
+    const [obs] = await listObservationsForSession(targetDb, imported.id);
+
+    expect(obs.positionSource).toBe('trace');
+    expect(obs.geometry).toEqual(TRACE_GEOMETRY);
+    expect(obs.lat).toBe(51.5005);
+    expect(obs.gpsAccuracyM).toBe(11);
+    expect(obs.fixAt).toBe('2026-08-06T09:40:00.000Z');
+    expect(obs.note).toBe('north hedgerow');
+  });
+
+  test('a foreign LineString without lat/lon properties stands at its midpoint as a trace', () => {
+    const encoderEntry = (name, text) => ({ name, data: encoder.encode(text) });
+    const text = JSON.stringify({
+      type: 'FeatureCollection',
+      survey_session: { id: 's', name: 'S', started_at: FIXED_NOW, ended_at: null },
+      features: [
+        {
+          type: 'Feature',
+          geometry: {
+            type: 'LineString',
+            coordinates: [
+              [0, 0],
+              [0, 2],
+            ],
+          },
+          properties: { obs_id: 'o1', recorded_at: FIXED_NOW, fix_at: FIXED_NOW, gps_accuracy_m: 5 },
+        },
+      ],
+    });
+
+    const parsed = parseSessionExport([encoderEntry('session.geojson', text)]);
+
+    expect(parsed.observations[0].positionSource).toBe('trace');
+    expect(parsed.observations[0].lat).toBeCloseTo(1, 5);
+    expect(parsed.observations[0].geometry.type).toBe('LineString');
+  });
+
+  test('a foreign Polygon without lat/lon properties stands at its centroid', () => {
+    const encoderEntry = (name, text) => ({ name, data: encoder.encode(text) });
+    const ring = [
+      [0, 0],
+      [2, 0],
+      [2, 2],
+      [0, 2],
+      [0, 0],
+    ];
+    const text = JSON.stringify({
+      type: 'FeatureCollection',
+      survey_session: { id: 's', name: 'S', started_at: FIXED_NOW, ended_at: null },
+      features: [
+        {
+          type: 'Feature',
+          geometry: { type: 'Polygon', coordinates: [ring] },
+          properties: { obs_id: 'o1', recorded_at: FIXED_NOW, fix_at: FIXED_NOW, gps_accuracy_m: 5 },
+        },
+      ],
+    });
+
+    const parsed = parseSessionExport([encoderEntry('session.geojson', text)]);
+
+    expect(parsed.observations[0].positionSource).toBe('trace');
+    expect(parsed.observations[0].lat).toBeCloseTo(1, 5);
+    expect(parsed.observations[0].lon).toBeCloseTo(1, 5);
+  });
+
+  test('names the feature whose trace geometry fails validation', () => {
+    const encoderEntry = (name, text) => ({ name, data: encoder.encode(text) });
+    const text = JSON.stringify({
+      type: 'FeatureCollection',
+      survey_session: { id: 's', name: 'S', started_at: FIXED_NOW, ended_at: null },
+      features: [
+        {
+          type: 'Feature',
+          geometry: { type: 'LineString', coordinates: [[0, 0]] },
+          properties: {
+            obs_id: 'o1',
+            recorded_at: FIXED_NOW,
+            fix_at: FIXED_NOW,
+            lat: 0,
+            lon: 0,
+            gps_accuracy_m: 5,
+            position_source: 'trace',
+          },
+        },
+      ],
+    });
+
+    expect(() => parseSessionExport([encoderEntry('session.geojson', text)])).toThrow(
+      /feature 1: .*two positions/i,
+    );
+  });
+});

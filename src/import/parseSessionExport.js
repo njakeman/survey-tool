@@ -1,5 +1,7 @@
 import { createObservation } from '../domain/observation.js';
 import { AUDIO_TYPE_BY_EXTENSION } from '../domain/audio.js';
+import { midpointOnLine } from '../geo/lineMetrics.js';
+import { polygonCentroid } from '../geo/centroid.js';
 
 // The pure inverse of domain/geojson.js: zip entries (or a bare
 // session.geojson) → a validated { session, observations, photos } ready to
@@ -58,9 +60,26 @@ function sessionFrom(collection) {
   };
 }
 
+// Where a geometry stands when a foreign file carries no lat/lon
+// properties: the same representative point the app itself would record —
+// a line's distance-midpoint, a polygon's centroid.
+function representativeFrom(geometry) {
+  if (geometry?.type === 'LineString') return midpointOnLine(geometry.coordinates);
+  if (geometry?.type === 'Polygon') return polygonCentroid(geometry);
+  return null;
+}
+
 function observationFrom(feature, index, sessionId) {
   const props = feature?.properties ?? {};
-  const coords = feature?.geometry?.coordinates ?? [];
+  const geometry = feature?.geometry ?? null;
+  // A non-Point geometry is a trace and rides into the record, where
+  // createObservation does all the shape validation; Point geometry stays
+  // what it always was — a duplicate of lat/lon for GIS consumers.
+  const traced = Boolean(geometry) && geometry.type !== 'Point';
+  const coords = geometry?.coordinates ?? [];
+  const fallback = traced
+    ? representativeFrom(geometry)
+    : { lat: coords[1], lon: coords[0] };
   try {
     return createObservation({
       id: props.obs_id ?? `feature-${index + 1}`,
@@ -69,8 +88,8 @@ function observationFrom(feature, index, sessionId) {
       fixAt: props.fix_at,
       // The properties are the exporter's authoritative copy; the geometry
       // duplicates them for GIS consumers. Fall back for foreign files.
-      lat: props.lat ?? coords[1],
-      lon: props.lon ?? coords[0],
+      lat: props.lat ?? fallback?.lat,
+      lon: props.lon ?? fallback?.lon,
       gpsAccuracyM: props.gps_accuracy_m,
       altitudeM: props.altitude_m ?? null,
       altitudeAccuracyM: props.altitude_accuracy_m ?? null,
@@ -85,9 +104,14 @@ function observationFrom(feature, index, sessionId) {
       featureLayerId: props.feature_layer ?? null,
       featureId: props.feature_id ?? null,
       featureLabel: props.feature_label ?? null,
-      positionSource: props.position_source ?? 'gps',
+      // A non-Point geometry defaults to 'trace' rather than 'gps': a file
+      // carrying a LineString but no position_source could only mean a
+      // walked line, and createObservation rightly rejects 'gps' + geometry.
+      positionSource: props.position_source ?? (traced ? 'trace' : 'gps'),
+      geometry: traced ? geometry : null,
       // os_grid_ref is ignored: derived from lat/lon at export time, it
-      // would only ever be re-derived, never stored.
+      // would only ever be re-derived, never stored. trace_length_m too —
+      // both restate the geometry.
     });
   } catch (error) {
     throw new Error(`Could not import feature ${index + 1}: ${error.message}`, { cause: error });
