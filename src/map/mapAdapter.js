@@ -148,9 +148,11 @@ export async function createMapAdapter({
     // A survey map that spins under a gloved hand is worse than useless.
     dragRotate: false,
     pitchWithRotate: false,
-    // The map is a panel inside a scrolling one-handed page: one finger
-    // scrolls the page, two fingers pan the map.
-    cooperativeGestures: true,
+    // Standard gestures: one finger pans, pinch zooms. Cooperative gestures
+    // (one finger scrolls the page, two fingers pan) were tried first and
+    // failed in the field — two-finger pan is unwieldy in gloves, and the
+    // stray second touch pinch-zoomed the interface instead of the map. The
+    // page scrolls from outside the map panel.
     attributionControl: { compact: true },
     fadeDuration: 0,
   });
@@ -417,6 +419,10 @@ export async function createMapAdapter({
     return map.dragRotate.isEnabled();
   }
 
+  function isSingleFingerPanEnabled() {
+    return map.dragPan.isEnabled() && !map.cooperativeGestures.isEnabled();
+  }
+
   async function getSourceFeatureCount(sourceId) {
     const source = map.getSource(sourceId);
     if (!source) return 0;
@@ -455,6 +461,7 @@ export async function createMapAdapter({
     destroy,
     getMaxBounds,
     isRotationEnabled,
+    isSingleFingerPanEnabled,
     getSourceFeatureCount,
     getLayerOrder,
     hasSource,

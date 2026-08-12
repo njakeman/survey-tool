@@ -134,6 +134,15 @@
      match. */
 }
 
+html {
+  /* Belt to the viewport meta's braces: no double-tap zoom (and no 300ms
+     tap delay with it) anywhere in the interface. Pan and the map's own
+     pinch still work — MapLibre sets touch-action on its canvas itself. */
+  touch-action: manipulation;
+  /* iOS otherwise inflates text after orientation changes. */
+  -webkit-text-size-adjust: 100%;
+}
+
 body {
   margin: 0;
   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)

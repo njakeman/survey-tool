@@ -46,8 +46,11 @@ happened — and each is still binding on anything added later.
    warnings are led by a triangle, the in-use region is filled and bordered and labelled. This was
    a live defect before the design pass — see _Map markers_ below.
 7. **The map is a panel, not a screen.** 300px inside a scrolling page, full-bleed to the screen
-   edges, with overlay controls positioned over it. Cooperative gestures: one finger scrolls the
-   page, two fingers pan the map. Overlay controls sit at `z-index` 1 (`.capture-map-controls`),
+   edges, with overlay controls positioned over it. Standard gestures: one finger pans the map,
+   pinch zooms it, and the page scrolls from outside the panel (cooperative gestures were tried
+   and dropped — two-finger pan was unusable gloved, and the stray second touch pinch-zoomed the
+   interface; the viewport meta now pins `maximum-scale=1` so the interface can never zoom).
+   Overlay controls sit at `z-index` 1 (`.capture-map-controls`),
    2 (region suggestion, and the picking crosshair) and 3 (the picking confirm panel, which must
    stay tappable above the crosshair) — keep that ordering or the suggestion can be obscured.
 

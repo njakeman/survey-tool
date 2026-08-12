@@ -143,9 +143,11 @@ real device; Playwright cannot exercise any of it.
 **Feel in the field**
 
 - [ ] Map is readable in direct sunlight at arm's length
-- [ ] One finger dragging over the map scrolls the _page_; two fingers pan the map (a "use two
-      fingers" overlay appears on a one-finger drag). Confirm this is right with gloves on —
-      if two-finger panning is unusable gloved, say so and we'll revisit
+- [ ] One finger pans the map and pinch zooms it (the field verdict on the earlier two-finger
+      scheme: unusable gloved — revisited 2026-08-12). The page still scrolls from outside the
+      map panel
+- [ ] Pinching anywhere — including a stray second finger while panning the map — never resizes
+      the interface itself (viewport is pinned to `maximum-scale=1`)
 - [ ] The map cannot be rotated or tilted by any gesture
 - [ ] Panning stops at the edge of the extracted area rather than revealing blank grey
 - [ ] Blue dot tracks position; the accuracy ring grows/shrinks sensibly when zooming

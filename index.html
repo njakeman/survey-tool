@@ -2,7 +2,16 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <!-- maximum-scale + user-scalable=no: a stray second finger on the map
+         was pinch-zooming the whole interface. Honoured in standalone mode,
+         which is where the app actually runs; the map's own pinch zoom is
+         unaffected (MapLibre handles its canvas touches itself). Deliberate
+         accessibility trade: this app is one fixed full-screen layout with
+         its own large-type styling. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    />
     <!-- Two variants: the browser picks by scheme, so the iOS status bar
          matches the app rather than always wearing the light accent. -->
     <meta name="theme-color" content="#c2611f" media="(prefers-color-scheme: light)" />

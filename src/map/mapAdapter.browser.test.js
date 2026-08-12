@@ -105,6 +105,16 @@ describe('mapAdapter against real MapLibre', () => {
     expect(adapter.isRotationEnabled()).toBe(false);
   });
 
+  test('one finger pans — cooperative gestures are off, drag pan is on', async () => {
+    // Two-finger pan proved unwieldy in the field, and the accidental
+    // second-finger touch pinch-zoomed the *interface* instead. The map now
+    // takes the standard gestures: one finger pans, pinch zooms.
+    const adapter = await createAdapter();
+    await adapter.ready;
+
+    expect(adapter.isSingleFingerPanEnabled()).toBe(true);
+  });
+
   test('accepts position and observation updates without erroring', async () => {
     const onError = vi.fn();
     const adapter = await createAdapter({ onError });
