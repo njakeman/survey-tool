@@ -12,6 +12,12 @@ vocabulary — the picker row shape, the surface/rule/accent-border treatment, t
 than inventing anything, so they should read as part of the same system. Nobody has checked that
 on a device.
 
+The **trace mode** surfaces (2026-08-12: the trace strip, the path/boundary chooser, the
+recovery strip, the map's trace lines, the traced list qualifier) also postdate the handoff and
+were likewise assembled from the existing vocabulary, deliberately awaiting a design pass —
+`docs/design/trace-modes-handoff.md` is the inventory of what exists, the known gaps, and the
+constraints binding on restyling them.
+
 Everything lives in one file — `src/style.css`, imported once from `src/main.js`. There is no
 framework, no build step for CSS, and no component-scoped styles. Markup is
 [htm](https://github.com/developit/htm) tagged templates inside Preact components, so classes are
