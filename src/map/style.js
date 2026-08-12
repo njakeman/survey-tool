@@ -82,6 +82,43 @@ function buildOnlineRasterStyle({ glyphsUrl, tiles, tileSize, maxzoom, attributi
   };
 }
 
+// A fetched remote style (an OpenFreeMap style JSON), made ready for the
+// map. Their styles declare no attribution on any source, so the region's
+// required credit is injected onto every source here — the attribution
+// control dedups identical strings, so it renders once. Everything else
+// (layers, glyphs, sprite) stays the provider's: their labels bind to their
+// own fontstacks and sprite sheet, which is fine online-only. Never mutates
+// the fetched object.
+export function prepareRemoteStyle(styleJson, { attribution }) {
+  const sources = {};
+  for (const [id, source] of Object.entries(styleJson.sources ?? {})) {
+    sources[id] = { ...source, ...(attribution ? { attribution } : {}) };
+  }
+  return { ...styleJson, sources };
+}
+
+// What a style-URL region degrades to when its style cannot be fetched: a
+// blank paper ground, built locally so map construction touches no network
+// and `load` always fires. The overlays — fix marker, observations, traces,
+// feature layers — all keep working over it; only the basemap pixels are
+// missing, which is the same degradation an unreachable imagery server has.
+// Local glyphs are declared so feature-layer labels still render.
+export function buildOfflineFallbackStyle({ glyphsUrl }) {
+  return {
+    version: 8,
+    glyphs: glyphsUrl,
+    sources: {},
+    layers: [
+      {
+        id: 'background',
+        type: 'background',
+        // The app's paper colour — a deliberate ground, not a void.
+        paint: { 'background-color': '#f4f0e8' },
+      },
+    ],
+  };
+}
+
 export function buildStyle({
   glyphsUrl,
   archiveKey = 'basemap',

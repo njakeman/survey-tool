@@ -176,11 +176,12 @@ describe('BasemapPicker', () => {
   });
 });
 
-describe('BasemapPicker online imagery row', () => {
+describe('BasemapPicker online basemap rows', () => {
   const IMAGERY = {
     id: 'online-imagery',
     name: 'Aerial imagery (online)',
     online: true,
+    description: 'imagery streamed over the network',
   };
 
   test('describes itself as streamed, with its own state text', () => {
@@ -188,6 +189,22 @@ describe('BasemapPicker online imagery row', () => {
 
     expect(screen.getByText('imagery streamed over the network')).toBeInTheDocument();
     expect(screen.getByText('Online — needs signal')).toBeInTheDocument();
+  });
+
+  test('each online basemap shows its own description, not a shared imagery sentence', () => {
+    // Light/Simple/Dark are streetmaps; describing them as imagery would
+    // misname three of the four rows.
+    const LIGHT = {
+      id: 'online-light',
+      name: 'Light (online)',
+      online: true,
+      description: 'streetmap streamed over the network',
+    };
+    renderPicker({ regions: [SOUTH, IMAGERY, LIGHT] });
+
+    expect(screen.getByText('imagery streamed over the network')).toBeInTheDocument();
+    expect(screen.getByText('streetmap streamed over the network')).toBeInTheDocument();
+    expect(screen.getAllByText('Online — needs signal')).toHaveLength(2);
   });
 
   test('tapping it selects — there is nothing to download', async () => {

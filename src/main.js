@@ -22,7 +22,7 @@ import { createBasemapService } from './app/basemapService.js';
 import { createFeatureLayerService } from './app/featureLayerService.js';
 import { deleteLegacyBasemap } from './storage/basemapStore.js';
 import { chooseActive } from './map/basemapSelection.js';
-import { ONLINE_IMAGERY, isOnlineImagery } from './map/onlineImagery.js';
+import { ONLINE_BASEMAPS, getOnlineBasemap } from './map/onlineBasemaps.js';
 import { glyphsUrl } from './map/glyphs.js';
 import { toGridRef } from './geo/osgb.js';
 import './style.css';
@@ -130,14 +130,16 @@ async function main() {
   // at startup. The split chunk is still precached, so the import resolves
   // offline (same rule as photo/encode.js: browser-only, main.js only).
   async function createMap({ container: mapContainer, onUserPan, onFeatureTap }) {
-    // The online imagery region has no archive: hand the adapter the tile
-    // template and let failed fetches surface as warnings. Everything about
-    // the map's behaviour — overlays, picking, feature layers — is identical.
-    if (isOnlineImagery(state.activeRegionId)) {
+    // An online region has no archive: hand the adapter the region and let
+    // failed fetches surface as warnings (the adapter handles the two online
+    // kinds — tile template vs remote style — itself). Everything about the
+    // map's behaviour — overlays, picking, feature layers — is identical.
+    const onlineRegion = getOnlineBasemap(state.activeRegionId);
+    if (onlineRegion) {
       const { createMapAdapter } = await import('./map/mapAdapter.js');
       return createMapAdapter({
         container: mapContainer,
-        online: ONLINE_IMAGERY,
+        online: onlineRegion,
         glyphsUrl: glyphsUrl(import.meta.env.BASE_URL),
         onUserPan,
         onFeatureTap,
@@ -175,11 +177,12 @@ async function main() {
         basemapService.listAvailable(),
         basemapService.getSelectedId(),
       ]);
-      // The online imagery pseudo-region rides at the end of the list. It is
-      // not part of what the service knows — nothing is stored, nothing is
-      // downloaded — but the picker and the selection logic treat it as one
-      // more region, which is what keeps it one mechanism instead of two.
-      state.regions = [...regions, ONLINE_IMAGERY];
+      // The online pseudo-regions ride at the end of the list. They are not
+      // part of what the service knows — nothing is stored, nothing is
+      // downloaded — but the picker and the selection logic treat each as
+      // one more region, which is what keeps it one mechanism instead of
+      // two.
+      state.regions = [...regions, ...ONLINE_BASEMAPS];
       state.manifestAvailable = manifestAvailable;
       state.selectedRegionId = selectedId;
       state.statusKnown = true;

@@ -21,9 +21,10 @@ import { formatSize } from './format.js';
 // falls back to what is on the device, and an older download may have no
 // recorded type or zoom range. Blanks are omitted rather than printed.
 function describeRegion(region) {
-  // The online region has no size, no archive type and no zoom range —
-  // saying what it is beats an empty line.
-  if (region.online) return 'imagery streamed over the network';
+  // An online region has no size, no archive type and no zoom range — each
+  // says what it is instead (imagery vs streetmap), which beats an empty
+  // line and stops three streetmaps being described as imagery.
+  if (region.online) return region.description;
   const zooms =
     region.minZoom != null && region.maxZoom != null
       ? `z${region.minZoom}–${region.maxZoom}`

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { buildStyle } from './style.js';
+import { buildOfflineFallbackStyle, buildStyle, prepareRemoteStyle } from './style.js';
 
 const GLYPHS_URL = 'https://example.test/survey-tool/fonts/{fontstack}/{range}.pbf';
 
@@ -191,5 +191,72 @@ describe('buildStyle online-raster', () => {
 
   test('still declares glyphs, because feature layers label over imagery too', () => {
     expect(buildStyle(ONLINE).glyphs).toBe(GLYPHS_URL);
+  });
+});
+
+describe('prepareRemoteStyle', () => {
+  // A fetched OpenFreeMap style, cut down to the parts that matter: it
+  // declares no attribution anywhere, and everything in it must survive
+  // preparation untouched.
+  const REMOTE = {
+    version: 8,
+    glyphs: 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf',
+    sprite: 'https://tiles.openfreemap.org/sprites/ofm_f384/ofm',
+    sources: {
+      ne2_shaded: { type: 'raster', tiles: ['https://tiles.openfreemap.org/ne2/{z}/{x}/{y}.png'] },
+      openmaptiles: { type: 'vector', url: 'https://tiles.openfreemap.org/planet' },
+    },
+    layers: [{ id: 'water', type: 'fill', source: 'openmaptiles', 'source-layer': 'water' }],
+  };
+  const CREDIT = '<a href="https://openfreemap.org">OpenFreeMap</a>';
+
+  test('injects the attribution onto every source, which carries none of its own', () => {
+    const style = prepareRemoteStyle(REMOTE, { attribution: CREDIT });
+
+    for (const source of Object.values(style.sources)) {
+      expect(source.attribution).toBe(CREDIT);
+    }
+  });
+
+  test('preserves the style otherwise — layers, glyphs and sprite stay the provider ones', () => {
+    const style = prepareRemoteStyle(REMOTE, { attribution: CREDIT });
+
+    expect(style.layers).toEqual(REMOTE.layers);
+    expect(style.glyphs).toBe(REMOTE.glyphs);
+    expect(style.sprite).toBe(REMOTE.sprite);
+    expect(style.version).toBe(8);
+  });
+
+  test('does not mutate the fetched object', () => {
+    const copy = structuredClone(REMOTE);
+    prepareRemoteStyle(copy, { attribution: CREDIT });
+
+    expect(copy).toEqual(REMOTE);
+  });
+});
+
+describe('buildOfflineFallbackStyle', () => {
+  // What a style-URL region degrades to when its style cannot be fetched:
+  // the map must still construct and fire load with no network at all, so
+  // the fix marker, observations and feature layers keep working over a
+  // blank ground.
+  test('touches no network: no sources, no sprite, one background layer', () => {
+    const style = buildOfflineFallbackStyle({ glyphsUrl: GLYPHS_URL });
+
+    expect(style.version).toBe(8);
+    expect(style.sources).toEqual({});
+    expect(style).not.toHaveProperty('sprite');
+    expect(style.layers).toHaveLength(1);
+    expect(style.layers[0].type).toBe('background');
+  });
+
+  test('still declares the local glyphs, so feature-layer labels render over the blank', () => {
+    expect(buildOfflineFallbackStyle({ glyphsUrl: GLYPHS_URL }).glyphs).toBe(GLYPHS_URL);
+  });
+
+  test('claims no attribution — there is no basemap data to credit', () => {
+    const style = buildOfflineFallbackStyle({ glyphsUrl: GLYPHS_URL });
+
+    expect(JSON.stringify(style)).not.toMatch(/OpenStreetMap|Protomaps|OpenFreeMap|Esri/);
   });
 });

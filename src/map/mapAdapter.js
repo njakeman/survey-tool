@@ -3,7 +3,7 @@ import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import { PMTiles, Protocol } from 'pmtiles';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { ArrayBufferSource } from './pmtilesSource.js';
-import { buildStyle } from './style.js';
+import { buildOfflineFallbackStyle, buildStyle, prepareRemoteStyle } from './style.js';
 import {
   accuracyRadiusExpression,
   observationsFeatureCollection,
@@ -102,25 +102,58 @@ export async function createMapAdapter({
   onFeatureTap,
   onError,
 }) {
-  // `online` (an onlineImagery.js region) is the alternative to
-  // `archiveBuffer`: a tile URL template instead of an archive, so there is
-  // no protocol registration, no header, and nothing to release on destroy.
-  // Construction touches no network either way — for the online map only the
-  // tile fetches themselves can fail, which MapLibre reports as error events
+  // `online` (an onlineBasemaps.js region) is the alternative to
+  // `archiveBuffer`: no protocol registration, no header, and nothing to
+  // release on destroy. Two online kinds, told apart by their fields — a
+  // `tiles` template (imagery) has its style built locally, so construction
+  // touches no network and only the tile fetches can fail, as error events
   // (routed to onError below, never a throw) over a map that keeps working.
+  // A `styleUrl` region (the OpenFreeMap styles) is the one case where the
+  // basemap *style itself* lives on the network — handing MapLibre the URL
+  // would mean a failed fetch stops `load` ever firing, losing every queued
+  // setter (the fix marker included). So the style JSON is fetched here,
+  // before construction, and a failed fetch falls back to a local blank
+  // ground: the map always constructs from a style already in hand.
   // Everything from the load handler down is identical: overlays, feature
   // layers and picking neither know nor care where the basemap pixels come
   // from.
   let archiveKey = null;
   let header = null;
-  if (!online) {
+  // Whether the provider's remote style is actually driving the map — its
+  // glyph server replaces ours, so feature-layer labels must switch stacks.
+  let remoteStyleLoaded = false;
+  let style;
+  if (online?.styleUrl) {
+    try {
+      const response = await fetch(online.styleUrl, { signal: AbortSignal.timeout(10_000) });
+      if (!response.ok) throw new Error(`style fetch failed: ${response.status}`);
+      const styleJson = await response.json();
+      style = prepareRemoteStyle(styleJson, { attribution: online.attribution });
+      remoteStyleLoaded = true;
+    } catch {
+      style = buildOfflineFallbackStyle({ glyphsUrl });
+    }
+  } else if (online) {
+    style = buildStyle({
+      glyphsUrl,
+      tileType: 'online-raster',
+      tiles: online.tiles,
+      tileSize: online.tileSize,
+      maxzoom: online.maxzoom,
+      attribution: online.attribution,
+    });
+  } else {
     ensureProtocol();
     archiveCounter += 1;
     archiveKey = `basemap-${archiveCounter}`;
     const archive = new PMTiles(new ArrayBufferSource(archiveBuffer, archiveKey));
     protocol.add(archive);
     header = await archive.getHeader();
+    style = buildStyle({ glyphsUrl, archiveKey, tileType, tileSize, attribution });
   }
+
+  // undefined falls back to the vendored stack inside featureLayerLayers.
+  const labelFontStack = remoteStyleLoaded ? online.featureFontStack : undefined;
 
   const viewport = online
     ? // No bounds and no zoom floor: the imagery covers the world, and a
@@ -148,16 +181,7 @@ export async function createMapAdapter({
 
   const map = new MapLibreMap({
     container,
-    style: online
-      ? buildStyle({
-          glyphsUrl,
-          tileType: 'online-raster',
-          tiles: online.tiles,
-          tileSize: online.tileSize,
-          maxzoom: online.maxzoom,
-          attribution: online.attribution,
-        })
-      : buildStyle({ glyphsUrl, archiveKey, tileType, tileSize, attribution }),
+    style,
     ...viewport,
     // A survey map that spins under a gloved hand is worse than useless.
     dragRotate: false,
@@ -217,7 +241,7 @@ export async function createMapAdapter({
 
   function addFeatureLayer(layer) {
     map.addSource(featureLayerSourceId(layer.id), featureLayerSource(layer));
-    for (const definition of featureLayerLayers(layer)) {
+    for (const definition of featureLayerLayers(layer, { fontStack: labelFontStack })) {
       map.addLayer(definition, featureLayersBefore());
     }
   }
@@ -600,6 +624,10 @@ export async function createMapAdapter({
     return map.getStyle().layers.map((layer) => layer.id);
   }
 
+  function getLayerLayoutProperty(layerId, name) {
+    return map.getLayoutProperty(layerId, name);
+  }
+
   function hasSource(sourceId) {
     return Boolean(map.getSource(sourceId));
   }
@@ -636,6 +664,7 @@ export async function createMapAdapter({
     isSingleFingerPanEnabled,
     getSourceFeatureCount,
     getLayerOrder,
+    getLayerLayoutProperty,
     hasSource,
     whenIdle,
     getArchiveKey: () => archiveKey,

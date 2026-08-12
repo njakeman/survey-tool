@@ -56,7 +56,12 @@ function resolve(style) {
   return { ...DEFAULT_STYLE, ...(style ?? {}) };
 }
 
-export function featureLayerLayers(layer) {
+// `fontStack` overrides the label font for basemaps whose glyph server is
+// not ours: a remote-style basemap (onlineBasemaps.js styleUrl entries)
+// replaces the map's glyphs URL with the provider's, which has no
+// 'noto-sans-regular' — labels must ask for a stack that server actually
+// serves, or the text silently fails to render.
+export function featureLayerLayers(layer, { fontStack = FONT_STACK } = {}) {
   const style = resolve(layer.style);
   const source = featureLayerSourceId(layer.id);
   const prefix = source;
@@ -110,7 +115,7 @@ export function featureLayerLayers(layer) {
       filter: ['has', style.labelProperty],
       layout: {
         'text-field': ['to-string', ['get', style.labelProperty]],
-        'text-font': [FONT_STACK],
+        'text-font': [fontStack],
         'text-size': 12,
         'text-anchor': 'top',
         'text-offset': [0, 0.8],

@@ -95,6 +95,22 @@ describe('featureLayerLayers', () => {
     expect(symbol.filter).toEqual(['has', 'ref']);
   });
 
+  test('labels take the vendored fontstack by default, an override when the basemap demands one', () => {
+    // Over an archive or imagery the map's glyphs are our vendored stack;
+    // over a remote-style basemap the glyph server is the provider's, which
+    // has no 'noto-sans-regular' — the adapter passes the stack that server
+    // actually serves, or the label text silently fails to render.
+    const defaulted = featureLayerLayers(layer({ style: { labelProperty: 'ref' } })).find(
+      (l) => l.type === 'symbol',
+    );
+    expect(defaulted.layout['text-font']).toEqual(['noto-sans-regular']);
+
+    const overridden = featureLayerLayers(layer({ style: { labelProperty: 'ref' } }), {
+      fontStack: 'Noto Sans Regular',
+    }).find((l) => l.type === 'symbol');
+    expect(overridden.layout['text-font']).toEqual(['Noto Sans Regular']);
+  });
+
   test('labels are haloed, because a bare word over aerial imagery is unreadable', () => {
     const symbol = featureLayerLayers(layer({ style: { labelProperty: 'ref' } })).find(
       (l) => l.type === 'symbol',

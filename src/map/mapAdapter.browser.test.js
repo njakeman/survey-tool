@@ -613,6 +613,110 @@ describe('an online imagery region whose server is unreachable', () => {
   });
 });
 
+describe('an online basemap defined by a remote style URL', () => {
+  // The OpenFreeMap shape: the whole style is fetched from the provider,
+  // not built locally. The style here is served from a data: URL so the
+  // happy path is deterministic, with its tile fetches pointing at a path
+  // this origin will 404 — reachable style, unreachable tiles.
+  const PROVIDER_STYLE = {
+    version: 8,
+    glyphs: '/fonts/{fontstack}/{range}.pbf',
+    sources: {
+      openmaptiles: {
+        type: 'vector',
+        tiles: [`${location.origin}/no-such-planet/{z}/{x}/{y}.pbf`],
+      },
+    },
+    layers: [
+      { id: 'ofm-background', type: 'background', paint: { 'background-color': '#dcd8ce' } },
+    ],
+  };
+
+  function styleRegion(overrides = {}) {
+    return {
+      id: 'online-light',
+      name: 'Light (online)',
+      online: true,
+      styleUrl: `data:application/json,${encodeURIComponent(JSON.stringify(PROVIDER_STYLE))}`,
+      attribution: '<a href="https://openfreemap.org">OpenFreeMap</a>',
+      featureFontStack: 'Noto Sans Regular',
+      centre: { lat: 54.5, lon: -2.5 },
+      ...overrides,
+    };
+  }
+
+  const LABELLED = { ...PARCELS, style: { ...PARCELS.style, labelProperty: 'ref' } };
+
+  async function createStyleAdapter(overrides = {}, region = styleRegion()) {
+    const adapter = await createMapAdapter({
+      container: mountContainer(),
+      online: region,
+      glyphsUrl: '/fonts/{fontstack}/{range}.pbf',
+      ...overrides,
+    });
+    adapters.push(adapter);
+    return adapter;
+  }
+
+  test('renders the provider style, not a locally built one', async () => {
+    const adapter = await createStyleAdapter({ onError: () => {} });
+    await adapter.ready;
+
+    expect(adapter.container.dataset.mapLoaded).toBe('true');
+    expect(adapter.getLayerOrder()).toContain('ofm-background');
+    expect(adapter.hasSource('openmaptiles')).toBe(true);
+  });
+
+  test('feature-layer labels ask for the fontstack the provider glyph server has', async () => {
+    // Their glyph endpoint has no 'noto-sans-regular'; without the override
+    // the label text silently fails to render.
+    const adapter = await createStyleAdapter({ onError: () => {} });
+    await adapter.ready;
+
+    adapter.setFeatureLayers([LABELLED]);
+
+    expect(adapter.getLayerLayoutProperty('feature-layer-parcels-label', 'text-font')).toEqual([
+      'Noto Sans Regular',
+    ]);
+  });
+
+  test('an unreachable style server degrades to the blank fallback, never a dead map', async () => {
+    // The failure Esri's tile template cannot have: with a remote *style*, a
+    // failed fetch at construction would mean load never fires and every
+    // queued setter — the fix marker included — is lost. The adapter fetches
+    // the style itself and falls back to a local blank ground instead.
+    const adapter = await createStyleAdapter(
+      { onError: () => {} },
+      styleRegion({ styleUrl: `${location.origin}/no-such-style` }),
+    );
+    await adapter.ready;
+
+    expect(adapter.container.dataset.mapLoaded).toBe('true');
+
+    adapter.setPosition({ lat: 51.5, lon: -0.25, accuracyM: 8 });
+    adapter.setObservations([{ id: 'obs-1', lat: 51.5, lon: -0.25, exported: false }]);
+    adapter.setFeatureLayers([LABELLED]);
+
+    expect(await adapter.getSourceFeatureCount('position')).toBe(1);
+    expect(await adapter.getSourceFeatureCount('observations')).toBe(1);
+    // The fallback's glyphs are our vendored ones, so labels keep the
+    // vendored stack — the override belongs to the provider style only.
+    expect(adapter.getLayerLayoutProperty('feature-layer-parcels-label', 'text-font')).toEqual([
+      'noto-sans-regular',
+    ]);
+  });
+
+  test('registers no archive in the pmtiles protocol, so destroy releases nothing', async () => {
+    const before = registeredArchiveCount();
+
+    const adapter = await createStyleAdapter({ onError: () => {} });
+    await adapter.ready;
+
+    expect(adapter.getArchiveKey()).toBe(null);
+    expect(registeredArchiveCount()).toBe(before);
+  });
+});
+
 describe('trace layers against real MapLibre', () => {
   const TRACED = {
     id: 'obs-t',

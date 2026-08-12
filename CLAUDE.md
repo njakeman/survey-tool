@@ -12,7 +12,8 @@ completed export), the offline PMTiles basemap with multi-region storage, **feat
 which on a polygon records the centroid via `src/geo/centroid.js`), **OS grid references**
 (OSTN15, offline), **marking a point the surveyor cannot reach** (`positionSource: 'map'` — the
 accuracy figure is the map precision at the picked zoom, the only thing distinguishing measured
-from eyeballed), **online aerial imagery** (Esri, one never-suggested pseudo-region), **trace
+from eyeballed), **online basemaps** (Esri aerial imagery plus OpenFreeMap Light/Simple/Dark,
+all never-suggested pseudo-regions — `src/map/onlineBasemaps.js`), **trace
 modes** (below), **night mode** (`data-mode="night"` via `src/app/displayMode.js`; an Auto|Night
 footer switch persisted in settings — never inferred from the OS), the **locator marker**
 (`src/map/locator.js`, a DOM marker whose beam width is the compass's uncertainty; stale goes
@@ -276,17 +277,25 @@ standalone })`, browser globals injected same as `probe/capabilities.js`, so it'
   browsing sessions (real Safari Private Browsing included, not just a test-harness artifact) —
   ArrayBuffer sidesteps the restriction entirely and works identically everywhere. This will matter
   again in Phase 4 (PMTiles archive stored in IndexedDB).
-- **One online basemap exists**: `map/onlineImagery.js` (Esri World Imagery — Bing's free tier
-  was retired June 2025). It is a pseudo-region appended in `main.js`, honoured by
+- **The online basemaps** (`map/onlineBasemaps.js`): Esri World Imagery (a raster tile template —
+  Bing's free tier was retired June 2025; ArcGIS scheme is `/tile/{z}/{y}/{x}`, row before
+  column, a z/x/y template renders the wrong ground) plus the three OpenFreeMap styles — Light
+  (Positron), Simple (Liberty), Dark. All are pseudo-regions appended in `main.js`, honoured by
   `basemapSelection.js` only as a remembered _choice_ — never the default, never suggested (no
-  bounds, deliberately). Its tiles are **never precached, runtime-cached, or stored in
-  IndexedDB**, and the map must keep loading and functioning with the imagery server unreachable
-  — asserted in the browser tier against an unreachable tile URL. Tile scheme is ArcGIS
-  `/tile/{z}/{y}/{x}` (row before column); a z/x/y template renders the wrong ground.
+  bounds, deliberately). Their tiles and styles are **never precached, runtime-cached, or stored
+  in IndexedDB**, and the map must keep loading and functioning with the provider unreachable —
+  asserted in the browser tier against unreachable URLs. The OpenFreeMap entries are `styleUrl`
+  regions: the adapter fetches the style JSON itself (never handing MapLibre the URL — a failed
+  style fetch would stop `load` firing and lose every queued setter), injects the region's
+  attribution (their style JSON carries none), and falls back to a local blank-ground style
+  offline. Feature-layer labels over a remote style use the region's `featureFontStack`
+  (`'Noto Sans Regular'`) — the provider's glyph server has no `noto-sans-regular`.
 - Basemap tiles: never bulk-fetch from `tile.openstreetmap.org` (OSMF policy explicitly bans
-  pre-seeding areas for offline use) or from OpenFreeMap's CDN (planet-only downloads, no PMTiles,
-  ToS silent-to-hostile on automated collection). Use `pmtiles extract` against Protomaps' public
-  planet build instead — the documented, ODbL-licensed, no-key route to a small regional extract.
+  pre-seeding areas for offline use) or from OpenFreeMap's CDN (planet-only downloads, no PMTiles;
+  bulk collection is what their ToS is hostile to — live per-tile streaming via their hosted
+  styles is their documented quick-start use, which is exactly what the online basemaps do, and
+  no more). Use `pmtiles extract` against Protomaps' public planet build instead — the
+  documented, ODbL-licensed, no-key route to a small regional extract.
 - Four map facts, each learned by something breaking. **MapLibre 6 loads its worker from a separate
   file** resolved against `import.meta.url`, which does not survive bundling — `?worker&url` +
   `setWorkerUrl` (mapAdapter.js) is why production and offline work; dev mode hides the failure.
