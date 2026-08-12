@@ -10,7 +10,8 @@ import {
   pickedPointPaint,
   traceShapeLayers,
   activeTraceData,
-  activeTraceLayer,
+  activeTraceLayers,
+  traceCasingColor,
   OBSERVATION_SHAPES_SOURCE_ID,
   ACTIVE_TRACE_SOURCE_ID,
 } from './overlays.js';
@@ -187,7 +188,7 @@ describe('traceShapeLayers', () => {
   test('fills polygons only, and splits solid from dashed by exported state', () => {
     const layers = traceShapeLayers();
     const fill = layers.find((l) => l.type === 'fill');
-    const lines = layers.filter((l) => l.type === 'line');
+    const lines = layers.filter((l) => l.type === 'line' && !l.id.endsWith('-casing'));
 
     expect(fill.filter).toEqual(['==', ['geometry-type'], 'Polygon']);
     expect(lines).toHaveLength(2);
@@ -219,6 +220,42 @@ describe('traceShapeLayers', () => {
       expect(JSON.stringify(layer.filter ?? [])).not.toContain('geometry-type');
     }
   });
+
+  test('the polygon fill is strong enough to read over imagery', () => {
+    const fill = traceShapeLayers().find((l) => l.type === 'fill');
+
+    expect(fill.paint['fill-opacity']).toBe(0.12);
+  });
+
+  test('every line sits on a solid pale casing directly beneath it', () => {
+    // Over dark aerial both ink lines disappear, and solid-versus-dashed
+    // cannot carry a distinction when neither line is visible — a
+    // constraint-6 failure. The casing is the standard cartographic fix:
+    // it stays SOLID under the dashed line deliberately, so the dash gaps
+    // read pale against dark ground and dark against pale.
+    const layers = traceShapeLayers();
+    const ids = layers.map((l) => l.id);
+
+    expect(ids.indexOf('trace-line-exported-casing')).toBe(ids.indexOf('trace-line-exported') - 1);
+    expect(ids.indexOf('trace-line-pending-casing')).toBe(ids.indexOf('trace-line-pending') - 1);
+
+    for (const casing of layers.filter((l) => l.id.endsWith('-casing'))) {
+      const line = layers.find((l) => l.id === casing.id.replace('-casing', ''));
+      expect(casing.type).toBe('line');
+      expect(casing.filter).toEqual(line.filter);
+      expect(casing.paint['line-color']).toBe(traceCasingColor());
+      expect(casing.paint['line-width']).toBeGreaterThan(line.paint['line-width']);
+      expect(casing.paint['line-dasharray']).toBeUndefined();
+    }
+  });
+});
+
+describe('traceCasingColor', () => {
+  test('is paper by day and near-black at night', () => {
+    // Against a dimmed night map the contrast a line needs is downward.
+    expect(traceCasingColor()).toBe('#f4f0e8');
+    expect(traceCasingColor(true)).toBe('#0b0604');
+  });
 });
 
 describe('active trace', () => {
@@ -239,10 +276,21 @@ describe('active trace', () => {
   });
 
   test('the live line is accent-coloured and dashed - provisional, like the picked point', () => {
-    const layer = activeTraceLayer();
+    const layers = activeTraceLayers();
+    const line = layers.find((l) => l.id === 'active-trace-line');
 
-    expect(layer.source).toBe(ACTIVE_TRACE_SOURCE_ID);
-    expect(layer.paint['line-color']).toBe('#c2611f');
-    expect(layer.paint['line-dasharray']).toBeDefined();
+    expect(line.source).toBe(ACTIVE_TRACE_SOURCE_ID);
+    expect(line.paint['line-color']).toBe('#c2611f');
+    expect(line.paint['line-dasharray']).toBeDefined();
+  });
+
+  test('the live line rides its own casing, like the saved ones', () => {
+    const ids = activeTraceLayers().map((l) => l.id);
+
+    expect(ids).toEqual(['active-trace-line-casing', 'active-trace-line']);
+
+    const casing = activeTraceLayers().find((l) => l.id === 'active-trace-line-casing');
+    expect(casing.paint['line-color']).toBe(traceCasingColor());
+    expect(casing.paint['line-dasharray']).toBeUndefined();
   });
 });

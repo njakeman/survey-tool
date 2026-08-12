@@ -10,6 +10,7 @@ import {
 import { lineLengthM } from '../geo/lineMetrics.js';
 import { useEffect, useState } from 'preact/hooks';
 import { ExportBadge } from './ExportBadge.js';
+import { TraceGlyph } from './traceGlyphs.js';
 
 // A saved voice note, loaded only when the surveyor asks to hear it — the
 // bytes stay in IndexedDB until the tap. Native <audio controls> once
@@ -106,6 +107,22 @@ export function ObservationsList({ observations, gridRef, loadAudio }) {
               <span class="observations-time">${formatTime(obs.fixAt)}</span>
               <${ExportBadge} exported=${obs.exported} />
             </p>
+            ${
+              // Directly under the head, glyph-led: this line is the row's
+              // identity — it says what the record IS, and everything below
+              // it describes that thing. The caveat and warning lines keep
+              // their place at the bottom.
+              traced
+                ? html`<p class="observations-traced">
+                    <${TraceGlyph}
+                      mode=${obs.geometry.type === 'Polygon' ? 'boundary' : 'path'}
+                      width="20"
+                      height="15"
+                    />
+                    ${traced}
+                  </p>`
+                : null
+            }
             ${gridReference ? html`<p class="observations-gridref">${gridReference}</p>` : null}
             <p class="observations-meta">${meta}</p>
             ${obs.note ? html`<p class="observations-note">${obs.note}</p>` : null}
@@ -135,7 +152,6 @@ export function ObservationsList({ observations, gridRef, loadAudio }) {
                 ? html`<p class="observations-picked">Marked on the map, not measured</p>`
                 : null
             }
-            ${traced ? html`<p class="observations-traced">${traced}</p>` : null}
           </li>
         `;
       })}

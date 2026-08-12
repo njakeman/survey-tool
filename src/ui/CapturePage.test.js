@@ -445,6 +445,18 @@ describe('CapturePage — session history link and export', () => {
 
     await screen.findByText(/zip failed/);
   });
+
+  test('Export is a session-level control at the page foot, not a capture action', async () => {
+    // Everything in the capture-actions row attaches to the observation
+    // being composed; Export acts on the whole session, like End session.
+    const service = createFakeService({ openSession: OPEN_SESSION });
+    const { sensors } = createFakeSensors();
+    renderPage({ service, sensors });
+    await screen.findByText('Ashton Keynes');
+
+    const exportButton = screen.getByRole('button', { name: /^export$/i });
+    expect(exportButton.closest('.capture-actions')).toBeNull();
+  });
 });
 
 describe('CapturePage — voice note', () => {
@@ -990,7 +1002,7 @@ describe('CapturePage - trace modes', () => {
     pushPosition(POSITION);
 
     fireEvent.click(screen.getByRole('button', { name: 'Trace' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Trace a path' }));
+    fireEvent.click(screen.getByRole('button', { name: /Trace a path/ }));
     await screen.findByText(/Tracing path/);
   }
 
@@ -1002,6 +1014,30 @@ describe('CapturePage - trace modes', () => {
     expect(service.startTraceDraft).toHaveBeenCalledWith({ mode: 'path' });
     // The first fix was already accepted as vertex zero.
     await waitFor(() => expect(service.appendTraceVertex).toHaveBeenCalled());
+  });
+
+  test('the chooser explains both walks and can be cancelled', async () => {
+    const service = createFakeService({ openSession: OPEN_SESSION });
+    const fakes = createFakeSensors();
+    render(
+      html`<${CapturePage} service=${service} sensors=${fakes.sensors} downscale=${vi.fn()} />`,
+    );
+    await screen.findByText('Ashton Keynes');
+    fakes.pushPosition(POSITION);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Trace' }));
+
+    // The one moment of modal choice in the flow: a first-time user won't
+    // know a boundary auto-closes, so each option says what it records.
+    expect(screen.getByText('What are you walking?')).toBeInTheDocument();
+    expect(screen.getByText(/Records the line you walk, start to finish/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Closes the loop back to your start point when you finish/),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('button', { name: /Trace a path/ })).toBeNull();
+    expect(service.startTraceDraft).not.toHaveBeenCalled();
   });
 
   test('walking appends vertices to the draft as they are accepted', async () => {
@@ -1047,7 +1083,7 @@ describe('CapturePage - trace modes', () => {
     fakes.pushPosition(POSITION);
 
     fireEvent.click(screen.getByRole('button', { name: 'Trace' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Trace a boundary' }));
+    fireEvent.click(screen.getByRole('button', { name: /Trace a boundary/ }));
     await screen.findByText(/Tracing boundary/);
 
     fireEvent.click(screen.getByRole('button', { name: 'Finish' }));
@@ -1120,7 +1156,44 @@ describe('CapturePage - trace modes', () => {
 
     // Paused, never silently recording - a relaunch hours later must not
     // stitch the drive home onto the hedgerow.
-    await screen.findByText(/Paused path/);
+    await screen.findByText(/Paused · path/);
     expect(screen.getByText(/2 points/)).toBeInTheDocument();
+  });
+
+  test('the recovery panel explains itself in a sentence and leads with Resume', async () => {
+    // The surveyor arrives at this cold, possibly days later — "12 points"
+    // alone does not tell them whether their walk survived. And nothing is
+    // recording, so nothing pulses (design pass 2e).
+    const service = createFakeService({
+      openSession: OPEN_SESSION,
+      traceDraft: {
+        draft: {
+          id: 'draft-9',
+          sessionId: 'sess-1',
+          mode: 'path',
+          startedAt: '2026-08-12T08:00:00.000Z',
+        },
+        vertices: [
+          { draftId: 'draft-9', seq: 0, lat: 51.5, lon: -0.14, accuracyM: 5, fixAt: 't0' },
+          { draftId: 'draft-9', seq: 1, lat: 51.5002, lon: -0.14, accuracyM: 6, fixAt: 't1' },
+        ],
+      },
+    });
+    const fakes = createFakeSensors();
+    render(
+      html`<${CapturePage} service=${service} sensors=${fakes.sensors} downscale=${vi.fn()} />`,
+    );
+
+    await screen.findByText('Unfinished trace found');
+    expect(
+      screen.getByText(
+        /A path with 2 points was still recording when the app closed\. It has not been saved\./,
+      ),
+    ).toBeInTheDocument();
+
+    const panel = document.querySelector('.trace-recovery');
+    expect(panel).not.toBeNull();
+    expect(panel.querySelector('.trace-strip-dot')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Resume' }).className).toContain('button-primary');
   });
 });

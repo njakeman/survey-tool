@@ -146,39 +146,68 @@ export function observationShapesCollection(observations) {
   };
 }
 
+// The casing under every trace line: 5px of solid pale (or, at night,
+// near-black) beneath the 3px line. The ink lines were tuned against pale
+// vector paper and disappear over dark aerial — and solid-versus-dashed
+// cannot carry the exported distinction when neither line is visible. A
+// casing is the standard cartographic fix and makes the lines basemap-
+// independent. It stays SOLID under the dashed lines deliberately: the dash
+// gaps then read pale against dark ground and dark against pale, so the
+// dash gets more legible, not less.
+export function traceCasingColor(night = false) {
+  // Against a dimmed night map the contrast a line needs is downward.
+  return night ? '#0b0604' : '#f4f0e8';
+}
+
+function casingLayer(line) {
+  return {
+    id: `${line.id}-casing`,
+    type: 'line',
+    source: line.source,
+    ...(line.filter ? { filter: line.filter } : {}),
+    paint: { 'line-color': traceCasingColor(), 'line-width': 5, 'line-opacity': 0.75 },
+  };
+}
+
 // Solid versus dashed is the line-scale analogue of the markers'
 // filled-versus-hollow: exported-or-not must survive greyscale, so it is
 // never carried by hue. Two line layers split by filter rather than one
 // with a data-driven dash — MapLibre's line-dasharray is not data-drivable.
 // The line layers carry no geometry-type filter, deliberately: a boundary
 // polygon needs its outline drawn by them, or it is a faint wash with no
-// edge.
+// edge. Each line's casing sits immediately before it in the returned
+// array, so adding the layers in order stacks every line directly on its
+// own casing.
 export function traceShapeLayers() {
   const source = OBSERVATION_SHAPES_SOURCE_ID;
+  const exported = {
+    id: 'trace-line-exported',
+    type: 'line',
+    source,
+    filter: ['get', 'exported'],
+    paint: { 'line-color': MARKER_INK, 'line-width': 3 },
+  };
+  const pending = {
+    id: 'trace-line-pending',
+    type: 'line',
+    source,
+    filter: ['!', ['get', 'exported']],
+    paint: { 'line-color': MARKER_INK, 'line-width': 3, 'line-dasharray': [2, 2] },
+  };
   return [
     {
       id: 'trace-fill',
       type: 'fill',
       source,
-      filter: ['==', ['geometry-type'], 'Polygon'],
       // Faint either way — the fill says "this area", the outline carries
       // the exported distinction.
-      paint: { 'fill-color': MARKER_INK, 'fill-opacity': 0.08 },
+      filter: ['==', ['geometry-type'], 'Polygon'],
+      paint: { 'fill-color': MARKER_INK, 'fill-opacity': 0.12 },
     },
-    {
-      id: 'trace-line-exported',
-      type: 'line',
-      source,
-      filter: ['get', 'exported'],
-      paint: { 'line-color': MARKER_INK, 'line-width': 3 },
-    },
-    {
-      id: 'trace-line-pending',
-      type: 'line',
-      source,
-      filter: ['!', ['get', 'exported']],
-      paint: { 'line-color': MARKER_INK, 'line-width': 3, 'line-dasharray': [2, 2] },
-    },
+    casingLayer(exported),
+    exported,
+    casingLayer(pending),
+    pending,
   ];
 }
 
@@ -198,11 +227,12 @@ export function activeTraceData(coordinates) {
   };
 }
 
-export function activeTraceLayer() {
-  return {
+export function activeTraceLayers() {
+  const line = {
     id: 'active-trace-line',
     type: 'line',
     source: ACTIVE_TRACE_SOURCE_ID,
     paint: { 'line-color': '#c2611f', 'line-width': 3, 'line-dasharray': [1.5, 1.5] },
   };
+  return [casingLayer(line), line];
 }

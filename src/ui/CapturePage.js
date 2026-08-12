@@ -11,6 +11,7 @@ import { ObservationsList } from './ObservationsList.js';
 import { CaptureMap } from './CaptureMap.js';
 import { FeatureSheet } from './FeatureSheet.js';
 import { TraceStrip } from './TraceStrip.js';
+import { TraceGlyph } from './traceGlyphs.js';
 import { formatLatLon } from '../sensors/format.js';
 import { chooseActive } from '../map/basemapSelection.js';
 import { isExported } from '../domain/session.js';
@@ -537,45 +538,53 @@ export function CapturePage({
         visible=${visible}
       />
       ${
+        // Not a readout of something happening now — the app asking an
+        // unprompted question after a crash — so it takes the suggestion
+        // ground like the chooser, not the strip's accent edge, and nothing
+        // pulses because nothing is recording. A sentence, not a status
+        // line: the surveyor arrives at this cold, possibly days later.
         recoveredDraft
-          ? html`<div class="trace-strip" data-status="recovered" role="status">
-              <p class="trace-strip-summary">
-                Unfinished trace found · ${recoveredDraft.draft.mode} ·
-                ${recoveredDraft.vertices.length}
-                point${recoveredDraft.vertices.length === 1 ? '' : 's'}
+          ? html`<div class="trace-recovery" role="status">
+              <p class="trace-recovery-title">Unfinished trace found</p>
+              <p class="trace-recovery-copy">
+                ${`A ${recoveredDraft.draft.mode} with ${recoveredDraft.vertices.length} point${
+                  recoveredDraft.vertices.length === 1 ? '' : 's'
+                } was still recording when the app closed. It has not been saved.`}
               </p>
-              <span class="trace-strip-actions">
-                <button type="button" class="button-outline" onClick=${handleResumeRecovered}>
-                  Resume
-                </button>
-                <button type="button" class="button-outline" onClick=${handleFinishRecovered}>
-                  Finish
-                </button>
-                ${
-                  confirmingRecoveredDiscard
-                    ? html`<button
-                          type="button"
-                          class="button-outline"
-                          onClick=${handleDiscardRecovered}
-                        >
-                          Discard trace
-                        </button>
-                        <button
-                          type="button"
-                          class="link"
-                          onClick=${() => setConfirmingRecoveredDiscard(false)}
-                        >
-                          Keep it
-                        </button>`
-                    : html`<button
+              ${
+                confirmingRecoveredDiscard
+                  ? html`<span class="trace-discard-confirm">
+                      <button
+                        type="button"
+                        class="trace-discard-commit"
+                        onClick=${handleDiscardRecovered}
+                      >
+                        Discard trace
+                      </button>
+                      <button
+                        type="button"
+                        class="link"
+                        onClick=${() => setConfirmingRecoveredDiscard(false)}
+                      >
+                        Keep it
+                      </button>
+                    </span>`
+                  : html`<span class="trace-recovery-actions">
+                      <button type="button" class="button-primary" onClick=${handleResumeRecovered}>
+                        Resume
+                      </button>
+                      <button type="button" class="button-surface" onClick=${handleFinishRecovered}>
+                        Finish
+                      </button>
+                      <button
                         type="button"
                         class="link"
                         onClick=${() => setConfirmingRecoveredDiscard(true)}
                       >
                         Discard
-                      </button>`
-                }
-              </span>
+                      </button>
+                    </span>`
+              }
             </div>`
           : null
       }
@@ -627,38 +636,46 @@ export function CapturePage({
               </button>`
             : null
         }
-        ${
-          // Export sits beside Take Photo rather than below the observations:
-          // exporting the *open* session is a thing a surveyor does before
-          // walking away, not a history-screen chore.
-          session
-            ? html`<button
-                type="button"
-                class="button-outline"
-                disabled=${exportState === 'exporting'}
-                onClick=${handleExport}
-              >
-                ${exportState === 'exporting' ? 'Exporting…' : 'Export'}
-              </button>`
-            : null
-        }
       </div>
       ${
+        // The one moment of modal choice in the flow, so it takes the
+        // region-suggestion ground: like the suggestion, it is the app
+        // asking an unprompted question. Options are stacked (it has to
+        // hold at 320px) and each says what it records — a first-time user
+        // won't know a boundary auto-closes.
         traceChooserOpen
           ? html`<div class="trace-chooser">
+              <div class="trace-chooser-head">
+                <p class="trace-chooser-title">What are you walking?</p>
+                <button type="button" class="link" onClick=${() => setTraceChooserOpen(false)}>
+                  Cancel
+                </button>
+              </div>
               <button
                 type="button"
-                class="button-outline"
+                class="trace-chooser-option"
                 onClick=${() => handleStartTrace('path')}
               >
-                Trace a path
+                <${TraceGlyph} mode="path" />
+                <span class="trace-chooser-body">
+                  <span class="trace-chooser-name">Trace a path</span>
+                  <span class="trace-chooser-desc"
+                    >Records the line you walk, start to finish.</span
+                  >
+                </span>
               </button>
               <button
                 type="button"
-                class="button-outline"
+                class="trace-chooser-option"
                 onClick=${() => handleStartTrace('boundary')}
               >
-                Trace a boundary
+                <${TraceGlyph} mode="boundary" />
+                <span class="trace-chooser-body">
+                  <span class="trace-chooser-name">Trace a boundary</span>
+                  <span class="trace-chooser-desc">
+                    Closes the loop back to your start point when you finish.
+                  </span>
+                </span>
               </button>
             </div>`
           : null
@@ -675,11 +692,6 @@ export function CapturePage({
               onError=${setAudioError}
               recordAudio=${recordAudio}
             />`
-          : null
-      }
-      ${
-        exportMessage
-          ? html`<p class="capture-page-export-message" role="status">${exportMessage}</p>`
           : null
       }
       ${
@@ -743,6 +755,28 @@ export function CapturePage({
           : null
       }
       ${observationsList}
+      ${
+        // At the page foot with the other session-level controls, not in the
+        // capture-actions row: photo, voice and trace all attach to the
+        // observation being composed, while Export — like End session — acts
+        // on the whole session. (Design pass 2c: a scope argument, not a
+        // space-saving one.)
+        session
+          ? html`<button
+              type="button"
+              class="button-outline capture-page-export"
+              disabled=${exportState === 'exporting'}
+              onClick=${handleExport}
+            >
+              ${exportState === 'exporting' ? 'Exporting…' : 'Export'}
+            </button>`
+          : null
+      }
+      ${
+        exportMessage
+          ? html`<p class="capture-page-export-message" role="status">${exportMessage}</p>`
+          : null
+      }
       ${
         offlineStatus && offlineStatus.precachedCount === 0
           ? // Appears with no user action, once the offline check settles

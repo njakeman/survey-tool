@@ -15,7 +15,7 @@ import {
   pickedPointPaint,
   traceShapeLayers,
   activeTraceData,
-  activeTraceLayer,
+  activeTraceLayers,
   OBSERVATION_SHAPES_SOURCE_ID,
   ACTIVE_TRACE_SOURCE_ID,
 } from './overlays.js';
@@ -295,7 +295,9 @@ export async function createMapAdapter({
         map.addLayer(definition);
       }
       map.addSource(ACTIVE_TRACE_SOURCE_ID, { type: 'geojson', data: activeTraceData(null) });
-      map.addLayer(activeTraceLayer());
+      for (const definition of activeTraceLayers()) {
+        map.addLayer(definition);
+      }
 
       // The paint lives in overlays.js with the rest of the pure marker
       // logic, so the pending/synced distinction is node-testable rather

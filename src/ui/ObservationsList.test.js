@@ -204,6 +204,17 @@ describe('ObservationsList - traced observations', () => {
     expect(screen.getByText(/Traced path · 111 m/)).toBeInTheDocument();
   });
 
+  test('the traced line is the identity of the row: glyph-led, directly under the head', () => {
+    // It says what the record IS — everything below it describes that thing —
+    // so it sits above the grid reference and metadata, not among the
+    // caveats at the bottom (design pass 2d).
+    render(html`<${ObservationsList} observations=${[TRACED_PATH]} />`);
+
+    const traced = screen.getByText(/Traced path · 111 m/).closest('.observations-traced');
+    expect(traced.querySelector('svg.trace-glyph')).not.toBeNull();
+    expect(traced.previousElementSibling.className).toContain('observations-row-head');
+  });
+
   test('a traced boundary reports its perimeter', () => {
     const ring = [
       [-0.14, 51.5],

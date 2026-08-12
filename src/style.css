@@ -1046,11 +1046,24 @@ button {
   font-size: var(--type-small);
 }
 
+/* A quieter strip reads before any word does. */
+.trace-strip[data-status='paused'] {
+  border-left-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+/* Line 1: the status run, elapsed pushed to the end — mid-walk the question
+   is how far you have got, not how long you have been out. */
 .trace-strip-summary {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: var(--space-2);
   margin: 0;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.trace-strip-elapsed {
+  margin-left: auto;
   font-variant-numeric: tabular-nums;
 }
 
@@ -1060,19 +1073,51 @@ button {
   height: 10px;
   border-radius: 50%;
   background: var(--accent);
-  animation: voice-note-pulse 1.2s ease-in-out infinite;
+  /* Its own tempo, split by duration (design pass 2f): a voice note runs
+     for seconds and wants the 1.2s pulse's urgency; a trace runs for tens
+     of minutes, where a fast blink in peripheral vision is tiring. Two
+     rhythms stop reading as one flashing interface when both record at
+     once. */
+  animation: trace-breathe 2.4s ease-in-out infinite;
 }
 
-/* Paused holds still — the pulse is what says "recording". */
+@keyframes trace-breathe {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+/* Paused holds still — the pulse is what says "recording". 0.4 stays below
+   the breathe's floor, so frozen and breathing never look alike. */
 .trace-strip-dot[data-paused='true'] {
   animation: none;
   opacity: 0.4;
 }
 
-.trace-strip-hint,
-.trace-strip-warning {
+/* Line 2: the walked total, the largest thing on the strip. Waiting-for-a-
+   fix borrows this slot (same size, muted) rather than adding a line, so
+   the strip height never jumps under the thumb. */
+.trace-strip-metrics {
+  margin: 0;
+  font-size: var(--type-save);
+  font-weight: 700;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.trace-strip-metrics[data-waiting='true'] {
+  color: var(--text-muted);
+}
+
+.trace-strip-note {
   margin: 0;
   color: var(--text-secondary);
+}
+
+.trace-strip-warning {
+  margin: 0;
+  font-weight: 700;
+  color: var(--accent-deep);
 }
 
 .trace-strip-error {
@@ -1080,12 +1125,172 @@ button {
 }
 
 .trace-strip-actions,
-.trace-discard-confirm,
-.trace-chooser {
+.trace-discard-confirm {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: var(--space-2);
+}
+
+/* Finish wears the accent at the strip's own scale — the row's other two
+   controls stay outline and link, so the eye lands on the way forward. */
+.trace-strip .button-primary {
+  font-size: var(--type-body);
+}
+
+.trace-strip-actions .link {
+  margin-left: auto;
+}
+
+/* The confirm REPLACES the action row (Finish and Pause leave), so the row
+   cannot reflow mid-interaction at 320px. Keep tracing sits where Discard
+   was — the escape is under the finger that just tapped. */
+.trace-discard-confirm {
+  width: 100%;
+}
+
+.trace-discard-confirm .link {
+  margin-left: auto;
+}
+
+/* The only red control in the app. */
+.trace-discard-commit {
+  background: transparent;
+  color: var(--danger-strong);
+  border: 1px solid var(--danger-rule);
+  border-radius: var(--radius);
+  font-size: var(--type-small);
+  padding: 0 14px;
+}
+
+/* The recovery panel: the app asking an unprompted question after a crash,
+   so it takes the suggestion ground like the chooser below — not the
+   strip's accent edge — and has no pulsing dot, because nothing is
+   recording. Light ground in both schemes (the alert-surface rule), hence
+   the light-scheme literals. */
+.trace-recovery {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 10px;
+  border-radius: var(--radius);
+  background: var(--suggestion-bg);
+  border: 1px solid var(--accent);
+  color: #1e2433;
+  animation: banner-in 120ms ease-out;
+}
+
+.trace-recovery-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.trace-recovery-copy {
+  margin: 0;
+  font-size: var(--type-small);
+}
+
+.trace-recovery .link {
+  color: #a8511a;
+}
+
+/* Resume leads as the forward action; Discard is pushed far right, away
+   from the accent. */
+.trace-recovery-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.trace-recovery-actions .link {
+  margin-left: auto;
+}
+
+.trace-recovery .button-primary {
+  font-size: var(--type-body);
+}
+
+/* Pinned to the light literals: the panel keeps its cream ground in both
+   schemes, so a dark-scheme --surface chip here would read as a hole. */
+.trace-recovery .button-surface {
+  background: #fbf9f4;
+  color: #1e2433;
+  border-color: rgba(30, 36, 51, 0.3);
+}
+
+/* The trace chooser: a panel, not two loose buttons. It takes the region
+   suggestion's ground because, like the suggestion, it is the app asking an
+   unprompted question — and like that banner it keeps a light ground in
+   both schemes, so its ink is the light scheme's literals rather than
+   tokens, which invert. */
+.trace-chooser {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 10px;
+  border-radius: var(--radius);
+  background: var(--suggestion-bg);
+  border: 1px solid var(--accent);
+  color: #1e2433;
+  animation: banner-in 120ms ease-out;
+}
+
+.trace-chooser-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.trace-chooser-title {
+  margin: 0;
+  font-size: var(--type-body);
+  font-weight: 700;
+}
+
+/* Accent-as-text on the cream ground needs the light pair in both schemes. */
+.trace-chooser .link {
+  color: #a8511a;
+}
+
+/* Each option is one 48px-min row, the whole row tappable. */
+.trace-chooser-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-height: 3rem;
+  padding: 10px 12px;
+  text-align: left;
+  background: none;
+  border: none;
+  border-top: 1px solid var(--rule-faint);
+  color: inherit;
+}
+
+.trace-chooser-option .trace-glyph {
+  flex: none;
+  margin-top: 4px;
+}
+
+.trace-chooser-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.trace-chooser-name {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.trace-chooser-desc {
+  font-size: var(--type-meta);
+  color: rgba(30, 36, 51, 0.62);
 }
 
 /* Session history: a read-only list of past sessions, each opening its own
@@ -1241,6 +1446,14 @@ button {
   width: 100%;
   min-height: 3.25rem;
   margin-top: var(--space-4);
+}
+
+/* Full width like the history views' import/export controls — it is the
+   same kind of act, offered where the session-level controls live. Outline,
+   not primary: Save keeps the page's accent. */
+.capture-page-export {
+  width: 100%;
+  min-height: 3.25rem;
 }
 
 .session-history-import-message,
@@ -1518,6 +1731,27 @@ button {
 
 .observations-row-head .chip {
   margin-left: auto;
+}
+
+/* Three kinds of qualifier line, three treatments (design pass 2d):
+   identity (traced — bold ink with the glyph, directly under the head),
+   caveat (picked — muted italic, last), warning (poor — accent-deep with
+   the triangle). */
+
+/* Identity: it names what the record IS; everything below describes it. The
+   glyph is the same open-line/closed-pentagon pair the chooser draws. */
+.observations-traced {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 0;
+  font-size: var(--type-meta);
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.observations-traced .trace-glyph {
+  flex: none;
 }
 
 /* Provenance, not a warning: a marked point is a legitimate observation, so

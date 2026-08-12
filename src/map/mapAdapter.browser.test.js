@@ -594,13 +594,22 @@ describe('trace layers against real MapLibre', () => {
     const order = adapter.getLayerOrder();
     for (const id of [
       'trace-fill',
+      'trace-line-exported-casing',
       'trace-line-exported',
+      'trace-line-pending-casing',
       'trace-line-pending',
+      'active-trace-line-casing',
       'active-trace-line',
     ]) {
       expect(order.indexOf(id)).toBeGreaterThan(order.indexOf('feature-highlight-line'));
       expect(order.indexOf(id)).toBeLessThan(order.indexOf('position-accuracy'));
       expect(order.indexOf(id)).toBeLessThan(order.indexOf('position-dot'));
+    }
+
+    // Each casing directly beneath its own line — anything between them
+    // would draw inside the casing's halo.
+    for (const line of ['trace-line-exported', 'trace-line-pending', 'active-trace-line']) {
+      expect(order.indexOf(`${line}-casing`)).toBe(order.indexOf(line) - 1);
     }
   });
 

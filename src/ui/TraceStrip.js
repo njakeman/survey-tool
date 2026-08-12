@@ -14,8 +14,16 @@ const MODE_LABEL = { path: 'path', boundary: 'boundary' };
 // the appender, the draft) lives in CapturePage, the same split as
 // pickedPoint: the strip shows and asks, the page owns and does.
 //
-// Discard is two-step. A walked kilometre must not be lost to one mistap
-// through a glove; everything else on this strip is single-tap because
+// Three stacked lines (design pass 2a): the status run with elapsed pushed
+// right, then the walked total as the largest thing on the strip — mid-walk
+// the question is how far you have got, not how long you have been out —
+// then the actions. Finish wears the accent in both live states, same
+// treatment, same slot: it is what moves the walk toward being saved.
+//
+// Discard is two-step, and the confirm REPLACES the action row rather than
+// extending it — the row must not reflow mid-interaction at 320px, and a
+// glove aiming at "Keep tracing" must not land on Finish. A walked kilometre
+// must not be lost to one mistap; everything else here is single-tap because
 // everything else is recoverable.
 export function TraceStrip({ trace, onPause, onResume, onFinish, onDiscard }) {
   const { status, mode, startedAt, stats, warnings, error } = trace;
@@ -35,37 +43,41 @@ export function TraceStrip({ trace, onPause, onResume, onFinish, onDiscard }) {
 
   const walked = `${formatDistance(stats.lengthM)} · ${stats.vertexCount} point${stats.vertexCount === 1 ? '' : 's'}`;
 
-  const discard = confirmingDiscard
-    ? html`
-        <span class="trace-discard-confirm">
-          <button type="button" class="button-outline" onClick=${() => onDiscard()}>
-            Discard trace
-          </button>
-          <button type="button" class="link" onClick=${() => setConfirmingDiscard(false)}>
-            Keep tracing
-          </button>
-        </span>
-      `
-    : html`
-        <button type="button" class="link" onClick=${() => setConfirmingDiscard(true)}>
-          Discard
-        </button>
-      `;
+  // "Keep tracing" sits where Discard was — far right — so the escape is
+  // under the finger that just tapped. "Discard trace" is the app's one red
+  // control.
+  const discardConfirm = html`
+    <span class="trace-discard-confirm">
+      <button type="button" class="trace-discard-commit" onClick=${() => onDiscard()}>
+        Discard trace
+      </button>
+      <button type="button" class="link" onClick=${() => setConfirmingDiscard(false)}>
+        Keep tracing
+      </button>
+    </span>
+  `;
+
+  const discardLink = html`
+    <button type="button" class="link" onClick=${() => setConfirmingDiscard(true)}>Discard</button>
+  `;
 
   if (status === 'pending') {
     return html`
       <div class="trace-strip" data-status="pending">
-        <p class="trace-strip-summary" role="status">
-          Traced ${MODE_LABEL[mode]} pending · save to keep it — ${walked}
-        </p>
+        <p class="trace-strip-metrics" role="status">Traced ${MODE_LABEL[mode]} · ${walked}</p>
+        <p class="trace-strip-note">Save to keep it</p>
         ${
           warnings.includes('self-intersection')
-            ? html`<p class="trace-strip-warning">
+            ? html`<p class="trace-strip-warning warns">
                 This boundary crosses itself — you can still save it.
               </p>`
             : null
         }
-        ${discard}
+        ${
+          confirmingDiscard
+            ? discardConfirm
+            : html`<span class="trace-strip-actions">${discardLink}</span>`
+        }
         ${error ? html`<p class="trace-strip-error panel-danger" role="alert">${error}</p>` : null}
       </div>
     `;
@@ -75,27 +87,38 @@ export function TraceStrip({ trace, onPause, onResume, onFinish, onDiscard }) {
     <div class="trace-strip" data-status=${status}>
       <p class="trace-strip-summary" role="status">
         <span class="trace-strip-dot" data-paused=${status === 'paused'} aria-hidden="true"></span>
-        ${status === 'paused' ? 'Paused' : 'Tracing'} ${MODE_LABEL[mode]} ·
-        ${formatElapsed(elapsedMs)} · ${walked}
+        ${status === 'paused' ? `Paused · ${MODE_LABEL[mode]}` : `Tracing ${MODE_LABEL[mode]}`}
+        <span class="trace-strip-elapsed">${formatElapsed(elapsedMs)}</span>
       </p>
       ${
+        // Waiting takes the metrics SLOT, not a fourth line: the strip is the
+        // same height before and after the first vertex, so nothing jumps
+        // under the thumb.
         status === 'recording' && stats.vertexCount === 0
-          ? html`<p class="trace-strip-hint">Waiting for a good fix…</p>`
-          : null
+          ? html`<p class="trace-strip-metrics" data-waiting="true">Waiting for a good fix…</p>`
+          : html`<p class="trace-strip-metrics">${walked}</p>`
       }
-      <span class="trace-strip-actions">
-        ${
-          status === 'paused'
-            ? html`<button type="button" class="button-outline" onClick=${() => onResume()}>
-                Resume
-              </button>`
-            : html`<button type="button" class="button-outline" onClick=${() => onPause()}>
-                Pause
-              </button>`
-        }
-        <button type="button" class="button-outline" onClick=${() => onFinish()}>Finish</button>
-        ${discard}
-      </span>
+      ${
+        confirmingDiscard
+          ? discardConfirm
+          : html`
+              <span class="trace-strip-actions">
+                <button type="button" class="button-primary" onClick=${() => onFinish()}>
+                  Finish
+                </button>
+                ${
+                  status === 'paused'
+                    ? html`<button type="button" class="button-outline" onClick=${() => onResume()}>
+                        Resume
+                      </button>`
+                    : html`<button type="button" class="button-outline" onClick=${() => onPause()}>
+                        Pause
+                      </button>`
+                }
+                ${discardLink}
+              </span>
+            `
+      }
       ${error ? html`<p class="trace-strip-error panel-danger" role="alert">${error}</p>` : null}
     </div>
   `;
