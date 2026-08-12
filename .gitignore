@@ -4,6 +4,8 @@ dev-dist/
 .vite/
 playwright-report/
 test-results/
+# Vitest browser mode drops failure screenshots beside the test file.
+__screenshots__/
 *.local
 .DS_Store
 RESUME.md

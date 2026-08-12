@@ -39,6 +39,13 @@ export default defineConfig({
         test: {
           name: 'browser',
           include: ['src/**/*.browser.test.js'],
+          // A ceiling for slow runners, not a licence for slow tests: every
+          // test here builds a real MapLibre map, which runs on software GL
+          // in CI, where a single init has been seen to cross the 15s
+          // default while the identical config passed in the adjacent test
+          // (and takes ~70ms locally). Node and happy-dom keep their tight
+          // defaults — nothing in those tiers should ever be slow.
+          testTimeout: 60_000,
           browser: {
             enabled: true,
             provider: playwright(),
