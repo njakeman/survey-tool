@@ -88,9 +88,10 @@ local server fails instead of silently opening yet another orphaned origin.
 - [ ] Full flow — start session, get a fix, take a photo, add a note, save — works in **airplane
       mode**. **Must** be run against a production build. Preferred: add
       `https://survey.field.works/` to the home screen and launch it once online before flipping
-      on airplane mode so the service worker precaches. Local alternative: `npm run build && npm
-    run preview:mobile`, re-add to home screen from `https://<LAN-IP>:4173/` (a _different_
-      origin from the dev server's 5173 — the old icon won't pick this build up). Either way, the plain dev server's SW
+      on airplane mode so the service worker precaches. Local alternative:
+      `npm run build && npm run preview:mobile`, re-add to home screen from
+      `https://<LAN-IP>:4173/` (a _different_ origin from the dev server's 5173 — the old icon
+      won't pick this build up). Either way, the plain dev server's SW
       precaches nothing by design (see CLAUDE.md) and will fail this check every time even though
       nothing is broken — this exact confusion produced a false bug report once already. If the
       capture page ever shows the red "No offline cache" banner, that's the app correctly telling
