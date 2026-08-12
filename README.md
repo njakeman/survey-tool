@@ -14,7 +14,10 @@ See [`CLAUDE.md`](./CLAUDE.md) for the constraints that bind the implementation 
 Field-usable offline. Capture (GPS/compass/photo/save, with in-place note editing on the open
 session), session history, zip export **and
 import** (plus [Load session](#import-a-session), which reopens a past or imported session to
-add to it), the offline basemap, [feature layers](#feature-layers) (with tap-to-inspect, an amber
+add to it, and [session deletion](#import-a-session) — single, or a purge of the fully exported),
+the offline basemap (with four [online basemaps](#offline-basemap) beside it — Esri aerial
+imagery and three OpenFreeMap streetmaps), [feature layers](#feature-layers) (with
+tap-to-inspect, an amber
 selection highlight, and "Record here" — which for a polygon records the polygon's centroid, not
 where you are standing), [OS grid references](#grid-references) and
 [marking points you cannot reach](#marking-a-point-you-cannot-reach) are built. The map takes
@@ -38,8 +41,8 @@ To see a map you must first produce basemap archives for your survey areas — s
 [Offline basemap](#offline-basemap) below. Without any, the app works exactly as before and the
 map panel simply offers to pick a region.
 
-Nothing since the capture phase has been verified on a real iPhone. `docs/ios-manual-checklist.md`
-is the gate, and it is unticked from Phase 3 onward.
+The app is in real field use on an iPhone, but the formal device pass lags the code:
+`docs/ios-manual-checklist.md` is the gate, and it is unticked from Phase 3 onward.
 
 **Trace modes** record a shape by walking it: _trace a path_ turns the walk into a line (a
 hedgerow, a track, a watercourse); _trace a boundary_ walks a perimeter and closes it into a

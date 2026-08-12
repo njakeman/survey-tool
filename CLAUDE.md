@@ -85,9 +85,9 @@ A few pointers the styling record leans on: every map trace line rides a **solid
 and the list rows; **Export lives at the page foot**, not in the capture-actions row — it acts
 on the session, not the observation being composed.
 
-**Everything since the capture phase is unverified on a real device.**
-`docs/ios-manual-checklist.md` is the gate, unticked from Phase 3 onward, run against
-`https://survey.field.works/`.
+**The formal device pass lags the code.** The app is in real field use on an iPhone (which is
+how the share-sheet banner and other reports surface), but `docs/ios-manual-checklist.md` is the
+gate — unticked from Phase 3 onward, run against `https://survey.field.works/`.
 
 The local dev server needs HTTPS to test geolocation/compass permissions (secure-context gated) —
 `npm run dev -- --host` now serves HTTPS via `vite-plugin-mkcert`, reachable on the LAN. Plain `vite
