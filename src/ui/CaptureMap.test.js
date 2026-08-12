@@ -16,6 +16,7 @@ function fakeAdapter() {
     setHighlight: vi.fn(),
     setActiveTrace: vi.fn(),
     setNightMode: vi.fn(),
+    setLocator: vi.fn(),
     centreOn: vi.fn(),
     resize: vi.fn(),
     destroy: vi.fn(),
@@ -112,6 +113,20 @@ describe('CaptureMap — showing a region', () => {
     fireEvent.click(screen.getByRole('button', { name: /change map/i }));
 
     expect(onOpenPicker).toHaveBeenCalled();
+  });
+
+  test('the compass reading and staleness feed the locator', async () => {
+    const adapter = fakeAdapter();
+    const createMap = vi.fn().mockResolvedValue(adapter);
+    const { rerender } = renderMap({ createMap });
+    await waitFor(() =>
+      expect(adapter.setLocator).toHaveBeenCalledWith({ heading: null, stale: false }),
+    );
+
+    const heading = { headingDeg: 142, headingAccuracyDeg: 10 };
+    rerender({ heading, positionStale: true });
+
+    await waitFor(() => expect(adapter.setLocator).toHaveBeenCalledWith({ heading, stale: true }));
   });
 
   test('night mode reaches the adapter, so the casings can flip', async () => {

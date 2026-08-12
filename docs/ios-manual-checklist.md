@@ -393,6 +393,37 @@ force-quit recovery path.
       trace adds only small writes, so expect no measurable difference; verify that)
 - [ ] A pre-trace export (any old zip) still imports unchanged
 
+## Second design pass — trace polish, night mode, locator, icon
+
+Implemented 2026-08-12 from `docs/design/mobile-design-pass-2.md`; everything below is styled
+state, so only eyes on the real screen can sign it off.
+
+- [ ] **Trace strip in sunlight, gloved:** the walked total reads at arm's length; Finish is
+      unmistakably the primary action; the discard confirm replaces the row without anything
+      shifting under the thumb at 320px-class widths
+- [ ] The chooser panel reads as a question, not leftover buttons; Cancel dismisses; the
+      path/boundary descriptions make sense to someone who has never traced
+- [ ] **Trace-line casings over dark ground:** switch to Esri aerial with a saved exported trace,
+      a saved unexported one and a live walk — all three lines visible, solid-vs-dashed legible,
+      at both z12 and z19; a dashed feature-layer parcel boundary next to a dashed trace still
+      reads as two different lines
+- [ ] Two recordings at once (voice note mid-trace): the two dots breathe at visibly different
+      tempi and the screen does not read as one flashing interface
+- [ ] **Night mode, in actual darkness:** toggle Night in the footer — nothing on screen is
+      white or blue, the map dims to red-on-black but stays readable as terrain, the danger and
+      suggestion panels show no pale ground, and the choice survives a force-quit and relaunch
+- [ ] Night mode's status bar: the clock/battery glyphs stay white (OS-owned) — confirm the
+      field-notes advice stands: the iOS **Red Filter** accessibility shortcut is the lever
+- [ ] **Locator:** the station mark holds on pale vector and dark aerial alike (the casing is
+      what to judge); the beam width visibly opens when the compass is disturbed (wave the phone
+      near a car door); with compass denied there is **no** beam; after 30 s under a roof the
+      mark goes hollow-and-dashed as the readout goes stale
+- [ ] The beam tracks turning smoothly, and with Reduce Motion on it steps rather than freezes
+- [ ] **Icon:** remove the old home-screen icon, re-add from the site — the station-mark icon
+      shows on the home screen and the splash; check it reads at a glance in a full app grid
+- [ ] Export moved to the page foot: confirm exporting the open session still works end-to-end
+      from there (share sheet, badge flip)
+
 ## Later phases (fill in as each lands)
 
 - [ ] Phase 6 — app storage surviving 2+ weeks of non-use (requires waiting, or trusting

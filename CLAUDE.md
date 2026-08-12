@@ -77,6 +77,25 @@ are settled:
   comes back as a straight segment, indistinguishable from a pause. Deliberately not coded
   around (no wake-lock); it is a checklist item.
 
+**The second design pass is implemented (2026-08-12, unverified on device** — checklist section
+"Second design pass"; handoff imported as `docs/design/mobile-design-pass-2.md`, mockups in
+`docs/Mobile app design exploration.zip`, as-built notes in `docs/styling.md` → "The second
+design pass"**).** In brief: the trace strip/chooser/recovery surfaces were redesigned (Finish
+wears the accent; the discard confirm _replaces_ the action row; the chooser and recovery are
+suggestion-ground panels; `src/ui/traceGlyphs.js` holds the path/boundary glyph pair), **Export
+moved from the capture-actions row to the page foot** (it acts on the session, not the
+observation being composed), every map trace line gained a **solid casing**
+(`traceCasingColor()` in `overlays.js` — flipped near-black at night via the adapter's
+`setNightMode`), **night mode** landed as a third `data-mode="night"` scheme
+(`src/app/displayMode.js`, Auto|Night footer switch persisted in settings, grayscale+red-multiply
+map filter — never inferred from the OS), the position dot became the **locator DOM marker**
+(`src/map/locator.js` + a maplibre `Marker`; beam width = compass uncertainty, no compass = no
+beam, stale = hollow/dashed; the accuracy ring stays a circle layer), and the **app icon** is
+now the station mark (`public/icons/`, maskable entry included, `apple-touch-icon-180.png` in
+`index.html`). One deliberate deviation from the design text: point capture (and photo/voice)
+stays live mid-trace per the settled capture-continues decision, so Finish and Save can both be
+accent in exactly that state. The one-accent rule holds everywhere else — keep it.
+
 The local dev server needs HTTPS to test geolocation/compass permissions (secure-context gated) —
 `npm run dev -- --host` now serves HTTPS via `vite-plugin-mkcert`, reachable on the LAN. Plain `vite
 preview` (used by e2e/CI) deliberately excludes mkcert — see the comment in `vite.config.js` for why

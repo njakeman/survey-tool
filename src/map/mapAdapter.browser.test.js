@@ -270,7 +270,6 @@ describe('mapAdapter against real MapLibre', () => {
     expect(lastFeatureLayer).toBeGreaterThan(-1);
     expect(lastFeatureLayer).toBeLessThan(order.indexOf('position-accuracy'));
     expect(lastFeatureLayer).toBeLessThan(order.indexOf('observations-markers'));
-    expect(lastFeatureLayer).toBeLessThan(order.indexOf('position-dot'));
   });
 
   test('the selection highlight sits above the feature layers and below the markers', async () => {
@@ -291,7 +290,6 @@ describe('mapAdapter against real MapLibre', () => {
     expect(order.indexOf('feature-highlight-line')).toBeLessThan(
       order.indexOf('position-accuracy'),
     );
-    expect(order.indexOf('feature-highlight-line')).toBeLessThan(order.indexOf('position-dot'));
   });
 
   test('clearing the selection empties the highlight, and setting it pre-load is not dropped', async () => {
@@ -445,7 +443,10 @@ describe('mapAdapter against real MapLibre', () => {
     expect(adapter.getZoom()).toBeGreaterThan(0);
   });
 
-  test('a marked point draws below the live fix, which must never be hidden', async () => {
+  test('a marked point draws above the saved markers; the live fix is a DOM marker over everything', async () => {
+    // The fix used to be the top canvas layer; it is now the locator DOM
+    // marker, which sits above the whole canvas by construction — so the
+    // ordering left to assert is the mark over the saved observations.
     const adapter = await createAdapter();
     await adapter.ready;
 
@@ -453,7 +454,32 @@ describe('mapAdapter against real MapLibre', () => {
     const order = adapter.getLayerOrder();
 
     expect(order).toContain('picked-point');
-    expect(order.indexOf('picked-point')).toBeLessThan(order.indexOf('position-dot'));
+    expect(order.indexOf('picked-point')).toBeGreaterThan(order.indexOf('observations-markers'));
+    expect(order).not.toContain('position-dot');
+  });
+
+  test('the first fix raises the locator marker, and clearing the fix removes it', async () => {
+    const adapter = await createAdapter();
+    await adapter.ready;
+    expect(adapter.hasLocator()).toBe(false);
+
+    adapter.setPosition({ lat: 51.5, lon: -0.14, accuracyM: 8 });
+    expect(adapter.hasLocator()).toBe(true);
+    expect(adapter.container.querySelector('.locator #locator-fix')).not.toBeNull();
+
+    // No compass reading yet: the beam is absent entirely, the honest
+    // representation of not knowing.
+    adapter.setLocator({ heading: null, stale: false });
+    expect(adapter.container.querySelector('#locator-beam').style.display).toBe('none');
+
+    adapter.setLocator({ heading: { headingDeg: 90, headingAccuracyDeg: 10 }, stale: true });
+    const beam = adapter.container.querySelector('#locator-beam');
+    expect(beam.style.display).not.toBe('none');
+    expect(beam.style.transform).toContain('rotate(90deg)');
+    expect(adapter.container.querySelector('.locator').dataset.stale).toBe('true');
+
+    adapter.setPosition(null);
+    expect(adapter.hasLocator()).toBe(false);
   });
 
   test('clearing the marked point removes it', async () => {
@@ -603,7 +629,6 @@ describe('trace layers against real MapLibre', () => {
     ]) {
       expect(order.indexOf(id)).toBeGreaterThan(order.indexOf('feature-highlight-line'));
       expect(order.indexOf(id)).toBeLessThan(order.indexOf('position-accuracy'));
-      expect(order.indexOf(id)).toBeLessThan(order.indexOf('position-dot'));
     }
 
     // Each casing directly beneath its own line — anything between them

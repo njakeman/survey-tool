@@ -71,17 +71,11 @@ export function observationPaint() {
   };
 }
 
-// The live fix and the ring of its reported accuracy. Accent-coloured so it
-// is never mistaken for a saved observation.
-export function positionPaint() {
-  return {
-    'circle-radius': 6,
-    'circle-color': '#c2611f',
-    'circle-stroke-width': 2,
-    'circle-stroke-color': MARKER_OUTLINE,
-  };
-}
-
+// The ring of the fix's reported accuracy. The fix itself is no longer a
+// circle layer: it is the locator DOM marker (locator.js), which a canvas
+// layer cannot express — dashed stale ring, rotating beam, per-mode CSS
+// tokens. The accuracy ring stays here because the metres-to-pixels zoom
+// expression already works and is already tested.
 export function accuracyPaint() {
   return {
     'circle-radius': 0,

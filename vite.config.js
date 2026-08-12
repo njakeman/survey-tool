@@ -103,9 +103,20 @@ export default defineConfig(async ({ command, isPreview }) => {
         // colour flash on every standalone launch.
         background_color: '#f4f0e8',
         theme_color: '#c2611f',
+        // The station-mark icon from the second design pass (variant I,
+        // "the station, sighting") — SVG masters beside the PNGs in
+        // public/icons/. The maskable entry is scaled to 70% with the
+        // ground bleeding to the edge, so Android's safe circle cannot
+        // clip the ticks; iOS reads the apple-touch-icon link instead.
         icons: [
-          { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png' },
-          { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png' },
+          { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+          {
+            src: 'icons/icon-maskable-512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'maskable',
+          },
         ],
       },
       devOptions: {

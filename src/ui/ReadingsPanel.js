@@ -9,8 +9,10 @@ import {
 
 // A fix older than this is called out. Long enough not to nag during a normal
 // ~1Hz stream, short enough that a surveyor about to save an observation
-// notices the coordinates are not current.
-const STALE_AFTER_MS = 30_000;
+// notices the coordinates are not current. Exported so the map's locator
+// goes stale at the same moment as the readout — two definitions of "old"
+// on one screen would contradict each other.
+export const STALE_AFTER_MS = 30_000;
 
 // Every code position.js can emit. Previously only permission-denied was
 // handled and the rest fell through to "Waiting for GPS fix…", so a device

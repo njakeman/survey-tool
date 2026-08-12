@@ -50,6 +50,8 @@ export function CaptureMap({
   gridRef,
   visible,
   night = false,
+  heading = null,
+  positionStale = false,
 }) {
   const containerRef = useRef(null);
   const adapterRef = useRef(null);
@@ -194,6 +196,13 @@ export function CaptureMap({
     // their colour flipped to hold against the dimmed ground.
     guarded(() => adapterRef.current?.setNightMode?.(night));
   }, [night, adapterReady]);
+
+  useEffect(() => {
+    // The locator's beam and stale state. Heading ticks are throttled to
+    // ~5Hz by the sensor adapter; the beam is the one thing on the map
+    // allowed to move continuously.
+    guarded(() => adapterRef.current?.setLocator?.({ heading, stale: positionStale }));
+  }, [heading, positionStale, adapterReady]);
 
   useEffect(() => {
     const adapter = adapterRef.current;

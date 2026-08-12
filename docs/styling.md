@@ -12,11 +12,11 @@ vocabulary — the picker row shape, the surface/rule/accent-border treatment, t
 than inventing anything, so they should read as part of the same system. Nobody has checked that
 on a device.
 
-The **trace mode** surfaces (2026-08-12: the trace strip, the path/boundary chooser, the
-recovery strip, the map's trace lines, the traced list qualifier) also postdate the handoff and
-were likewise assembled from the existing vocabulary, deliberately awaiting a design pass —
-`docs/design/trace-modes-handoff.md` is the inventory of what exists, the known gaps, and the
-constraints binding on restyling them.
+The **trace mode** surfaces were initially assembled from the existing vocabulary while awaiting
+a design pass (`docs/design/trace-modes-handoff.md` was the inventory sent out). That pass came
+back and was implemented on 2026-08-12 — `docs/design/mobile-design-pass-2.md` is its handoff,
+covering the redesigned trace surfaces, **night mode**, the **locator marker** and the **app
+icon**. See _The second design pass_ below for what was built and the one deliberate deviation.
 
 Everything lives in one file — `src/style.css`, imported once from `src/main.js`. There is no
 framework, no build step for CSS, and no component-scoped styles. Markup is
@@ -236,3 +236,54 @@ Honest gaps, not oversights:
 - **The dashed marker stroke**, above.
 - **Nothing here has been seen on a device.** Colour, contrast and touch comfort in sunlight are
   exactly what a passing test says nothing about. `docs/ios-manual-checklist.md` is the gate.
+
+## The second design pass (2026-08-12)
+
+`docs/design/mobile-design-pass-2.md` (its mockups are in the zip at
+`docs/Mobile app design exploration.zip`) answered the trace-modes handoff and added night mode,
+the locator and the icon. All of it is implemented; the notes below are what the stylesheet now
+encodes and what is binding on later changes.
+
+- **The one-accent rule.** At most one accent-filled button per surface, and it is always the
+  action that moves the record toward being saved: Finish on a live trace strip, Resume on the
+  recovery panel, Save everywhere else. **One deliberate deviation from the design text**: point
+  capture (and photo/voice) stays live mid-trace — the settled capture-continues decision — so in
+  the recording-with-a-good-fix state Finish and Save are both accent, each moving its own record.
+  Every other state matches the design exactly.
+- **The trace strip** is three stacked lines: status run (`--text-secondary`, elapsed pushed
+  right), the walked total at `--type-save`/700 (waiting-for-a-fix borrows the same slot so the
+  strip never changes height), then Finish (accent, 15px) / Pause / Discard. The discard confirm
+  _replaces_ the action row — nothing may reflow mid-interaction at 320px — and `Discard trace`
+  (`.trace-discard-commit`) is the app's only red control. Paused drops the left border to 45%
+  accent and freezes the dot at 0.4.
+- **Two pulse tempi.** `voice-note-pulse` stays 1.2s (seconds-long recording, wants urgency);
+  `.trace-strip-dot` breathes at 2.4s between 1 and 0.55 (tens of minutes, must not tire the
+  peripheral vision). Paused's frozen 0.4 sits below the breathe's floor deliberately.
+- **The suggestion ground now has three tenants**: the region suggestion, the trace chooser and
+  the recovery panel — all moments where the app asks an unprompted question. They keep a light
+  ground in light _and_ dark (the alert-surface rule, hence light-scheme literals for their ink),
+  and all three go dark-with-accent-border in night mode, where a slip of white paper is exactly
+  what must not happen.
+- **The trace glyphs** (`src/ui/traceGlyphs.js`): an open polyline for a path, an irregular
+  pentagon for a boundary — never a square. One drawing, used in the chooser and on list rows in
+  `currentColor`. `.observations-traced` is the row's _identity_ line (bold ink, glyph-led,
+  directly under the head); `.observations-picked` stays the caveat and `.observations-poor` the
+  warning.
+- **Trace-line casings** (`src/map/overlays.js`): 5px solid pale under every trace line, flipped
+  near-black in night via the adapter's `setNightMode`. Solid under the dashed lines
+  deliberately. Casing-directly-beneath-line is asserted in the browser tier; don't reorder.
+- **Night mode** is a third mode, not a darker dark: `<html data-mode="night">`
+  (`src/app/displayMode.js`, persisted in settings, Auto|Night switch in the capture footer)
+  drives a one-hue token block, the map's grayscale+red-multiply filter, and the theme-color
+  metas together. Hue is gone at night, so the whole signal budget is luminance and shape — the
+  reason constraint 6 exists. The iOS status bar's white clock is the OS's own; the Red Filter
+  shortcut is the field-notes answer.
+- **The locator** (`src/map/locator.js` + the adapter's DOM marker) replaced the position-dot
+  circle layer. Station mark: ring, four cardinal ticks, accent fix, every stroke on a 6px
+  half-opacity casing. The beam's width _is_ the compass's uncertainty (60°→120°, fading);
+  no compass means no beam at all; stale goes hollow-and-dashed at 55%. Colours ride
+  `--locator-stroke`/`--locator-casing`, defined per mode. The accuracy ring stays the
+  `position-accuracy` circle layer. No N label while the map never rotates.
+- **The icon** (variant I, "the station, sighting") is the locator at rest, beam due north —
+  `public/icons/` holds the SVG masters and every PNG the manifest needs, including the
+  maskable variant; `index.html` points `apple-touch-icon` at the 180px cut. All precached.

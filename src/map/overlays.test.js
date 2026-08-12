@@ -6,7 +6,6 @@ import {
   observationShapesCollection,
   metresToPixels,
   observationPaint,
-  positionPaint,
   pickedPointPaint,
   traceShapeLayers,
   activeTraceData,
@@ -151,11 +150,13 @@ describe('pickedPointPaint', () => {
     expect(paint['circle-stroke-width']).toBeGreaterThan(0);
   });
 
-  test('is larger than the fix and the observation markers, being the active thing', () => {
+  test('is larger than the observation markers, being the active thing', () => {
+    // The live fix is no longer a circle layer to compare against — it is
+    // the locator DOM marker (locator.js), which draws larger than any of
+    // these by construction.
     expect(pickedPointPaint()['circle-radius']).toBeGreaterThan(
       observationPaint()['circle-radius'],
     );
-    expect(pickedPointPaint()['circle-radius']).toBeGreaterThan(positionPaint()['circle-radius']);
   });
 });
 

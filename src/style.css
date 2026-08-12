@@ -105,6 +105,13 @@
   --surface-faint: color-mix(in srgb, currentColor 6%, transparent);
   --text-secondary: rgba(30, 36, 51, 0.62);
   --text-muted: rgba(30, 36, 51, 0.55);
+
+  /* The locator marker's strokes: pale mark on a dark casing in every
+     mode — in dark and night the pale value is the scheme's ink and the
+     casing its paper, which is why these are their own pair rather than
+     reusing --paper/--ink directly. */
+  --locator-stroke: #f4f0e8;
+  --locator-casing: #1e2433;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -126,6 +133,9 @@
     --control-rule: rgba(236, 231, 221, 0.3);
     --text-secondary: rgba(236, 231, 221, 0.62);
     --text-muted: rgba(236, 231, 221, 0.55);
+
+    --locator-stroke: #ece7dd;
+    --locator-casing: #16171c;
   }
 
   /* The alert surfaces (error panel, region suggestion) deliberately keep
@@ -162,6 +172,9 @@
   --control-rule: rgba(232, 102, 61, 0.35);
   --text-secondary: rgba(232, 102, 61, 0.62);
   --text-muted: rgba(232, 102, 61, 0.55);
+
+  --locator-stroke: #e8663d;
+  --locator-casing: #0b0604;
 }
 
 /* The alert-surface exception reverses at night: a slip of white paper is
@@ -694,6 +707,55 @@ button {
 
 .capture-map-error {
   color: var(--danger-strong);
+}
+
+/* The locator: the live fix as a station mark — ring, cardinal ticks, fix
+   at the centre, and a beam whose width is the compass's uncertainty
+   (map/locator.js builds it; the adapter feeds it). A DOM marker, so it
+   rides above every canvas layer, escapes the night-mode canvas filter,
+   and takes the per-mode tokens above directly. */
+.locator {
+  pointer-events: none;
+}
+
+.locator .locator-casing {
+  stroke: var(--locator-casing);
+}
+
+.locator .locator-stroke {
+  stroke: var(--locator-stroke);
+}
+
+.locator .locator-fix {
+  fill: var(--accent);
+  stroke: var(--locator-stroke);
+}
+
+/* The one thing on the map allowed to move continuously. The global
+   reduced-motion guard removes the transition, which leaves the beam
+   stepping to each new heading rather than frozen — a frozen heading is
+   worse than no heading. */
+.locator .locator-beam {
+  transform-box: view-box;
+  transform-origin: 80px 80px;
+  transition: transform 200ms ease-out;
+}
+
+/* Stale: the centre goes hollow, the ring dashed, the strokes quiet — the
+   same filled-against-hollow rule the observation markers use, so "this is
+   not a live measurement" never depends on colour. */
+.locator[data-stale='true'] .locator-fix {
+  fill: transparent;
+}
+
+.locator[data-stale='true'] .locator-casing circle,
+.locator[data-stale='true'] .locator-stroke circle {
+  stroke-dasharray: 5 5;
+}
+
+.locator[data-stale='true'] .locator-casing,
+.locator[data-stale='true'] .locator-stroke {
+  opacity: 0.55;
 }
 
 /* Sits over the map, above the re-centre control, because it is a question

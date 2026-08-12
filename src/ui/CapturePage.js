@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'preact/hooks';
 import { usePosition } from './hooks/usePosition.js';
 import { useHeading } from './hooks/useHeading.js';
 import { SessionBar } from './SessionBar.js';
-import { ReadingsPanel } from './ReadingsPanel.js';
+import { ReadingsPanel, STALE_AFTER_MS } from './ReadingsPanel.js';
 import { PhotoField } from './PhotoField.js';
 import { SaveButton } from './SaveButton.js';
 import { VoiceNoteField } from './VoiceNoteField.js';
@@ -539,6 +539,13 @@ export function CapturePage({
         gridRef=${gridRef}
         visible=${visible}
         night=${displayMode === 'night'}
+        heading=${heading}
+        positionStale=${
+          /* Computed at render like the readings panel's own stale line —
+             the GPS watch re-renders this page ~1Hz while it is alive, and
+             when it stops delivering, both readouts age together. */
+          Boolean(position && Date.now() - position.fixAtMs >= STALE_AFTER_MS)
+        }
       />
       ${
         // Not a readout of something happening now — the app asking an

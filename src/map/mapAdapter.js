@@ -1,4 +1,4 @@
-import { Map as MapLibreMap, addProtocol, setWorkerUrl } from 'maplibre-gl';
+import { Map as MapLibreMap, Marker, addProtocol, setWorkerUrl } from 'maplibre-gl';
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 import { PMTiles, Protocol } from 'pmtiles';
 import 'maplibre-gl/dist/maplibre-gl.css';
@@ -10,7 +10,6 @@ import {
   observationShapesCollection,
   positionFeature,
   observationPaint,
-  positionPaint,
   accuracyPaint,
   pickedPointPaint,
   traceShapeLayers,
@@ -30,6 +29,7 @@ import {
   highlightSourceData,
 } from './featureLayerStyle.js';
 import { describeTappedFeature } from './featureQuery.js';
+import { LOCATOR_SVG, beamPath, locatorView } from './locator.js';
 import { initialZoomFromHeader, maxBoundsFromHeader, minZoomFromHeader } from './viewport.js';
 
 // The one module that touches MapLibre. Everything above it (style, overlays,
@@ -324,12 +324,13 @@ export async function createMapAdapter({
         source: 'picked',
         paint: pickedPointPaint(),
       });
-      map.addLayer({
-        id: 'position-dot',
-        type: 'circle',
-        source: 'position',
-        paint: positionPaint(),
-      });
+      // The live fix itself is the locator DOM marker (locator.js), not a
+      // circle layer: it needs a dashed stale ring, a rotating gradient
+      // beam and per-mode CSS tokens, none of which a circle layer can
+      // express. As a DOM element it sits above every canvas layer — the
+      // "nothing may ever cover the fix" guarantee holds by construction —
+      // and outside the night-mode canvas filter, so it takes night tokens
+      // directly. Created on the first fix, in setPosition below.
 
       // Set before the replays below, so each setter takes its normal path.
       styleLoaded = true;
@@ -369,6 +370,45 @@ export async function createMapAdapter({
     });
   });
 
+  // The locator marker: created on the first fix, moved on every one after.
+  // Its beam and stale state arrive separately through setLocator — heading
+  // ticks and GPS ticks are different streams at different rates.
+  let locatorMarker = null;
+  let locatorElement = null;
+  // Cumulative, so the CSS-transitioned beam turns 2° at the 359→1 wrap
+  // instead of spinning 358° the long way round.
+  let locatorRotation = null;
+  let locatorState = { heading: null, stale: false };
+
+  function applyLocator() {
+    if (!locatorElement) return;
+    const view = locatorView(locatorState);
+    locatorElement.dataset.stale = String(view.stale);
+    const beam = locatorElement.querySelector('#locator-beam');
+    const path = locatorElement.querySelector('#locator-beam-path');
+    if (!view.beam) {
+      // Absent entirely — the honest representation of not knowing; the
+      // readings panel says "Position only — no compass" in words.
+      beam.style.display = 'none';
+      return;
+    }
+    beam.style.display = '';
+    beam.style.opacity = String(view.beam.opacity);
+    path.setAttribute('d', beamPath(view.beam.arcDeg));
+    if (locatorRotation === null) {
+      locatorRotation = view.beam.rotationDeg;
+    } else {
+      const delta = ((((view.beam.rotationDeg - locatorRotation) % 360) + 540) % 360) - 180;
+      locatorRotation += delta;
+    }
+    beam.style.transform = `rotate(${locatorRotation}deg)`;
+  }
+
+  function setLocator(state) {
+    locatorState = state;
+    applyLocator();
+  }
+
   function setPosition(reading) {
     // Stashed as the reading, not as the feature: `undefined` means "nothing
     // set yet" and null means "explicitly cleared", and a fix that arrived
@@ -383,6 +423,20 @@ export async function createMapAdapter({
       ?.setData(feature ? { type: 'FeatureCollection', features: [feature] } : EMPTY_COLLECTION);
     if (feature) {
       map.setPaintProperty('position-accuracy', 'circle-radius', accuracyRadiusExpression(reading));
+      if (!locatorMarker) {
+        locatorElement = container.ownerDocument.createElement('div');
+        locatorElement.className = 'locator';
+        locatorElement.innerHTML = LOCATOR_SVG;
+        applyLocator();
+        locatorMarker = new Marker({ element: locatorElement, anchor: 'center' });
+        locatorMarker.setLngLat([reading.lon, reading.lat]).addTo(map);
+      } else {
+        locatorMarker.setLngLat([reading.lon, reading.lat]);
+      }
+    } else if (locatorMarker) {
+      locatorMarker.remove();
+      locatorMarker = null;
+      locatorElement = null;
     }
   }
 
@@ -498,6 +552,7 @@ export async function createMapAdapter({
   }
 
   function destroy() {
+    locatorMarker?.remove();
     map.remove();
     // Releases this archive's PMTiles and its buffer; without it, switching
     // regions accumulates them for the life of the page. An online map
@@ -552,6 +607,9 @@ export async function createMapAdapter({
     setHighlight,
     setActiveTrace,
     setNightMode,
+    setLocator,
+    // The browser tier's read-through: whether the DOM marker is on the map.
+    hasLocator: () => Boolean(locatorMarker),
     getPointAtFraction,
     getZoom,
     onMove,
