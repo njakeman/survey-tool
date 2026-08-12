@@ -363,6 +363,36 @@ Built on the probe result above. The probe proved the microphone; these prove th
 - [ ] Export a session with a voice note, import it back: the note plays on the copy
 - [ ] Undo after saving a note: the recording is gone with the observation (no orphaned audio)
 
+## Trace modes
+
+Trace a path / trace a boundary (2026-08-12). The recorder, storage and round trip are all
+unit/browser-tested; what only the device can prove is the GPS behaviour on a real walk and the
+force-quit recovery path.
+
+- [ ] Start a path trace and walk ~100 m: the point count climbs, the dashed accent line draws
+      behind you, and the distance figure roughly matches the ground covered
+- [ ] Stand still for a minute mid-trace: the count does **not** climb (GPS wobble smaller than
+      the error bar must not add vertices)
+- [ ] **Force-quit mid-trace, relaunch:** the "Unfinished trace found" strip appears; Resume
+      continues **paused** with the walked points intact; walk on after resuming and the line
+      carries on from where it stopped
+- [ ] Pause, walk ~50 m, Resume, walk on: the line bridges the gap with one straight segment
+- [ ] Boundary: walk a rough rectangle, Finish — it closes and saves; walk a deliberate
+      figure-eight — the "crosses itself" warning shows and Save still works
+- [ ] Finish a boundary after only two points: refused with the keep-walking message, still
+      recording
+- [ ] Save a trace with note + photo + voice note + feature link, export, import the zip back:
+      the copy's traced row shows the same length and the annotations survive
+- [ ] Open the exported `session.geojson` in QGIS: the line/polygon renders alongside the point
+      observations and the `trace_length_m` column is populated on the traced row, null elsewhere
+- [ ] Save an ordinary point observation mid-trace: it saves normally and the walk carries on
+      unaffected
+- [ ] Lock the screen for 2 minutes mid-walk, unlock: iOS suspends the watch, so expect a
+      straight segment across the gap — note how long the watch takes to come back
+- [ ] Battery/thermals over a ~30 min continuous trace (extends the existing watch item — the
+      trace adds only small writes, so expect no measurable difference; verify that)
+- [ ] A pre-trace export (any old zip) still imports unchanged
+
 ## Later phases (fill in as each lands)
 
 - [ ] Phase 6 — app storage surviving 2+ weeks of non-use (requires waiting, or trusting

@@ -37,28 +37,45 @@ architecture corrected several of the brief's technical choices (raster tiles �
 download-as-primary-export → Web Share-as-primary) — read the plan history / recent commits before
 assuming the brief's map or export sections still describe the built app.
 
-**Planned next (not yet designed, 2026-08-12): trace modes.** _Trace a path_ — walk and record a
-series of GPS fixes as a line (hedgerow, track, watercourse) — and _trace a boundary_ — walk a
-perimeter and close it into a polygon. Nothing is committed yet, but any design must reckon with
-these existing boundaries rather than discover them mid-build:
+**Trace modes are built (2026-08-12, unverified on device** — see the Trace modes section of
+`docs/ios-manual-checklist.md`; design spec in `docs/superpowers/specs/2026-08-12-trace-modes-design.md`**).**
+_Trace a path_ (walk, record a LineString — hedgerow, track, watercourse) and _trace a boundary_
+(walk a perimeter, closed into a Polygon). The shape of what was built, and the decisions that
+are settled:
 
-- **The no-watch-persistence rule needs a deliberate carve-out, not a silent breach.** "Don't
-  persist the live GPS watch stream" (Design boundaries below) exists to stop _ambient_ ~1Hz
-  write amplification; a trace is an explicit, surveyor-started recording, and the
-  "offline-first, nothing lost" guarantee cuts the other way there — a force-quit mid-trace must
-  not lose the walked line, which argues for appending vertices to IndexedDB as they accrue,
-  thinned (by minimum distance and/or fix accuracy), never raw at 1Hz.
-- **Everything downstream assumes observations are Points**: `domain/geojson.js` (export),
-  `import/parseSessionExport.js` (validates every feature through `createObservation`),
-  `map/overlays.js` (markers), the Exported badge, the observations list. A trace is either a new
-  record type or a geometry on the observation — decide once, and keep the export/import round
-  trip faithful either way (older exports must still import).
-- **`gpsAccuracyM` semantics**: per-vertex accuracy exists at capture time; decide what one
-  figure on the trace means (worst vertex is the honest default) rather than inventing one later.
-- **A boundary must close validly**: first vertex = last (RFC 7946 ring), minimum 3 distinct
-  vertices, and a decision about self-intersection (warn, refuse, or allow) made up front.
-- Battery/thermals are already probed for a continuous watch (the checklist's 30-min item); a
-  trace adds writes, not sensor load.
+- **Vertex capture is automatic**, thinned by `src/trace/recording.js` (pure reducer over the
+  existing shared watch): accuracy gate 20 m, and a fix must move `max(5 m, its own accuracy)`
+  from the last vertex — motion smaller than the error bar is noise. No manual drop-vertex.
+- **A trace is an observation with a geometry**, not a new record type: `createObservation` takes
+  an optional LineString/one-ring-Polygon `geometry` with `positionSource: 'trace'`
+  (both-or-neither, like the feature link). lat/lon hold a representative point (path →
+  distance-midpoint via `geo/lineMetrics.js`, boundary → `polygonCentroid`), `gpsAccuracyM` the
+  **worst vertex**, `fixAt` the walk's start — so list rows, undo, badges, export and import all
+  reuse the observation machinery. Full annotations (note/photo/voice note/feature link) compose
+  on Save exactly like a point.
+- **The no-watch-persistence carve-out is real and narrow**: DB v6 adds `traceDrafts` +
+  `traceVertices` (one record per accepted vertex, composite key `[draftId, seq]`); only the
+  gated appender writes there, and the save transaction (`captureWrite.js` `traceDraftId`)
+  deletes the draft atomically with the observation put. A force-quit mid-walk recovers on
+  relaunch as resume-**paused**/finish/discard — never silently re-recording.
+- **Boundary self-intersection: warn, save anyway** (`geo/selfIntersection.js`, proper crossings
+  only). Deliberately NOT validated in `createObservation`, or a saved figure-eight would fail
+  its own re-import. Ring closure and ≥3 distinct vertices ARE validated there.
+- **Export/import**: the feature carries the walked geometry in place of the Point;
+  `trace_length_m` is derived at export on every feature (`?? null`, the feature-link precedent —
+  old exports still import, guarded by tests). Import passes non-Point geometry back through
+  `createObservation` and defaults a bare non-Point feature to `'trace'`.
+- **Map**: saved shapes render from `overlays.js`'s `observation-shapes` source (solid vs
+  **dashed** line = exported vs not, the line-scale filled-vs-hollow; layers sit above the
+  highlight, below `position-accuracy` — asserted in the browser tier), the live walk as a dashed
+  accent line via `setActiveTrace`, keyed per accepted vertex, not per GPS tick.
+- **UI**: Trace button in the capture actions row → path/boundary chooser; `ui/TraceStrip.js` is
+  the persistent readout (pause/resume, two-step discard); point capture stays live mid-trace;
+  End session is refused while a trace is recording or pending; "Mark a distant point" is
+  withheld while a trace is pending (both arm the same Save).
+- iOS suspends `watchPosition` when a standalone PWA is backgrounded/screen-locked — the gap
+  comes back as a straight segment, indistinguishable from a pause. Deliberately not coded
+  around (no wake-lock); it is a checklist item.
 
 The local dev server needs HTTPS to test geolocation/compass permissions (secure-context gated) —
 `npm run dev -- --host` now serves HTTPS via `vite-plugin-mkcert`, reachable on the LAN. Plain `vite
@@ -220,7 +237,14 @@ standalone })`, browser globals injected same as `probe/capabilities.js`, so it'
   `src/geo/fixtures/` — `osgb.test.js` matches every one to within a millimetre. `distance.js` has
   haversine, bearing, and the metres-per-pixel figure behind a picked point's accuracy.
   `centroid.js` has the area-weighted polygon centroid (and its farthest-vertex reach) behind
-  "Record here" on a polygon.
+  "Record here" on a polygon. `lineMetrics.js` (walked length, distance-midpoint) and
+  `selfIntersection.js` (proper-crossing ring test, warn-only) serve the trace modes.
+- `src/trace/recording.js` — the trace recorder: a pure, node-tested reducer over position
+  readings (`acceptFix` gates by accuracy and spacing; `finishTrace` closes rings, computes the
+  representative point, worst-vertex accuracy and warnings). No I/O — persisting an accepted
+  vertex is CapturePage's appender's job, which is what keeps "no draft write without an accepted
+  vertex" unit-testable. `storage/traceDraftStore.js` holds the in-progress draft (DB v6);
+  `ui/TraceStrip.js` is the walk's readout.
 - `src/probe/` — the Phase 1 device-capability probe, still reachable via a footer link in the
   capture UI. Findings recorded in `docs/ios-manual-checklist.md`.
 - Test tiers (`vitest.config.js`): `node` for domain/storage logic (real WebCrypto; jsdom is
@@ -355,10 +379,11 @@ standalone })`, browser globals injected same as `probe/capabilities.js`, so it'
   write amplification with no benefit. The actual "nothing held in volatile memory" guarantee is:
   session written on start/end, observation + photo written in one transaction on the Save tap
   (`captureWrite.js`), before any UI feedback. If you're tempted to write every `watchPosition` tick,
-  don't — that's not what "offline-first, nothing lost" means here. (The planned **trace modes**
-  — Project status above — will be the one deliberate exception: an explicit, surveyor-started
-  recording whose thinned vertices are worth persisting as they accrue. Ambient ticks outside a
-  trace stay unwritten.)
+  don't — that's not what "offline-first, nothing lost" means here. (**Trace modes** — Project
+  status above — are the one deliberate exception: an explicit, surveyor-started recording whose
+  thinned, gated vertices are persisted as they accrue (`traceDrafts`/`traceVertices`, DB v6).
+  Ambient ticks outside a trace stay unwritten, and no write happens without a vertex the pure
+  reducer accepted.)
 - An observation's `featureLayerId`/`featureId`/`featureLabel` are **both halves or neither** —
   `createObservation` throws on a half link, because an id with no layer joins to nothing and a
   layer with no id says only "somewhere in there". They are exported as `feature_layer`,
