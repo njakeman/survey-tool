@@ -8,6 +8,13 @@ import {
 import { saveObservationWithPhoto } from '../storage/captureWrite.js';
 import { getAudio as getAudioFromStore } from '../storage/audioStore.js';
 import { deleteObservationWithPhoto } from '../storage/captureDelete.js';
+import {
+  appendTraceVertex as appendVertexToStore,
+  deleteTraceDraft,
+  listTraceDrafts,
+  listTraceVertices,
+  putTraceDraft,
+} from '../storage/traceDraftStore.js';
 
 // Orchestration seam between the UI and storage. Stateless — every call
 // re-reads IndexedDB rather than caching the open session, which is what
@@ -53,6 +60,13 @@ export function createCaptureService({ db, newId, nowIso }) {
   // observation was made from somewhere, at a time, and that is worth keeping.
   // `audio` is a recorded voice note — { blob } like a photo, stored in the
   // same transaction under the observation's id.
+  // `trace` is a finished walk from trace/recording.js's finishTrace —
+  // { draftId, geometry, representative, gpsAccuracyM, fixAt }. It replaces
+  // the fix entirely: lat/lon are the representative point, gpsAccuracyM the
+  // worst vertex, fixAt when the walk began, and neither the surveyor's
+  // altitude nor their heading belongs to a line they walked the length of.
+  // A trace can even save without a live fix (relaunch recovery): the
+  // vertices already carry every position and timestamp that matters.
   async function saveObservation({
     reading,
     heading,
@@ -61,27 +75,32 @@ export function createCaptureService({ db, newId, nowIso }) {
     audio = null,
     feature = null,
     pickedPoint = null,
+    trace = null,
   }) {
     const session = await getOpenSession();
     if (!session) throw new Error('saveObservation: no open session');
-    if (!reading) throw new Error('saveObservation: no position fix yet');
+    if (!reading && !trace) throw new Error('saveObservation: no position fix yet');
 
     const id = newId();
     const observation = createObservation({
       id,
       sessionId: session.id,
       recordedAt: nowIso(),
-      fixAt: reading.fixAt,
-      lat: pickedPoint ? pickedPoint.lat : reading.lat,
-      lon: pickedPoint ? pickedPoint.lon : reading.lon,
-      gpsAccuracyM: pickedPoint ? pickedPoint.accuracyM : reading.accuracyM,
+      fixAt: trace ? trace.fixAt : reading.fixAt,
+      lat: trace ? trace.representative.lat : pickedPoint ? pickedPoint.lat : reading.lat,
+      lon: trace ? trace.representative.lon : pickedPoint ? pickedPoint.lon : reading.lon,
+      gpsAccuracyM: trace
+        ? trace.gpsAccuracyM
+        : pickedPoint
+          ? pickedPoint.accuracyM
+          : reading.accuracyM,
       // Altitude belongs to the fix, and a point on a map has none. Carrying
       // the surveyor's own altitude across would assert the far side of the
       // valley is at the height they are standing at.
-      altitudeM: pickedPoint ? null : reading.altitudeM,
-      altitudeAccuracyM: pickedPoint ? null : reading.altitudeAccuracyM,
-      headingDeg: heading?.headingDeg ?? null,
-      headingAccuracyDeg: heading?.headingAccuracyDeg ?? null,
+      altitudeM: pickedPoint || trace ? null : reading.altitudeM,
+      altitudeAccuracyM: pickedPoint || trace ? null : reading.altitudeAccuracyM,
+      headingDeg: trace ? null : (heading?.headingDeg ?? null),
+      headingAccuracyDeg: trace ? null : (heading?.headingAccuracyDeg ?? null),
       note: (note ?? '').trim(),
       photoId: photo ? id : null,
       audioId: audio ? id : null,
@@ -91,15 +110,45 @@ export function createCaptureService({ db, newId, nowIso }) {
       featureLayerId: feature?.featureId ? feature.layerId : null,
       featureId: feature?.featureId ?? null,
       featureLabel: feature?.featureId ? (feature.title ?? null) : null,
-      positionSource: pickedPoint ? 'map' : 'gps',
+      positionSource: trace ? 'trace' : pickedPoint ? 'map' : 'gps',
+      geometry: trace ? trace.geometry : null,
     });
 
     await saveObservationWithPhoto(db, {
       observation,
       photo: photo ? { id, blob: photo.blob, contentType: photo.blob.type } : null,
       audio: audio ? { id, blob: audio.blob, contentType: audio.blob.type } : null,
+      traceDraftId: trace ? trace.draftId : null,
     });
     return observation;
+  }
+
+  // The in-progress trace draft. One at a time in practice; getTraceDraft
+  // returns whichever exists, with its vertices in walked order, so a
+  // relaunch can offer resume/finish/discard. Stateless like everything
+  // else here — the draft lives in IndexedDB, not in this closure.
+  async function startTraceDraft({ mode }) {
+    const session = await getOpenSession();
+    if (!session) throw new Error('startTraceDraft: no open session');
+    const draft = { id: newId(), sessionId: session.id, mode, startedAt: nowIso() };
+    await putTraceDraft(db, draft);
+    return draft;
+  }
+
+  function appendTraceVertex(draftId, vertex) {
+    return appendVertexToStore(db, draftId, vertex);
+  }
+
+  async function getTraceDraft() {
+    const drafts = await listTraceDrafts(db);
+    if (drafts.length === 0) return null;
+    const draft = drafts[0];
+    const vertices = await listTraceVertices(db, draft.id);
+    return { draft, vertices };
+  }
+
+  function discardTraceDraft(draftId) {
+    return deleteTraceDraft(db, draftId);
   }
 
   function countObservations(sessionId) {
@@ -131,6 +180,10 @@ export function createCaptureService({ db, newId, nowIso }) {
     startSession,
     endSession,
     saveObservation,
+    startTraceDraft,
+    appendTraceVertex,
+    getTraceDraft,
+    discardTraceDraft,
     countObservations,
     listObservations,
     deleteObservation,

@@ -534,3 +534,110 @@ describe('saveObservation — a point picked off the map', () => {
     expect(observation.altitudeM).toBe(45.2);
   });
 });
+
+describe('trace drafts', () => {
+  const TRACE = {
+    draftId: 'id-1',
+    geometry: {
+      type: 'LineString',
+      coordinates: [
+        [-0.14, 51.5],
+        [-0.141, 51.501],
+      ],
+    },
+    representative: { lat: 51.5005, lon: -0.1405 },
+    gpsAccuracyM: 12,
+    fixAt: '2026-08-06T09:40:00.000Z',
+  };
+
+  test('startTraceDraft requires an open session', async () => {
+    const service = await makeService('capture-trace-no-session');
+
+    await expect(service.startTraceDraft({ mode: 'path' })).rejects.toThrow(/no open session/i);
+  });
+
+  test('a draft and its vertices round-trip through getTraceDraft', async () => {
+    const service = await makeService('capture-trace-roundtrip');
+    await service.startSession('Ashton Keynes');
+
+    const draft = await service.startTraceDraft({ mode: 'boundary' });
+    expect(draft).toMatchObject({ mode: 'boundary', startedAt: FIXED_NOW });
+
+    await service.appendTraceVertex(draft.id, { seq: 0, lat: 51.5, lon: -0.14, accuracyM: 5, fixAt: 't0' });
+    await service.appendTraceVertex(draft.id, { seq: 1, lat: 51.501, lon: -0.14, accuracyM: 7, fixAt: 't1' });
+
+    const recovered = await service.getTraceDraft();
+    expect(recovered.draft).toEqual(draft);
+    expect(recovered.vertices.map((v) => v.seq)).toEqual([0, 1]);
+  });
+
+  test('getTraceDraft is null when nothing is in progress', async () => {
+    const service = await makeService('capture-trace-none');
+
+    expect(await service.getTraceDraft()).toBeNull();
+  });
+
+  test('discardTraceDraft removes the draft and its vertices', async () => {
+    const service = await makeService('capture-trace-discard');
+    await service.startSession('Ashton Keynes');
+    const draft = await service.startTraceDraft({ mode: 'path' });
+    await service.appendTraceVertex(draft.id, { seq: 0, lat: 51.5, lon: -0.14, accuracyM: 5, fixAt: 't0' });
+
+    await service.discardTraceDraft(draft.id);
+
+    expect(await service.getTraceDraft()).toBeNull();
+  });
+
+  test('saving a trace builds the observation from the walk, not the live fix', async () => {
+    const service = await makeService('capture-trace-save');
+    await service.startSession('Ashton Keynes');
+    const draft = await service.startTraceDraft({ mode: 'path' });
+
+    const observation = await service.saveObservation({
+      reading: READING,
+      heading: HEADING,
+      note: 'hedgerow, north field',
+      trace: { ...TRACE, draftId: draft.id },
+    });
+
+    expect(observation.positionSource).toBe('trace');
+    expect(observation.geometry).toEqual(TRACE.geometry);
+    expect(observation.lat).toBe(TRACE.representative.lat);
+    expect(observation.lon).toBe(TRACE.representative.lon);
+    expect(observation.gpsAccuracyM).toBe(TRACE.gpsAccuracyM);
+    // The trace fixAt is when measurement began, not the current fix.
+    expect(observation.fixAt).toBe(TRACE.fixAt);
+    // Neither the surveyor altitude nor their heading belongs to a walked line.
+    expect(observation.altitudeM).toBeNull();
+    expect(observation.headingDeg).toBeNull();
+    expect(observation.note).toBe('hedgerow, north field');
+  });
+
+  test('the draft is gone after a trace save', async () => {
+    const service = await makeService('capture-trace-save-clears');
+    await service.startSession('Ashton Keynes');
+    const draft = await service.startTraceDraft({ mode: 'path' });
+    await service.appendTraceVertex(draft.id, { seq: 0, lat: 51.5, lon: -0.14, accuracyM: 5, fixAt: 't0' });
+
+    await service.saveObservation({ reading: READING, heading: null, note: '', trace: { ...TRACE, draftId: draft.id } });
+
+    expect(await service.getTraceDraft()).toBeNull();
+  });
+
+  test('a trace can be saved without a live fix - the walk is its own provenance', async () => {
+    // After a relaunch recovery the watch may not have a fix yet; the trace
+    // vertices already carry every timestamp and position that matters.
+    const service = await makeService('capture-trace-no-reading');
+    await service.startSession('Ashton Keynes');
+    const draft = await service.startTraceDraft({ mode: 'path' });
+
+    const observation = await service.saveObservation({
+      reading: null,
+      heading: null,
+      note: '',
+      trace: { ...TRACE, draftId: draft.id },
+    });
+
+    expect(observation.positionSource).toBe('trace');
+  });
+});
