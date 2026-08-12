@@ -40,6 +40,39 @@ test('a fresh load requests no same-origin resource that 404s', async ({ page })
   expect(notFound).toEqual([]);
 });
 
+test('a muted cross-origin error paints no fatal banner; a real error still does', async ({
+  page,
+}) => {
+  // The iOS share-sheet symptom: WebKit dispatches a sanitized ErrorEvent
+  // (message "Script error.", null error, no filename) for errors the page
+  // may not inspect — browser-internal or extension script, never app code,
+  // since every app script is same-origin. The global handler must ignore
+  // it instead of painting "Something went wrong loading the app: Script
+  // error. (:0:0)" over a working app. A genuine error keeps the banner —
+  // it is the only diagnostics channel on an installed PWA.
+  await page.goto('/');
+  await expect(page.getByRole('button', { name: 'Save observation' })).toBeVisible();
+
+  await page.evaluate(() => {
+    window.dispatchEvent(new ErrorEvent('error', { message: 'Script error.' }));
+  });
+  await expect(page.getByText(/something went wrong/i)).not.toBeVisible();
+
+  await page.evaluate(() => {
+    window.dispatchEvent(
+      new ErrorEvent('error', {
+        message: 'real failure',
+        filename: 'main.js',
+        lineno: 12,
+        colno: 4,
+        error: new Error('real failure'),
+      }),
+    );
+  });
+  await expect(page.getByText(/something went wrong/i)).toBeVisible();
+  await expect(page.getByText(/real failure/)).toBeVisible();
+});
+
 test("a fresh install's first load never shows the offline-readiness warning once it settles", async ({
   page,
 }) => {

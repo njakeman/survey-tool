@@ -2,7 +2,7 @@ import { render } from 'preact';
 import { html } from 'htm/preact';
 import { registerSW } from 'virtual:pwa-register';
 import { App } from './ui/App.js';
-import { formatError } from './error-display.js';
+import { formatError, isMutedErrorEvent } from './error-display.js';
 import { openDatabase } from './storage/db.js';
 import { markSessionExported } from './storage/sessionStore.js';
 import { createCaptureService } from './app/captureService.js';
@@ -49,7 +49,21 @@ function showFatalError(errorLike) {
   }
 }
 
-window.addEventListener('error', (event) => showFatalError(event));
+window.addEventListener('error', (event) => {
+  // WebKit's muted cross-origin errors (null error object, no filename)
+  // surface from browser-internal/extension script — on iOS, notably around
+  // the share sheet — and can never be app code or carry anything
+  // actionable. Painting the fatal banner over a working app for them was
+  // the intermittent "Script error. (:0:0)" report. Ignored here, logged
+  // for anyone with a debugger attached; asserted in e2e/install.spec.js.
+  if (isMutedErrorEvent(event)) {
+    console.warn('Ignored muted cross-origin error', event);
+    return;
+  }
+  // Prefer the real Error when the event carries one — name and stack beat
+  // the event's message/filename summary.
+  showFatalError(event.error ?? event);
+});
 window.addEventListener('unhandledrejection', (event) => showFatalError(event.reason));
 
 // Composition root: open storage, build the capture service, bind sensor
