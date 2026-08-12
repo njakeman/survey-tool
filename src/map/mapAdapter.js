@@ -7,11 +7,17 @@ import { buildStyle } from './style.js';
 import {
   accuracyRadiusExpression,
   observationsFeatureCollection,
+  observationShapesCollection,
   positionFeature,
   observationPaint,
   positionPaint,
   accuracyPaint,
   pickedPointPaint,
+  traceShapeLayers,
+  activeTraceData,
+  activeTraceLayer,
+  OBSERVATION_SHAPES_SOURCE_ID,
+  ACTIVE_TRACE_SOURCE_ID,
 } from './overlays.js';
 import {
   featureLayerIds,
@@ -195,6 +201,7 @@ export async function createMapAdapter({
   let pendingObservations;
   let pendingPickedPoint;
   let pendingHighlight;
+  let pendingActiveTrace;
 
   function featureLayersBefore() {
     // beforeId only once the target layers exist. During the initial load
@@ -280,6 +287,16 @@ export async function createMapAdapter({
         map.addLayer(definition);
       }
 
+      // Saved traces and the walk in progress, above the highlight and
+      // below every marker: a boundary is ground shape, never allowed to
+      // cover the live fix or a marker dot.
+      map.addSource(OBSERVATION_SHAPES_SOURCE_ID, { type: 'geojson', data: EMPTY_COLLECTION });
+      for (const definition of traceShapeLayers()) {
+        map.addLayer(definition);
+      }
+      map.addSource(ACTIVE_TRACE_SOURCE_ID, { type: 'geojson', data: activeTraceData(null) });
+      map.addLayer(activeTraceLayer());
+
       // The paint lives in overlays.js with the rest of the pure marker
       // logic, so the pending/synced distinction is node-testable rather
       // than only visible on a real map.
@@ -328,6 +345,10 @@ export async function createMapAdapter({
         setHighlight(pendingHighlight);
         pendingHighlight = undefined;
       }
+      if (pendingActiveTrace !== undefined) {
+        setActiveTrace(pendingActiveTrace);
+        pendingActiveTrace = undefined;
+      }
       // Last, so the accuracy ring's paint is applied over a layer stack that
       // is already complete.
       if (pendingPosition !== undefined) {
@@ -362,7 +383,20 @@ export async function createMapAdapter({
       pendingObservations = observations;
       return;
     }
+    // One call feeds both: every observation a marker at its representative
+    // point, and the traced ones their walked shape underneath.
     map.getSource('observations')?.setData(observationsFeatureCollection(observations));
+    map.getSource(OBSERVATION_SHAPES_SOURCE_ID)?.setData(observationShapesCollection(observations));
+  }
+
+  // The walk in progress, as a bare coordinates array (or null). Rendered
+  // only from two vertices — a dot is not a line (overlays.js).
+  function setActiveTrace(coordinates) {
+    if (!styleLoaded) {
+      pendingActiveTrace = coordinates;
+      return;
+    }
+    map.getSource(ACTIVE_TRACE_SOURCE_ID)?.setData(activeTraceData(coordinates));
   }
 
   // The provisional mark. Same stash-until-loaded discipline as the others.
@@ -490,6 +524,7 @@ export async function createMapAdapter({
     setFeatureLayers,
     setPickedPoint,
     setHighlight,
+    setActiveTrace,
     getPointAtFraction,
     getZoom,
     onMove,

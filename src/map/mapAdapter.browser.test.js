@@ -567,3 +567,61 @@ describe('an online imagery region whose server is unreachable', () => {
     adapters.length = 0; // already destroyed
   });
 });
+
+describe('trace layers against real MapLibre', () => {
+  const TRACED = {
+    id: 'obs-t',
+    lat: 51.5,
+    lon: -0.5,
+    exported: false,
+    geometry: {
+      type: 'LineString',
+      coordinates: [
+        [-0.5, 51.5],
+        [-0.4, 51.6],
+      ],
+    },
+  };
+  const POINT = { id: 'obs-p', lat: 51.5, lon: -0.5, exported: true };
+
+  test('saved traces draw above the highlight and below the fix and markers', async () => {
+    // The ordering guarantee, extended: a walked boundary must never cover
+    // the live fix or the marker dots, and only this tier can see the
+    // composed layer stack.
+    const adapter = await createAdapter();
+    await adapter.ready;
+
+    const order = adapter.getLayerOrder();
+    for (const id of ['trace-fill', 'trace-line-exported', 'trace-line-pending', 'active-trace-line']) {
+      expect(order.indexOf(id)).toBeGreaterThan(order.indexOf('feature-highlight-line'));
+      expect(order.indexOf(id)).toBeLessThan(order.indexOf('position-accuracy'));
+      expect(order.indexOf(id)).toBeLessThan(order.indexOf('position-dot'));
+    }
+  });
+
+  test('setObservations feeds the markers and the shapes from one call', async () => {
+    const adapter = await createAdapter();
+    await adapter.ready;
+
+    adapter.setObservations([TRACED, POINT]);
+
+    // Every observation gets a marker at its representative point; only the
+    // traced one appears in the shapes source.
+    expect(await adapter.getSourceFeatureCount('observations')).toBe(2);
+    expect(await adapter.getSourceFeatureCount('observation-shapes')).toBe(1);
+  });
+
+  test('an active trace set before load is replayed, and clearing empties it', async () => {
+    const adapter = await createAdapter();
+    adapter.setActiveTrace([
+      [-0.5, 51.5],
+      [-0.4, 51.6],
+    ]);
+
+    await adapter.ready;
+    expect(await adapter.getSourceFeatureCount('active-trace')).toBe(1);
+
+    adapter.setActiveTrace(null);
+    expect(await adapter.getSourceFeatureCount('active-trace')).toBe(0);
+  });
+});
