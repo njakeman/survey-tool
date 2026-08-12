@@ -1,9 +1,10 @@
 # Field Survey
 
 Offline-first PWA for light location surveying in the field: GPS + compass readings, optional
-photo, saved as a GeoJSON observation. Session data syncs to a private GitHub repo as one commit;
-export to file works without any network at all. Built for iOS Safari, installed to the home
-screen.
+photo and voice note, saved as a GeoJSON observation. Data leaves the phone through the share
+sheet as a zip export and comes back through import — no server, no accounts, no network needed.
+Built for iOS Safari, installed to the home screen. Live at
+[survey.field.works](https://survey.field.works/).
 
 See [`field-survey-pwa-prompt.md`](./field-survey-pwa-prompt.md) for the original brief and
 [`CLAUDE.md`](./CLAUDE.md) for constraints that bind the implementation.
@@ -11,9 +12,12 @@ See [`field-survey-pwa-prompt.md`](./field-survey-pwa-prompt.md) for the origina
 ## Status
 
 Field-usable offline. Capture (GPS/compass/photo/save), session history, zip export **and
-import**, the offline basemap, [feature layers](#feature-layers),
-[OS grid references](#grid-references) and
-[marking points you cannot reach](#marking-a-point-you-cannot-reach) are built.
+import**, the offline basemap, [feature layers](#feature-layers) (with tap-to-inspect, an amber
+selection highlight, and "Record here" — which for a polygon records the polygon's centroid, not
+where you are standing), [OS grid references](#grid-references) and
+[marking points you cannot reach](#marking-a-point-you-cannot-reach) are built. The map takes
+standard gestures — one finger pans, pinch zooms — and the interface itself can never be
+pinch-zoomed.
 
 **Voice notes** ride on observations: record on the capture page (webm/opus at ~0.4 MB/min —
 about half a photo per minute, measured on the device), hear it back before saving, play it from
@@ -34,6 +38,12 @@ map panel simply offers to pick a region.
 
 Nothing since the capture phase has been verified on a real iPhone. `docs/ios-manual-checklist.md`
 is the gate, and it is unticked from Phase 3 onward.
+
+**Planned next: trace modes.** Two ways to record a shape by walking it, both building on the
+existing GPS watch. _Trace a path_ maps a series of fixes into a line (a hedgerow, a track, a
+watercourse); _trace a boundary_ walks a perimeter and closes it into a polygon (a parcel, a
+habitat patch). Neither is designed yet — see CLAUDE.md's Project status for the constraints any
+design has to respect before this is built.
 
 ## Develop
 
@@ -183,10 +193,15 @@ it once into IndexedDB; after that it works with no network, and switching it of
 it comes back offline too. _Remove_ is what reclaims the space, and is offered only for a layer
 that is already switched off.
 
-Tapping a feature shows its attributes and offers **Record here**, which starts an observation
-linked to that feature. The link travels into the exported GeoJSON as `feature_layer`, `feature_id`
-and `feature_label`, so a session can be joined back to the dataset it was surveyed against. Those
-three columns are present on every observation, `null` where there is no link.
+Tapping a feature highlights it on the map in amber, shows its attributes and offers
+**Record here**, which starts an observation linked to that feature — the highlight stays on the
+linked feature until Save or Unlink. For a **polygon**, Record here places the observation at the
+polygon's centroid rather than where you are standing (you are at the gate; the parcel is the
+record): it goes through the same marked-point path as the crosshair, `position_source: "map"`,
+with an accuracy figure spanning the polygon, and "Use my position" before Save reverts it. The
+link travels into the exported GeoJSON as `feature_layer`, `feature_id` and `feature_label`, so a
+session can be joined back to the dataset it was surveyed against. Those three columns are
+present on every observation, `null` where there is no link.
 
 Three things that will bite:
 
@@ -303,7 +318,11 @@ Playwright's WebKit is not Safari and not iOS. Before signing off any phase, run
 ## Deploy
 
 Pushing to `main` builds and deploys to GitHub Pages via Actions (`.github/workflows/ci.yml`).
-First-time setup: in the repo's Settings → Pages, set the source to "GitHub Actions".
+First-time setup: in the repo's Settings → Pages, set the source to "GitHub Actions". The app is
+served at the root of the custom domain `survey.field.works` (a Cloudflare CNAME; the domain is
+set in the same Pages settings — an Actions deploy ignores CNAME files, so there is none), which
+is why `vite.config.js`'s `base` is `'/'`. Changing or removing the domain means changing `base`
+with it: the two only work together.
 
 ## Import a session
 

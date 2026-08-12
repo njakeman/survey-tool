@@ -24,12 +24,41 @@ attributes and "Record here"), **OS grid references** (OSTN15, offline), **marki
 surveyor cannot reach** (a crosshair on the map, recorded as an ordinary observation with
 `positionSource: 'map'`) and **online aerial imagery** (Esri World Imagery as one more region in
 the picker — streamed, never stored, never suggested) are implemented and, like everything since
-Phase 3, **unverified on a device** — see the Feature layers and Grid references sections of `docs/ios-manual-checklist.md`. **The stylesheet is
+Phase 3, **unverified on a device** — see the Feature layers and Grid references sections of `docs/ios-manual-checklist.md`. The **2026-08-12 map
+interaction pass** added the amber **selection highlight** (tapped/linked feature echoed on the
+map — `featureLayerStyle.js`'s highlight source/layers, geometry carried out of `featureQuery.js`),
+**"Record here" on a polygon records the polygon's centroid** through the marked-point path
+(`src/geo/centroid.js`), and **standard map gestures** (one-finger pan, pinch zoom; cooperative
+gestures were tried and failed in the field, and the viewport meta now pins `maximum-scale=1` so
+the interface itself can never pinch-zoom). **The stylesheet is
 no longer a placeholder**; do not restyle from scratch without reading `docs/styling.md` first.
 See `field-survey-pwa-prompt.md` for the original brief. The approved
 architecture corrected several of the brief's technical choices (raster tiles → PMTiles/MapLibre,
 download-as-primary-export → Web Share-as-primary) — read the plan history / recent commits before
 assuming the brief's map or export sections still describe the built app.
+
+**Planned next (not yet designed, 2026-08-12): trace modes.** _Trace a path_ — walk and record a
+series of GPS fixes as a line (hedgerow, track, watercourse) — and _trace a boundary_ — walk a
+perimeter and close it into a polygon. Nothing is committed yet, but any design must reckon with
+these existing boundaries rather than discover them mid-build:
+
+- **The no-watch-persistence rule needs a deliberate carve-out, not a silent breach.** "Don't
+  persist the live GPS watch stream" (Design boundaries below) exists to stop _ambient_ ~1Hz
+  write amplification; a trace is an explicit, surveyor-started recording, and the
+  "offline-first, nothing lost" guarantee cuts the other way there — a force-quit mid-trace must
+  not lose the walked line, which argues for appending vertices to IndexedDB as they accrue,
+  thinned (by minimum distance and/or fix accuracy), never raw at 1Hz.
+- **Everything downstream assumes observations are Points**: `domain/geojson.js` (export),
+  `import/parseSessionExport.js` (validates every feature through `createObservation`),
+  `map/overlays.js` (markers), the Exported badge, the observations list. A trace is either a new
+  record type or a geometry on the observation — decide once, and keep the export/import round
+  trip faithful either way (older exports must still import).
+- **`gpsAccuracyM` semantics**: per-vertex accuracy exists at capture time; decide what one
+  figure on the trace means (worst vertex is the honest default) rather than inventing one later.
+- **A boundary must close validly**: first vertex = last (RFC 7946 ring), minimum 3 distinct
+  vertices, and a decision about self-intersection (warn, refuse, or allow) made up front.
+- Battery/thermals are already probed for a continuous watch (the checklist's 30-min item); a
+  trace adds writes, not sensor load.
 
 The local dev server needs HTTPS to test geolocation/compass permissions (secure-context gated) —
 `npm run dev -- --host` now serves HTTPS via `vite-plugin-mkcert`, reachable on the LAN. Plain `vite
@@ -326,7 +355,10 @@ standalone })`, browser globals injected same as `probe/capabilities.js`, so it'
   write amplification with no benefit. The actual "nothing held in volatile memory" guarantee is:
   session written on start/end, observation + photo written in one transaction on the Save tap
   (`captureWrite.js`), before any UI feedback. If you're tempted to write every `watchPosition` tick,
-  don't — that's not what "offline-first, nothing lost" means here.
+  don't — that's not what "offline-first, nothing lost" means here. (The planned **trace modes**
+  — Project status above — will be the one deliberate exception: an explicit, surveyor-started
+  recording whose thinned vertices are worth persisting as they accrue. Ambient ticks outside a
+  trace stay unwritten.)
 - An observation's `featureLayerId`/`featureId`/`featureLabel` are **both halves or neither** —
   `createObservation` throws on a half link, because an id with no layer joins to nothing and a
   layer with no id says only "somewhere in there". They are exported as `feature_layer`,
