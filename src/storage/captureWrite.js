@@ -8,12 +8,30 @@
 // InactiveTransactionError on the next store call. And per CLAUDE.md, only
 // the ArrayBuffer is ever stored — never the Blob (see photoStore.js).
 
-export async function saveObservationWithPhoto(db, { observation, photo = null, audio = null }) {
+import { draftVertexRange } from './traceDraftStore.js';
+
+// `traceDraftId`: the finished trace draft this observation was built from.
+// Its meta record and vertex range are deleted in the same transaction as
+// the observation put, so a kill mid-save leaves either the draft
+// (recoverable) or the observation — never both, never neither.
+export async function saveObservationWithPhoto(
+  db,
+  { observation, photo = null, audio = null, traceDraftId = null },
+) {
   const photoBuffer = photo ? await photo.blob.arrayBuffer() : null;
   const audioBuffer = audio ? await audio.blob.arrayBuffer() : null;
 
-  const stores = ['observations', ...(photo ? ['photos'] : []), ...(audio ? ['audio'] : [])];
+  const stores = [
+    'observations',
+    ...(photo ? ['photos'] : []),
+    ...(audio ? ['audio'] : []),
+    ...(traceDraftId ? ['traceDrafts', 'traceVertices'] : []),
+  ];
   const tx = db.transaction(stores, 'readwrite');
+  if (traceDraftId) {
+    tx.objectStore('traceDrafts').delete(traceDraftId);
+    tx.objectStore('traceVertices').delete(draftVertexRange(traceDraftId));
+  }
   if (photo) {
     tx.objectStore('photos').put({
       id: photo.id,

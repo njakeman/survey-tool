@@ -4,6 +4,12 @@ import { openDatabase } from './db.js';
 import { saveObservationWithPhoto } from './captureWrite.js';
 import { getObservation } from './observationStore.js';
 import { getPhoto } from './photoStore.js';
+import {
+  appendTraceVertex,
+  listTraceDrafts,
+  listTraceVertices,
+  putTraceDraft,
+} from './traceDraftStore.js';
 import { createObservation } from '../domain/observation.js';
 
 function makeObservation(overrides = {}) {
@@ -62,6 +68,43 @@ describe('saveObservationWithPhoto', () => {
     const raw = await tx.store.get('obs-1');
     expect(raw.arrayBuffer).toBeInstanceOf(ArrayBuffer);
     expect(raw).not.toHaveProperty('blob');
+    db.close();
+  });
+
+  test('clears the trace draft and its vertices in the same transaction as the save', async () => {
+    // A kill mid-save must leave either the draft (recoverable) or the
+    // observation — never both, never neither.
+    const db = await openDatabase('capture-write-trace-draft');
+    await putTraceDraft(db, { id: 'draft-1', sessionId: 'sess-1', mode: 'path', startedAt: 't' });
+    await appendTraceVertex(db, 'draft-1', { seq: 0, lat: 51.5, lon: -0.14, accuracyM: 5, fixAt: 't' });
+    const observation = makeObservation({
+      positionSource: 'trace',
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [-0.14, 51.5],
+          [-0.141, 51.501],
+        ],
+      },
+    });
+
+    await saveObservationWithPhoto(db, { observation, traceDraftId: 'draft-1' });
+
+    expect(await getObservation(db, 'obs-1')).toEqual(observation);
+    expect(await listTraceDrafts(db)).toEqual([]);
+    expect(await listTraceVertices(db, 'draft-1')).toEqual([]);
+    db.close();
+  });
+
+  test('an ordinary save leaves a running trace draft alone', async () => {
+    // Point observations are captured mid-trace; their save must not touch
+    // the draft stores at all.
+    const db = await openDatabase('capture-write-draft-untouched');
+    await putTraceDraft(db, { id: 'draft-1', sessionId: 'sess-1', mode: 'path', startedAt: 't' });
+
+    await saveObservationWithPhoto(db, { observation: makeObservation() });
+
+    expect(await listTraceDrafts(db)).toHaveLength(1);
     db.close();
   });
 

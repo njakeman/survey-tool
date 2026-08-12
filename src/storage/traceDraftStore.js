@@ -5,8 +5,9 @@
 
 // Every vertex of one draft, and nothing else: from [draftId] up to
 // [draftId, []] — an empty array sorts above every number in IndexedDB key
-// order, the standard upper sentinel for a composite-key range.
-const draftRange = (draftId) => IDBKeyRange.bound([draftId], [draftId, []]);
+// order, the standard upper sentinel for a composite-key range. Exported
+// for captureWrite.js, which clears a draft inside the save transaction.
+export const draftVertexRange = (draftId) => IDBKeyRange.bound([draftId], [draftId, []]);
 
 export function putTraceDraft(db, draft) {
   return db.put('traceDrafts', draft);
@@ -23,7 +24,7 @@ export function appendTraceVertex(db, draftId, vertex) {
 // Ordered by seq — the composite key sorts within a draft by its second
 // component, so this is walked order without an index.
 export function listTraceVertices(db, draftId) {
-  return db.getAll('traceVertices', draftRange(draftId));
+  return db.getAll('traceVertices', draftVertexRange(draftId));
 }
 
 // One transaction over both stores: the draft can never survive its
@@ -31,6 +32,6 @@ export function listTraceVertices(db, draftId) {
 export async function deleteTraceDraft(db, draftId) {
   const tx = db.transaction(['traceDrafts', 'traceVertices'], 'readwrite');
   tx.objectStore('traceDrafts').delete(draftId);
-  tx.objectStore('traceVertices').delete(draftRange(draftId));
+  tx.objectStore('traceVertices').delete(draftVertexRange(draftId));
   await tx.done;
 }
