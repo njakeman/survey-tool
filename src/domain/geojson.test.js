@@ -78,6 +78,7 @@ describe('sessionToFeatureCollection', () => {
           feature_label: null,
           os_grid_ref: null,
           position_source: 'gps',
+          trace_length_m: null,
           session_name: 'Ashton Keynes',
           app_version: '0.1.0',
         },
@@ -318,5 +319,93 @@ describe('sessionToFeatureCollection', () => {
       '01AAAAAAAAAAAAAAAAAAAAAAAA',
       '01BBBBBBBBBBBBBBBBBBBBBBBB',
     ]);
+  });
+});
+
+describe('traced observations', () => {
+  const LINE = {
+    type: 'LineString',
+    coordinates: [
+      [-0.14, 51.5],
+      [-0.14, 51.501],
+    ],
+  };
+
+  const traceObs = (geometry) =>
+    createObservation({
+      id: 'obs-t',
+      sessionId: 'sess-1',
+      recordedAt: '2026-08-06T10:00:00.000Z',
+      fixAt: '2026-08-06T09:40:00.000Z',
+      lat: 51.5005,
+      lon: -0.14,
+      gpsAccuracyM: 12,
+      positionSource: 'trace',
+      geometry,
+    });
+
+  test('a traced path exports its LineString and walked length', () => {
+    const fc = sessionToFeatureCollection(session, [traceObs(LINE)], { appVersion: '0.1.0' });
+
+    expect(fc.features[0].geometry).toEqual(LINE);
+    // ~111 m of northing - derived from the geometry at export time.
+    expect(fc.features[0].properties.trace_length_m).toBeCloseTo(111.2, 0);
+    expect(fc.features[0].properties.position_source).toBe('trace');
+    // The representative point still rides in the properties, authoritative
+    // for import exactly like a Point observation's coordinates.
+    expect(fc.features[0].properties.lat).toBe(51.5005);
+  });
+
+  test('a traced boundary exports its Polygon and perimeter', () => {
+    const ring = [
+      [-0.14, 51.5],
+      [-0.1386, 51.5],
+      [-0.1386, 51.501],
+      [-0.14, 51.5],
+    ];
+    const fc = sessionToFeatureCollection(
+      session,
+      [traceObs({ type: 'Polygon', coordinates: [ring] })],
+      { appVersion: '0.1.0' },
+    );
+
+    expect(fc.features[0].geometry.type).toBe('Polygon');
+    expect(fc.features[0].properties.trace_length_m).toBeGreaterThan(300);
+  });
+
+  test('point observations carry trace_length_m null, keeping the column set stable', () => {
+    const obs = createObservation({
+      id: 'obs-1',
+      sessionId: 'sess-1',
+      recordedAt: '2026-08-06T10:00:00.000Z',
+      fixAt: '2026-08-06T09:59:20.000Z',
+      lat: 51.5,
+      lon: -0.14,
+      gpsAccuracyM: 8.2,
+    });
+
+    const fc = sessionToFeatureCollection(session, [obs], { appVersion: '0.1.0' });
+
+    expect(fc.features[0].geometry).toEqual({ type: 'Point', coordinates: [-0.14, 51.5] });
+    expect(fc.features[0].properties).toHaveProperty('trace_length_m', null);
+  });
+
+  test('records stored before geometry existed still export as Points', () => {
+    // A raw stored record with no geometry key at all - `?? null` reads,
+    // because canonicalStringify drops undefined.
+    const legacy = {
+      id: 'obs-old',
+      sessionId: 'sess-1',
+      recordedAt: '2026-08-06T10:00:00.000Z',
+      fixAt: '2026-08-06T09:59:20.000Z',
+      lat: 51.5,
+      lon: -0.14,
+      gpsAccuracyM: 8.2,
+    };
+
+    const fc = sessionToFeatureCollection(session, [legacy], { appVersion: '0.1.0' });
+
+    expect(fc.features[0].geometry.type).toBe('Point');
+    expect(fc.features[0].properties.trace_length_m).toBeNull();
   });
 });

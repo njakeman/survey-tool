@@ -4,10 +4,25 @@
 // Combine with canonical-json.js's canonicalStringify for the actual bytes
 // written to disk/sync.
 
+import { lineLengthM } from '../geo/lineMetrics.js';
+
+// A traced observation's walked length: line length for a path, perimeter
+// for a boundary. Derived from the geometry at export time like os_grid_ref
+// — a stored copy could only ever drift from the coordinates it restates.
+function traceLengthM(geometry) {
+  if (!geometry) return null;
+  const line = geometry.type === 'Polygon' ? geometry.coordinates[0] : geometry.coordinates;
+  return lineLengthM(line);
+}
+
 function observationToFeature(obs, session, appVersion, gridRef, audioFilename) {
+  // A trace carries the walked LineString/Polygon; everything else is the
+  // Point its lat/lon already describe. `?? null` on the read below because
+  // records stored before geometry existed have no such key.
+  const geometry = obs.geometry ?? null;
   return {
     type: 'Feature',
-    geometry: { type: 'Point', coordinates: [obs.lon, obs.lat] },
+    geometry: geometry ?? { type: 'Point', coordinates: [obs.lon, obs.lat] },
     properties: {
       obs_id: obs.id,
       recorded_at: obs.recordedAt,
@@ -45,6 +60,9 @@ function observationToFeature(obs, session, appVersion, gridRef, audioFilename) 
       // rather than read straight through: records saved before this field
       // existed were all GPS fixes, and 'gps' is the honest value for them.
       position_source: obs.positionSource ?? 'gps',
+      // Walked length of a trace, null on every point row — emitted always,
+      // for the same column-set reason as the feature link above.
+      trace_length_m: traceLengthM(geometry),
       session_name: session.name,
       app_version: appVersion,
     },
