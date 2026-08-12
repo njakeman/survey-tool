@@ -4,7 +4,7 @@ import { openDB } from 'idb';
 import { openDatabase, DB_VERSION } from './db.js';
 
 describe('openDatabase', () => {
-  test('creates the sessions, observations, photos, basemap, settings, featureLayers and audio stores', async () => {
+  test('creates the sessions, observations, photos, basemap, settings, featureLayers, audio and trace stores', async () => {
     const db = await openDatabase('db-test-stores');
     expect([...db.objectStoreNames].sort()).toEqual([
       'audio',
@@ -14,6 +14,8 @@ describe('openDatabase', () => {
       'photos',
       'sessions',
       'settings',
+      'traceDrafts',
+      'traceVertices',
     ]);
     db.close();
   });
@@ -107,6 +109,32 @@ describe('openDatabase', () => {
     // it in the v4 branch would throw on an existing store.
     const tx = db.transaction('observations', 'readonly');
     expect([...tx.store.indexNames]).toEqual(['by-session']);
+    db.close();
+  });
+
+  test('upgrades a v5 database to v6, adding the trace stores without disturbing a voice note', async () => {
+    // v5 is what shipped with voice notes; real devices hold recordings.
+    const v5 = await openDB('db-test-upgrade-v6', 5, {
+      upgrade(db) {
+        db.createObjectStore('sessions', { keyPath: 'id' });
+        const observations = db.createObjectStore('observations', { keyPath: 'id' });
+        observations.createIndex('by-session', 'sessionId');
+        db.createObjectStore('photos', { keyPath: 'id' });
+        db.createObjectStore('basemap', { keyPath: 'id' });
+        db.createObjectStore('settings', { keyPath: 'key' });
+        db.createObjectStore('featureLayers', { keyPath: 'id' });
+        db.createObjectStore('audio', { keyPath: 'id' });
+      },
+    });
+    await v5.put('audio', { id: 'obs-1', arrayBuffer: new ArrayBuffer(6), contentType: 'audio/webm' });
+    v5.close();
+
+    const db = await openDatabase('db-test-upgrade-v6');
+
+    expect(db.version).toBe(DB_VERSION);
+    expect([...db.objectStoreNames]).toContain('traceDrafts');
+    expect([...db.objectStoreNames]).toContain('traceVertices');
+    expect((await db.get('audio', 'obs-1')).arrayBuffer.byteLength).toBe(6);
     db.close();
   });
 });
