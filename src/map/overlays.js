@@ -123,3 +123,86 @@ export function observationsFeatureCollection(observations) {
     })),
   };
 }
+
+// Saved traces: the walked lines and boundaries behind the markers. A
+// separate source from the markers because these are the observations'
+// geometries, not their representative points — every traced observation
+// appears in both (its shape here, its marker dot above).
+export const OBSERVATION_SHAPES_SOURCE_ID = 'observation-shapes';
+
+export function observationShapesCollection(observations) {
+  return {
+    type: 'FeatureCollection',
+    features: (observations ?? [])
+      .filter((observation) => observation.geometry)
+      .map((observation) => ({
+        type: 'Feature',
+        geometry: observation.geometry,
+        properties: {
+          obs_id: observation.id,
+          exported: Boolean(observation.exported),
+        },
+      })),
+  };
+}
+
+// Solid versus dashed is the line-scale analogue of the markers'
+// filled-versus-hollow: exported-or-not must survive greyscale, so it is
+// never carried by hue. Two line layers split by filter rather than one
+// with a data-driven dash — MapLibre's line-dasharray is not data-drivable.
+// The line layers carry no geometry-type filter, deliberately: a boundary
+// polygon needs its outline drawn by them, or it is a faint wash with no
+// edge.
+export function traceShapeLayers() {
+  const source = OBSERVATION_SHAPES_SOURCE_ID;
+  return [
+    {
+      id: 'trace-fill',
+      type: 'fill',
+      source,
+      filter: ['==', ['geometry-type'], 'Polygon'],
+      // Faint either way — the fill says "this area", the outline carries
+      // the exported distinction.
+      paint: { 'fill-color': MARKER_INK, 'fill-opacity': 0.08 },
+    },
+    {
+      id: 'trace-line-exported',
+      type: 'line',
+      source,
+      filter: ['get', 'exported'],
+      paint: { 'line-color': MARKER_INK, 'line-width': 3 },
+    },
+    {
+      id: 'trace-line-pending',
+      type: 'line',
+      source,
+      filter: ['!', ['get', 'exported']],
+      paint: { 'line-color': MARKER_INK, 'line-width': 3, 'line-dasharray': [2, 2] },
+    },
+  ];
+}
+
+// The trace being walked right now. Accent and dashed — the provisional
+// visual language of the picked point, against the ink of saved shapes.
+export const ACTIVE_TRACE_SOURCE_ID = 'active-trace';
+
+export function activeTraceData(coordinates) {
+  // Always a FeatureCollection, empty below two vertices — a source set
+  // unconditionally, like the highlight, and a dot is not a line.
+  const enough = Array.isArray(coordinates) && coordinates.length >= 2;
+  return {
+    type: 'FeatureCollection',
+    features: enough
+      ? [{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates } }]
+      : [],
+  };
+}
+
+export function activeTraceLayer() {
+  return {
+    id: 'active-trace-line',
+    type: 'line',
+    source: ACTIVE_TRACE_SOURCE_ID,
+    paint: { 'line-color': '#c2611f', 'line-width': 3, 'line-dasharray': [1.5, 1.5] },
+  };
+}

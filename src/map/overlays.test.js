@@ -3,10 +3,16 @@ import {
   positionFeature,
   accuracyRadiusExpression,
   observationsFeatureCollection,
+  observationShapesCollection,
   metresToPixels,
   observationPaint,
   positionPaint,
   pickedPointPaint,
+  traceShapeLayers,
+  activeTraceData,
+  activeTraceLayer,
+  OBSERVATION_SHAPES_SOURCE_ID,
+  ACTIVE_TRACE_SOURCE_ID,
 } from './overlays.js';
 
 describe('positionFeature', () => {
@@ -149,5 +155,89 @@ describe('pickedPointPaint', () => {
       observationPaint()['circle-radius'],
     );
     expect(pickedPointPaint()['circle-radius']).toBeGreaterThan(positionPaint()['circle-radius']);
+  });
+});
+
+describe('observationShapesCollection', () => {
+  const LINE = {
+    type: 'LineString',
+    coordinates: [
+      [-0.14, 51.5],
+      [-0.141, 51.501],
+    ],
+  };
+
+  test('carries only the observations that have a geometry', () => {
+    const fc = observationShapesCollection([
+      { id: 'obs-1', lat: 51.5, lon: -0.14, exported: true },
+      { id: 'obs-2', lat: 51.5, lon: -0.14, geometry: LINE, exported: false },
+    ]);
+
+    expect(fc.features).toHaveLength(1);
+    expect(fc.features[0].geometry).toEqual(LINE);
+    expect(fc.features[0].properties).toEqual({ obs_id: 'obs-2', exported: false });
+  });
+
+  test('is an empty collection for no observations', () => {
+    expect(observationShapesCollection(null).features).toEqual([]);
+  });
+});
+
+describe('traceShapeLayers', () => {
+  test('fills polygons only, and splits solid from dashed by exported state', () => {
+    const layers = traceShapeLayers();
+    const fill = layers.find((l) => l.type === 'fill');
+    const lines = layers.filter((l) => l.type === 'line');
+
+    expect(fill.filter).toEqual(['==', ['geometry-type'], 'Polygon']);
+    expect(lines).toHaveLength(2);
+
+    // Solid-versus-dashed is the line-scale analogue of the markers
+    // filled-versus-hollow: it must survive greyscale. Two layers rather
+    // than a data-driven dasharray, which MapLibre does not support.
+    const exported = lines.find((l) => l.filter && JSON.stringify(l.filter).includes('"get","exported"') && !JSON.stringify(l.filter).includes('"!"'));
+    const pending = lines.find((l) => JSON.stringify(l.filter).includes('"!"'));
+    expect(exported.paint['line-dasharray']).toBeUndefined();
+    expect(pending.paint['line-dasharray']).toBeDefined();
+  });
+
+  test('every layer draws from the one observation-shapes source', () => {
+    for (const layer of traceShapeLayers()) {
+      expect(layer.source).toBe(OBSERVATION_SHAPES_SOURCE_ID);
+    }
+  });
+
+  test('the line layers outline polygons as well as paths', () => {
+    // A boundary with no outline would be a faint wash with no edge; the
+    // line layers must not be filtered down to LineString geometry.
+    for (const layer of traceShapeLayers().filter((l) => l.type === 'line')) {
+      expect(JSON.stringify(layer.filter ?? [])).not.toContain('geometry-type');
+    }
+  });
+});
+
+describe('active trace', () => {
+  test('fewer than two vertices draws nothing - a dot is not a line', () => {
+    expect(activeTraceData([]).features).toEqual([]);
+    expect(activeTraceData([[0, 0]]).features).toEqual([]);
+    expect(activeTraceData(null).features).toEqual([]);
+  });
+
+  test('two or more vertices draw as one LineString', () => {
+    const fc = activeTraceData([
+      [0, 0],
+      [0, 0.001],
+    ]);
+
+    expect(fc.features).toHaveLength(1);
+    expect(fc.features[0].geometry.type).toBe('LineString');
+  });
+
+  test('the live line is accent-coloured and dashed - provisional, like the picked point', () => {
+    const layer = activeTraceLayer();
+
+    expect(layer.source).toBe(ACTIVE_TRACE_SOURCE_ID);
+    expect(layer.paint['line-color']).toBe('#c2611f');
+    expect(layer.paint['line-dasharray']).toBeDefined();
   });
 });
