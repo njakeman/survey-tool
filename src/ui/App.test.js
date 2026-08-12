@@ -13,6 +13,7 @@ function createFakeService() {
     saveObservation: vi.fn(),
     countObservations: vi.fn().mockResolvedValue(0),
     deleteObservation: vi.fn(),
+    getTraceDraft: vi.fn().mockResolvedValue(null),
   };
 }
 

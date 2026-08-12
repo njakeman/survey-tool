@@ -10,10 +10,19 @@ import { VoiceNoteField } from './VoiceNoteField.js';
 import { ObservationsList } from './ObservationsList.js';
 import { CaptureMap } from './CaptureMap.js';
 import { FeatureSheet } from './FeatureSheet.js';
+import { TraceStrip } from './TraceStrip.js';
 import { formatLatLon } from '../sensors/format.js';
 import { chooseActive } from '../map/basemapSelection.js';
 import { isExported } from '../domain/session.js';
 import { polygonCentroid, polygonExtentM } from '../geo/centroid.js';
+import {
+  acceptFix,
+  createTraceState,
+  finishTrace,
+  pauseTrace,
+  resumeTrace,
+  traceStats,
+} from '../trace/recording.js';
 
 function todayDateString() {
   return new Date().toISOString().slice(0, 10);
@@ -77,6 +86,20 @@ export function CapturePage({
   const [saveError, setSaveError] = useState(null);
   const [lastSaved, setLastSaved] = useState(null);
 
+  // The trace being walked: the draft record it persists into and the pure
+  // recorder state (trace/recording.js). Held here like pickedPoint — it must
+  // survive typing a note, capturing a point observation, and view switches.
+  const [traceSession, setTraceSession] = useState(null); // { draft, state, error }
+  // A finished walk waiting on Save — finishTrace's result plus what the
+  // save needs to clear the draft. Save composes it with the note, photo,
+  // voice note and feature link exactly like any other observation.
+  const [pendingTrace, setPendingTrace] = useState(null);
+  const [traceChooserOpen, setTraceChooserOpen] = useState(false);
+  // An unfinished draft found in IndexedDB on mount — a force-quit mid-walk.
+  // Offered, never auto-resumed: recording again is a decision.
+  const [recoveredDraft, setRecoveredDraft] = useState(null);
+  const [confirmingRecoveredDiscard, setConfirmingRecoveredDiscard] = useState(false);
+
   const { reading: position, error: positionError } = usePosition(sensors.watchPosition);
   const {
     reading: heading,
@@ -97,10 +120,35 @@ export function CapturePage({
 
   useEffect(() => {
     refreshSession();
+    // A draft in the store with no strip on screen is a force-quit mid-walk.
+    service.getTraceDraft().then((found) => {
+      if (found) setRecoveredDraft(found);
+    });
     // Mount only: re-reading whenever the closure changes would refetch the
     // session on every GPS tick.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // The appender: every fix from the shared watch goes through the pure
+  // recorder; only an accepted vertex is persisted — which is what keeps the
+  // no-watch-persistence carve-out narrow. Re-running after a state change
+  // re-offers the same fix, which the distance rule rejects, so the effect
+  // is safely idempotent.
+  useEffect(() => {
+    if (!traceSession || !position) return;
+    const { state, vertex } = acceptFix(traceSession.state, position);
+    if (!vertex) return;
+    setTraceSession((current) => (current ? { ...current, state } : current));
+    service.appendTraceVertex(traceSession.draft.id, vertex).catch(() => {
+      // A failed append is a failed crash-safety guarantee — say so where
+      // the surveyor is looking.
+      setTraceSession((current) =>
+        current ? { ...current, error: 'Could not record that point — storage failed' } : current,
+      );
+    });
+    // service is stable; traceSession covers the state the appender reads.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [position, traceSession]);
 
   async function handleStart(name) {
     enableCompass(); // synchronous, before any await — iOS gesture rule
@@ -115,6 +163,14 @@ export function CapturePage({
   }
 
   async function handleEnd() {
+    // A closed session must not leave a draft pointing at it, and a pending
+    // trace not yet saved is exactly the data loss End would silently cause.
+    if (traceSession || pendingTrace) {
+      const message = 'Finish or discard the trace first';
+      if (traceSession) setTraceSession({ ...traceSession, error: message });
+      else setPendingTrace({ ...pendingTrace, error: message });
+      return;
+    }
     setSessionBusy(true);
     setLastSaved(null); // an Undo must never cross a session boundary
     try {
@@ -122,6 +178,101 @@ export function CapturePage({
       await refreshSession();
     } finally {
       setSessionBusy(false);
+    }
+  }
+
+  async function handleStartTrace(mode) {
+    setTraceChooserOpen(false);
+    try {
+      const draft = await service.startTraceDraft({ mode });
+      setTraceSession({ draft, state: createTraceState({ mode }), error: null });
+    } catch (error) {
+      setSaveError(error.message || 'Could not start the trace');
+    }
+  }
+
+  function handlePauseTrace() {
+    setTraceSession((current) =>
+      current ? { ...current, state: pauseTrace(current.state), error: null } : current,
+    );
+  }
+
+  function handleResumeTrace() {
+    setTraceSession((current) =>
+      current ? { ...current, state: resumeTrace(current.state), error: null } : current,
+    );
+  }
+
+  // Shared by the live Finish and the recovery strip's: close the walk into
+  // a pending trace, or say why it cannot close yet.
+  function finishIntoPending(draft, state) {
+    try {
+      const finished = finishTrace(state);
+      setPendingTrace({
+        ...finished,
+        draftId: draft.id,
+        mode: state.mode,
+        stats: traceStats(state),
+        error: null,
+      });
+      setTraceSession(null);
+      // Both arm the same Save; a stale mark would silently override the
+      // walked line's own representative point.
+      setPickedPoint(null);
+      return true;
+    } catch {
+      const message =
+        state.mode === 'boundary'
+          ? 'Keep walking or discard — a boundary needs three distinct points'
+          : 'Keep walking or discard — a path needs at least two points';
+      setTraceSession({ draft, state, error: message });
+      return false;
+    }
+  }
+
+  function handleFinishTrace() {
+    if (traceSession) finishIntoPending(traceSession.draft, traceSession.state);
+  }
+
+  async function handleDiscardTrace() {
+    const draftId = traceSession?.draft.id ?? pendingTrace?.draftId;
+    setTraceSession(null);
+    setPendingTrace(null);
+    if (!draftId) return;
+    try {
+      await service.discardTraceDraft(draftId);
+    } catch (error) {
+      setSaveError(error.message || 'Could not discard the trace');
+    }
+  }
+
+  // The recovered draft's vertices, back into recorder state — paused, so a
+  // relaunch hours later can never silently stitch the drive home onto the
+  // hedgerow.
+  function recoveredState() {
+    const { draft, vertices } = recoveredDraft;
+    return pauseTrace(createTraceState({ mode: draft.mode, vertices }));
+  }
+
+  function handleResumeRecovered() {
+    setTraceSession({ draft: recoveredDraft.draft, state: recoveredState(), error: null });
+    setRecoveredDraft(null);
+  }
+
+  function handleFinishRecovered() {
+    const { draft } = recoveredDraft;
+    setRecoveredDraft(null);
+    finishIntoPending(draft, recoveredState());
+  }
+
+  async function handleDiscardRecovered() {
+    const { draft } = recoveredDraft;
+    setRecoveredDraft(null);
+    setConfirmingRecoveredDiscard(false);
+    try {
+      await service.discardTraceDraft(draft.id);
+    } catch (error) {
+      setSaveError(error.message || 'Could not discard the trace');
     }
   }
 
@@ -155,11 +306,24 @@ export function CapturePage({
         audio,
         feature: linkedFeature,
         pickedPoint,
+        // The finished walk, when one is waiting: Save is the same tap
+        // either way, and the annotations compose identically.
+        trace: pendingTrace
+          ? {
+              draftId: pendingTrace.draftId,
+              geometry: pendingTrace.geometry,
+              representative: pendingTrace.representative,
+              gpsAccuracyM: pendingTrace.gpsAccuracyM,
+              fixAt: pendingTrace.fixAt,
+            }
+          : null,
       });
       setNote('');
       setPhoto(null);
       setAudio(null);
       setAudioError(null);
+      // The draft died inside the save transaction; the strip follows it.
+      setPendingTrace(null);
       // Cleared with the note and photo: the link belongs to the observation
       // just saved, and leaving it armed would silently attach the next one
       // to a feature the surveyor has walked away from.
@@ -273,12 +437,48 @@ export function CapturePage({
     [decoratedObservations, gridRef],
   );
 
+  // What the strip shows, derived from whichever half of the trace state
+  // exists — pending wins, because a pending trace is what Save will take.
+  const stripTrace = pendingTrace
+    ? {
+        status: 'pending',
+        mode: pendingTrace.mode,
+        startedAt: null,
+        stats: pendingTrace.stats,
+        warnings: pendingTrace.warnings,
+        error: pendingTrace.error,
+      }
+    : traceSession
+      ? {
+          status: traceSession.state.paused ? 'paused' : 'recording',
+          mode: traceSession.state.mode,
+          startedAt: traceSession.draft.startedAt,
+          stats: traceStats(traceSession.state),
+          warnings: [],
+          error: traceSession.error,
+        }
+      : null;
+
+  // The line on the map: the walk so far while recording, the finished
+  // shape while pending — it must not vanish between Finish and Save.
+  const activeTraceCoords = useMemo(() => {
+    if (pendingTrace) {
+      return pendingTrace.geometry.type === 'Polygon'
+        ? pendingTrace.geometry.coordinates[0]
+        : pendingTrace.geometry.coordinates;
+    }
+    if (traceSession) return traceSession.state.vertices.map((v) => [v.lon, v.lat]);
+    return null;
+  }, [pendingTrace, traceSession]);
+
   const disabledReason = !session
     ? 'start a session first'
-    : !position
+    : !position && !pendingTrace
       ? 'waiting for GPS fix'
       : '';
-  const canSave = Boolean(session) && Boolean(position);
+  // A pending trace can save without a live fix — after a relaunch recovery
+  // the walk itself is the provenance (captureService nulls the rest).
+  const canSave = Boolean(session) && (Boolean(position) || Boolean(pendingTrace));
 
   return html`
     <main class="capture-page">
@@ -327,9 +527,65 @@ export function CapturePage({
         selectedFeature=${tappedFeature ?? linkedFeature}
         pickedPoint=${pickedPoint}
         onPickPoint=${setPickedPoint}
+        activeTrace=${activeTraceCoords}
+        ${
+          '' /* Marking a point and a pending trace arm the same Save; two
+             provisional positions at once could only disagree. */
+        }
+        canPick=${!pendingTrace}
         gridRef=${gridRef}
         visible=${visible}
       />
+      ${
+        recoveredDraft
+          ? html`<div class="trace-strip" data-status="recovered" role="status">
+              <p class="trace-strip-summary">
+                Unfinished trace found · ${recoveredDraft.draft.mode} ·
+                ${recoveredDraft.vertices.length}
+                point${recoveredDraft.vertices.length === 1 ? '' : 's'}
+              </p>
+              <span class="trace-strip-actions">
+                <button type="button" class="button-outline" onClick=${handleResumeRecovered}>
+                  Resume
+                </button>
+                <button type="button" class="button-outline" onClick=${handleFinishRecovered}>
+                  Finish
+                </button>
+                ${
+                  confirmingRecoveredDiscard
+                    ? html`<button type="button" class="button-outline" onClick=${handleDiscardRecovered}>
+                          Discard trace
+                        </button>
+                        <button
+                          type="button"
+                          class="link"
+                          onClick=${() => setConfirmingRecoveredDiscard(false)}
+                        >
+                          Keep it
+                        </button>`
+                    : html`<button
+                        type="button"
+                        class="link"
+                        onClick=${() => setConfirmingRecoveredDiscard(true)}
+                      >
+                        Discard
+                      </button>`
+                }
+              </span>
+            </div>`
+          : null
+      }
+      ${
+        stripTrace
+          ? html`<${TraceStrip}
+              trace=${stripTrace}
+              onPause=${handlePauseTrace}
+              onResume=${handleResumeTrace}
+              onFinish=${handleFinishTrace}
+              onDiscard=${handleDiscardTrace}
+            />`
+          : null
+      }
       <${FeatureSheet}
         feature=${tappedFeature}
         ${
@@ -353,6 +609,21 @@ export function CapturePage({
           onClear=${handlePhotoClear}
         />
         ${
+          // Starting a walk is a kind of capture, so it lives with the
+          // capture actions — the map controls row is already full. Hidden
+          // once a trace exists in any state: one walk at a time.
+          session && !traceSession && !pendingTrace && !recoveredDraft
+            ? html`<button
+                type="button"
+                class="button-outline"
+                disabled=${!position}
+                onClick=${() => setTraceChooserOpen((open) => !open)}
+              >
+                Trace
+              </button>`
+            : null
+        }
+        ${
           // Export sits beside Take Photo rather than below the observations:
           // exporting the *open* session is a thing a surveyor does before
           // walking away, not a history-screen chore.
@@ -368,6 +639,26 @@ export function CapturePage({
             : null
         }
       </div>
+      ${
+        traceChooserOpen
+          ? html`<div class="trace-chooser">
+              <button
+                type="button"
+                class="button-outline"
+                onClick=${() => handleStartTrace('path')}
+              >
+                Trace a path
+              </button>
+              <button
+                type="button"
+                class="button-outline"
+                onClick=${() => handleStartTrace('boundary')}
+              >
+                Trace a boundary
+              </button>
+            </div>`
+          : null
+      }
       ${
         // Below the photo row: recording is rarer than photographing, and a
         // recorded note shows an inline player where the button was.

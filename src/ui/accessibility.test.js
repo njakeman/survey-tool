@@ -35,6 +35,7 @@ function createFakeService({ observations = [] } = {}) {
     countObservations: vi.fn().mockResolvedValue(observations.length),
     listObservations: vi.fn().mockResolvedValue(observations),
     deleteObservation: vi.fn(),
+    getTraceDraft: vi.fn().mockResolvedValue(null),
   };
 }
 

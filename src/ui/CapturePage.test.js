@@ -20,7 +20,7 @@ const POSITION = {
 };
 const HEADING = { headingDeg: 247, headingAccuracyDeg: 5, source: 'webkit-compass' };
 
-function createFakeService({ openSession = null, observations = [] } = {}) {
+function createFakeService({ openSession = null, observations = [], traceDraft = null } = {}) {
   return {
     getOpenSession: vi.fn().mockResolvedValue(openSession),
     startSession: vi.fn().mockResolvedValue(OPEN_SESSION),
@@ -29,6 +29,17 @@ function createFakeService({ openSession = null, observations = [] } = {}) {
     countObservations: vi.fn().mockResolvedValue(observations.length),
     listObservations: vi.fn().mockResolvedValue(observations),
     deleteObservation: vi.fn().mockResolvedValue(undefined),
+    startTraceDraft: vi
+      .fn()
+      .mockImplementation(async ({ mode }) => ({
+        id: 'draft-1',
+        sessionId: 'sess-1',
+        mode,
+        startedAt: '2026-08-12T09:00:00.000Z',
+      })),
+    appendTraceVertex: vi.fn().mockResolvedValue(undefined),
+    getTraceDraft: vi.fn().mockResolvedValue(traceDraft),
+    discardTraceDraft: vi.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -182,12 +193,13 @@ describe('CapturePage — saving an observation', () => {
         note: 'gate post',
         photo: null,
         audio: null,
-        // Both explicitly null rather than omitted, and asserted as part of
-        // the exact object: an observation with no source feature and no
-        // marked point has to say so, or a stale one from a previous save
-        // could slip through unnoticed.
+        // All explicitly null rather than omitted, and asserted as part of
+        // the exact object: an observation with no source feature, no
+        // marked point and no pending trace has to say so, or a stale one
+        // from a previous save could slip through unnoticed.
         feature: null,
         pickedPoint: null,
+        trace: null,
       }),
     );
   });
@@ -965,5 +977,143 @@ describe('CapturePage — saving against a point marked on the map', () => {
     fireEvent.click(await screen.findByRole('button', { name: /use this point/i }));
 
     expect(screen.getByLabelText(/note/i)).toHaveValue('far gate');
+  });
+});
+
+describe('CapturePage - trace modes', () => {
+  // ~22 m and ~44 m north of POSITION - far enough apart that the recorder
+  // accepts each as a vertex at +/-8.2 m accuracy.
+  const FIX_2 = { ...POSITION, lat: 51.5002, fixAt: 'x2', fixAtMs: 2 };
+  const FIX_3 = { ...POSITION, lat: 51.5004, fixAt: 'x3', fixAtMs: 3 };
+
+  async function startPathTrace({ service, sensors, pushPosition }) {
+    render(html`<${CapturePage} service=${service} sensors=${sensors} downscale=${vi.fn()} />`);
+    await screen.findByText('Ashton Keynes');
+    pushPosition(POSITION);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Trace' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Trace a path' }));
+    await screen.findByText(/Tracing path/);
+  }
+
+  test('the Trace button opens a chooser and starting a path begins recording', async () => {
+    const service = createFakeService({ openSession: OPEN_SESSION });
+    const fakes = createFakeSensors();
+    await startPathTrace({ service, ...fakes });
+
+    expect(service.startTraceDraft).toHaveBeenCalledWith({ mode: 'path' });
+    // The first fix was already accepted as vertex zero.
+    await waitFor(() => expect(service.appendTraceVertex).toHaveBeenCalled());
+  });
+
+  test('walking appends vertices to the draft as they are accepted', async () => {
+    const service = createFakeService({ openSession: OPEN_SESSION });
+    const fakes = createFakeSensors();
+    await startPathTrace({ service, ...fakes });
+
+    fakes.pushPosition(FIX_2);
+    fakes.pushPosition(FIX_3);
+
+    await waitFor(() => expect(service.appendTraceVertex).toHaveBeenCalledTimes(3));
+    expect(screen.getByText(/3 points/)).toBeInTheDocument();
+  });
+
+  test('Finish arms the save, and Save hands the trace to the service', async () => {
+    const service = createFakeService({ openSession: OPEN_SESSION });
+    const fakes = createFakeSensors();
+    await startPathTrace({ service, ...fakes });
+    fakes.pushPosition(FIX_2);
+    await waitFor(() => expect(service.appendTraceVertex).toHaveBeenCalledTimes(2));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Finish' }));
+    await screen.findByText(/save to keep it/i);
+
+    fireEvent.click(screen.getByRole('button', { name: /save observation/i }));
+    await waitFor(() => expect(service.saveObservation).toHaveBeenCalled());
+    const args = service.saveObservation.mock.calls[0][0];
+    expect(args.trace.draftId).toBe('draft-1');
+    expect(args.trace.geometry.type).toBe('LineString');
+    expect(args.trace.geometry.coordinates).toHaveLength(2);
+
+    // Saved: the strip is gone.
+    await waitFor(() => expect(screen.queryByText(/save to keep it/i)).toBeNull());
+  });
+
+  test('a boundary that cannot close yet errors on the strip and keeps recording', async () => {
+    const service = createFakeService({ openSession: OPEN_SESSION });
+    const fakes = createFakeSensors();
+    render(html`<${CapturePage} service=${service} sensors=${fakes.sensors} downscale=${vi.fn()} />`);
+    await screen.findByText('Ashton Keynes');
+    fakes.pushPosition(POSITION);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Trace' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Trace a boundary' }));
+    await screen.findByText(/Tracing boundary/);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Finish' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/keep walking/i);
+    expect(screen.getByText(/Tracing boundary/)).toBeInTheDocument();
+    expect(service.saveObservation).not.toHaveBeenCalled();
+  });
+
+  test('Discard clears the trace and deletes the draft', async () => {
+    const service = createFakeService({ openSession: OPEN_SESSION });
+    const fakes = createFakeSensors();
+    await startPathTrace({ service, ...fakes });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Discard' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Discard trace' }));
+
+    await waitFor(() => expect(service.discardTraceDraft).toHaveBeenCalledWith('draft-1'));
+    expect(screen.queryByText(/Tracing path/)).toBeNull();
+  });
+
+  test('an ordinary point observation still saves mid-trace, without the trace', async () => {
+    const service = createFakeService({ openSession: OPEN_SESSION });
+    const fakes = createFakeSensors();
+    await startPathTrace({ service, ...fakes });
+
+    fireEvent.click(screen.getByRole('button', { name: /save observation/i }));
+
+    await waitFor(() => expect(service.saveObservation).toHaveBeenCalled());
+    expect(service.saveObservation.mock.calls[0][0].trace ?? null).toBeNull();
+    // The walk carries on.
+    expect(screen.getByText(/Tracing path/)).toBeInTheDocument();
+  });
+
+  test('ending the session is refused while a trace is running', async () => {
+    const service = createFakeService({ openSession: OPEN_SESSION });
+    const fakes = createFakeSensors();
+    await startPathTrace({ service, ...fakes });
+
+    fireEvent.click(screen.getByRole('button', { name: 'End session' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm end session' }));
+
+    await screen.findByText(/finish or discard the trace first/i);
+    expect(service.endSession).not.toHaveBeenCalled();
+  });
+
+  test('an unfinished draft found on mount is offered for recovery, resuming paused', async () => {
+    const service = createFakeService({
+      openSession: OPEN_SESSION,
+      traceDraft: {
+        draft: { id: 'draft-9', sessionId: 'sess-1', mode: 'path', startedAt: '2026-08-12T08:00:00.000Z' },
+        vertices: [
+          { draftId: 'draft-9', seq: 0, lat: 51.5, lon: -0.14, accuracyM: 5, fixAt: 't0' },
+          { draftId: 'draft-9', seq: 1, lat: 51.5002, lon: -0.14, accuracyM: 6, fixAt: 't1' },
+        ],
+      },
+    });
+    const fakes = createFakeSensors();
+    render(html`<${CapturePage} service=${service} sensors=${fakes.sensors} downscale=${vi.fn()} />`);
+
+    await screen.findByText(/unfinished trace/i);
+    fireEvent.click(screen.getByRole('button', { name: 'Resume' }));
+
+    // Paused, never silently recording - a relaunch hours later must not
+    // stitch the drive home onto the hedgerow.
+    await screen.findByText(/Paused path/);
+    expect(screen.getByText(/2 points/)).toBeInTheDocument();
   });
 });

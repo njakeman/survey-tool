@@ -1031,6 +1031,63 @@ button {
   overflow-wrap: anywhere;
 }
 
+/* The trace strip: the walk's persistent readout under the map — recording,
+   paused, recovered or pending-save. Same accent-edged surface language as
+   the linked-feature strip, because both are provisional state the next
+   Save will consume. */
+.trace-strip {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-left: 3px solid var(--accent);
+  background: var(--surface);
+  font-size: var(--type-small);
+}
+
+.trace-strip-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.trace-strip-dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: voice-note-pulse 1.2s ease-in-out infinite;
+}
+
+/* Paused holds still — the pulse is what says "recording". */
+.trace-strip-dot[data-paused='true'] {
+  animation: none;
+  opacity: 0.4;
+}
+
+.trace-strip-hint,
+.trace-strip-warning {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.trace-strip-error {
+  margin: 0;
+}
+
+.trace-strip-actions,
+.trace-discard-confirm,
+.trace-chooser {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
 /* Session history: a read-only list of past sessions, each opening its own
    observations. Same shell as the capture page so views don't jump width. */
 .session-history {

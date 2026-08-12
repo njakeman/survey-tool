@@ -14,6 +14,7 @@ function fakeAdapter() {
     setFeatureLayers: vi.fn(),
     setPickedPoint: vi.fn(),
     setHighlight: vi.fn(),
+    setActiveTrace: vi.fn(),
     centreOn: vi.fn(),
     resize: vi.fn(),
     destroy: vi.fn(),
@@ -449,5 +450,32 @@ describe('CaptureMap — marking a point you cannot walk to', () => {
 
     rerender({ pickedPoint: null });
     await waitFor(() => expect(adapter.setPickedPoint).toHaveBeenLastCalledWith(null));
+  });
+});
+
+describe('CaptureMap - active trace', () => {
+  test('pushes the walked line to the adapter, and clears it when the trace ends', async () => {
+    const adapter = fakeAdapter();
+    const coords = [
+      [-0.14, 51.5],
+      [-0.14, 51.5002],
+    ];
+    const { rerender } = renderMap({
+      createMap: vi.fn().mockResolvedValue(adapter),
+      activeTrace: coords,
+    });
+
+    await waitFor(() => expect(adapter.setActiveTrace).toHaveBeenCalledWith(coords));
+
+    rerender({ activeTrace: null });
+    await waitFor(() => expect(adapter.setActiveTrace).toHaveBeenCalledWith(null));
+  });
+
+  test('withholds Mark a distant point while a trace is pending', async () => {
+    const adapter = fakeAdapter();
+    renderMap({ createMap: vi.fn().mockResolvedValue(adapter), canPick: false });
+
+    await waitFor(() => expect(adapter.setActiveTrace).toHaveBeenCalled());
+    expect(screen.queryByRole('button', { name: /mark a distant point/i })).toBeNull();
   });
 });

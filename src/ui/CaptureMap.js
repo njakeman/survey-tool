@@ -45,6 +45,8 @@ export function CaptureMap({
   selectedFeature,
   pickedPoint,
   onPickPoint,
+  activeTrace,
+  canPick = true,
   gridRef,
   visible,
 }) {
@@ -173,6 +175,12 @@ export function CaptureMap({
   useEffect(() => {
     guarded(() => adapterRef.current?.setPickedPoint(pickedPoint ?? null));
   }, [pickedPoint, adapterReady]);
+
+  useEffect(() => {
+    // Keyed on the coordinates array reference: CapturePage replaces it per
+    // accepted vertex — every few seconds at walking pace — not per GPS tick.
+    guarded(() => adapterRef.current?.setActiveTrace(activeTrace ?? null));
+  }, [activeTrace, adapterReady]);
 
   useEffect(() => {
     // The tapped (or linked) feature, echoed on the map so "this one" is
@@ -329,9 +337,16 @@ export function CaptureMap({
               <button type="button" class="button-surface" onClick=${onOpenPicker}>
                 Change map
               </button>
-              <button type="button" class="button-surface" onClick=${startPicking}>
-                Mark a distant point
-              </button>
+              ${
+                // Withheld while a trace is pending: marking a point and the
+                // pending trace would arm the same Save with two different
+                // provisional positions.
+                canPick
+                  ? html`<button type="button" class="button-surface" onClick=${startPicking}>
+                      Mark a distant point
+                    </button>`
+                  : null
+              }
               ${
                 showsRecentre(follow)
                   ? html`<button type="button" class="button-surface" onClick=${handleRecentre}>
