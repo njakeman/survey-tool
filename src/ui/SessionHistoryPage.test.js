@@ -281,6 +281,156 @@ describe('SessionHistoryPage — load session', () => {
   });
 });
 
+describe('SessionHistoryPage — delete session', () => {
+  const EXPORTED_A = {
+    ...CLOSED_A,
+    lastExportedAt: '2026-08-05T12:00:00.000Z',
+    lastExportCount: 1,
+  };
+
+  async function openDetail(service) {
+    render(
+      html`<${SessionHistoryPage} service=${service} exportSession=${vi.fn()} onBack=${vi.fn()} />`,
+    );
+    await screen.findByText('Site A');
+    fireEvent.click(screen.getByRole('button', { name: /Site A/ }));
+    await screen.findByRole('button', { name: /delete session/i });
+  }
+
+  test('the delete is two-step: the confirm replaces the trigger, and Keep session escapes', async () => {
+    const service = createFakeService({
+      sessions: [CLOSED_A],
+      observationsBySession: { 'sess-a': [OBS] },
+    });
+    service.deleteSession = vi.fn();
+    await openDetail(service);
+
+    fireEvent.click(screen.getByRole('button', { name: /delete session/i }));
+
+    expect(screen.getByRole('button', { name: /delete permanently/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^delete session$/i })).toBeNull();
+    expect(service.deleteSession).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: /keep session/i }));
+
+    expect(screen.queryByRole('button', { name: /delete permanently/i })).toBeNull();
+    expect(screen.getByRole('button', { name: /delete session/i })).toBeInTheDocument();
+  });
+
+  test('warns how many observations have never been exported before the commit', async () => {
+    const service = createFakeService({
+      sessions: [CLOSED_A], // never exported — both observations unexported
+      observationsBySession: { 'sess-a': [OBS, OBS] },
+    });
+    service.deleteSession = vi.fn();
+    await openDetail(service);
+
+    fireEvent.click(screen.getByRole('button', { name: /delete session/i }));
+
+    expect(screen.getByText(/2 observations have never been exported/i)).toBeInTheDocument();
+  });
+
+  test('no unexported warning when everything has left the device', async () => {
+    const service = createFakeService({
+      sessions: [EXPORTED_A],
+      observationsBySession: { 'sess-a': [OBS] },
+    });
+    service.deleteSession = vi.fn();
+    await openDetail(service);
+
+    fireEvent.click(screen.getByRole('button', { name: /delete session/i }));
+
+    expect(screen.queryByText(/never been exported/i)).toBeNull();
+  });
+
+  test('committing deletes through the service and returns to a refreshed list', async () => {
+    const service = createFakeService({
+      sessions: [CLOSED_A],
+      observationsBySession: { 'sess-a': [OBS] },
+    });
+    service.deleteSession = vi.fn().mockResolvedValue(undefined);
+    await openDetail(service);
+
+    fireEvent.click(screen.getByRole('button', { name: /delete session/i }));
+    fireEvent.click(screen.getByRole('button', { name: /delete permanently/i }));
+
+    await waitFor(() => expect(service.deleteSession).toHaveBeenCalledWith('sess-a'));
+    // Back on the list, with the snapshot re-read.
+    await screen.findByText('Past sessions');
+    await waitFor(() => expect(service.listSessions.mock.calls.length).toBeGreaterThan(1));
+  });
+
+  test('a failed delete shows the error inline and keeps the session on screen', async () => {
+    const service = createFakeService({
+      sessions: [CLOSED_A],
+      observationsBySession: { 'sess-a': [OBS] },
+    });
+    service.deleteSession = vi.fn().mockRejectedValue(new Error('delete failed'));
+    await openDetail(service);
+
+    fireEvent.click(screen.getByRole('button', { name: /delete session/i }));
+    fireEvent.click(screen.getByRole('button', { name: /delete permanently/i }));
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/delete failed/));
+    expect(screen.getByText('Site A')).toBeInTheDocument();
+  });
+});
+
+describe('SessionHistoryPage — purge exported sessions', () => {
+  const EXPORTED_A = {
+    ...CLOSED_A,
+    lastExportedAt: '2026-08-05T12:00:00.000Z',
+    lastExportCount: 1,
+  };
+
+  test('offers the purge only when at least one listed session is fully exported', async () => {
+    const service = createFakeService({
+      sessions: [EXPORTED_A, CLOSED_B],
+      observationsBySession: { 'sess-a': [OBS] },
+    });
+    render(
+      html`<${SessionHistoryPage} service=${service} exportSession=${vi.fn()} onBack=${vi.fn()} />`,
+    );
+    await screen.findByText('Site A');
+
+    expect(screen.getByRole('button', { name: /delete exported sessions/i })).toBeInTheDocument();
+  });
+
+  test('hides the purge when nothing has been fully exported', async () => {
+    const service = createFakeService({
+      sessions: [CLOSED_A, CLOSED_B],
+      observationsBySession: { 'sess-a': [OBS] },
+    });
+    render(
+      html`<${SessionHistoryPage} service=${service} exportSession=${vi.fn()} onBack=${vi.fn()} />`,
+    );
+    await screen.findByText('Site A');
+
+    expect(screen.queryByRole('button', { name: /delete exported sessions/i })).toBeNull();
+  });
+
+  test('purges two-step, reports the count and refreshes the list', async () => {
+    const service = createFakeService({
+      sessions: [EXPORTED_A],
+      observationsBySession: { 'sess-a': [OBS] },
+    });
+    service.deleteExportedSessions = vi.fn().mockResolvedValue({ deletedCount: 1 });
+    render(
+      html`<${SessionHistoryPage} service=${service} exportSession=${vi.fn()} onBack=${vi.fn()} />`,
+    );
+    await screen.findByText('Site A');
+
+    fireEvent.click(screen.getByRole('button', { name: /delete exported sessions/i }));
+    expect(service.deleteExportedSessions).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: /confirm delete 1 exported session/i }));
+
+    await waitFor(() => expect(service.deleteExportedSessions).toHaveBeenCalledTimes(1));
+    await screen.findByText(/deleted 1 session/i);
+    await waitFor(() => expect(service.listSessions.mock.calls.length).toBeGreaterThan(1));
+  });
+});
+
 describe('SessionHistoryPage — import', () => {
   function renderWithImport({ importSession, service = createFakeService() } = {}) {
     render(

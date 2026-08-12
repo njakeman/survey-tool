@@ -1324,8 +1324,11 @@ button {
   margin-left: auto;
 }
 
-/* The only red control in the app. */
-.trace-discard-commit {
+/* The red treatment has exactly two instances — Discard trace and Delete
+   permanently — both the commit step of a two-step destruction, never a
+   first tap. */
+.trace-discard-commit,
+.session-history-delete-commit {
   background: transparent;
   color: var(--danger-strong);
   border: 1px solid var(--danger-rule);
@@ -1579,6 +1582,45 @@ button {
   text-align: center;
 }
 
+/* Deleting a session: the destructive act sits last in the detail stack as
+   a quiet link; its confirm replaces the trigger (the TraceStrip rule —
+   nothing reflows mid-interaction) with the red commit left and the escape
+   pushed right, under the finger that just tapped. */
+.session-history-delete {
+  display: block;
+  margin: var(--space-4) auto 0;
+  font-size: var(--type-small);
+}
+
+.session-history-delete-confirm {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  width: 100%;
+  margin-top: var(--space-4);
+}
+
+.session-history-delete-confirm .link {
+  margin-left: auto;
+}
+
+.session-history-delete-warning {
+  margin: var(--space-4) 0 0;
+  font-size: var(--type-small);
+}
+
+.session-history-purge {
+  width: 100%;
+  min-height: 3.25rem;
+  margin-top: var(--space-3);
+}
+
+.session-history-delete-message,
+.session-history-purge-message {
+  margin-top: var(--space-2);
+}
+
 /* Recording a voice note: the field sits under the photo/export row. The
    pulsing dot is the only animation in the app; it means a live microphone,
    which is worth movement. */
@@ -1645,6 +1687,7 @@ button {
 
 .session-history-import-message,
 .session-history-export-message,
+.session-history-purge-message,
 .capture-page-export-message {
   display: flex;
   align-items: center;

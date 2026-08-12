@@ -3,6 +3,7 @@ import {
   closeSession,
   reopenSession as reopenSessionRecord,
   findOpenSession,
+  countUnexported,
 } from '../domain/session.js';
 import { createObservation } from '../domain/observation.js';
 import {
@@ -18,6 +19,7 @@ import {
 import { saveObservationWithPhoto } from '../storage/captureWrite.js';
 import { getAudio as getAudioFromStore } from '../storage/audioStore.js';
 import { deleteObservationWithPhoto } from '../storage/captureDelete.js';
+import { deleteSessionWithData } from '../storage/sessionDelete.js';
 import {
   appendTraceVertex as appendVertexToStore,
   deleteTraceDraft,
@@ -184,6 +186,37 @@ export function createCaptureService({ db, newId, nowIso }) {
     return listObservationsForSession(db, sessionId);
   }
 
+  // Delete a past session and everything it holds — one transaction
+  // (sessionDelete.js). Refuses the currently open session: history never
+  // lists it, but the service must not trust the UI, and deleting live
+  // capture out from under the mounted CapturePage is the one unrecoverable
+  // case. Deleting a past session while a different one is open is fine.
+  async function deleteSession(sessionId) {
+    const open = await getOpenSession();
+    if (open && open.id === sessionId) {
+      throw new Error('deleteSession: the session is open — end it first');
+    }
+    await deleteSessionWithData(db, sessionId);
+  }
+
+  // The bulk clean-up: delete every closed session whose every observation
+  // has been exported — the exact fully-exported predicate the badge uses,
+  // so nothing the surveyor sees as "not yet exported" can ever be purged.
+  // One transaction per session rather than one over the batch: each delete
+  // stays atomic without holding a write lock across the lot.
+  async function deleteExportedSessions() {
+    const sessions = await listSessionsFromStore(db);
+    let deletedCount = 0;
+    for (const session of sessions) {
+      if (session.status !== 'closed' || !session.lastExportedAt) continue;
+      const count = await countObservationsForSession(db, session.id);
+      if (countUnexported(session, count) !== 0) continue;
+      await deleteSessionWithData(db, session.id);
+      deletedCount += 1;
+    }
+    return { deletedCount };
+  }
+
   // Amend a saved observation's note — the one post-save edit that exists.
   // Trimmed here so an edit and a save can never disagree about whitespace.
   function updateNote(id, note) {
@@ -220,6 +253,8 @@ export function createCaptureService({ db, newId, nowIso }) {
     listObservations,
     updateNote,
     deleteObservation,
+    deleteSession,
+    deleteExportedSessions,
     getAudio,
   };
 }

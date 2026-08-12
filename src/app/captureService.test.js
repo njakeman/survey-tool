@@ -178,6 +178,107 @@ describe('reopenSession', () => {
   });
 });
 
+describe('deleteSession', () => {
+  test('deletes a past session with everything it holds', async () => {
+    const db = await openDatabase('capture-service-delete-session');
+    const service = createCaptureService({ db, newId: fakeIdGenerator(), nowIso: () => FIXED_NOW });
+    const session = await service.startSession('Ashton Keynes');
+    await service.saveObservation({ reading: READING, heading: null, note: 'gate', photo: null });
+    await service.endSession();
+
+    await service.deleteSession(session.id);
+
+    expect(await service.listSessions()).toEqual([]);
+    expect(await listObservationsForSession(db, session.id)).toEqual([]);
+  });
+
+  test('refuses to delete the currently open session', async () => {
+    // History never lists the open session, but the service must not trust
+    // the UI: deleting live capture out from under the mounted CapturePage
+    // is the one unrecoverable case.
+    const service = await makeService('capture-service-delete-open');
+    const session = await service.startSession('Ashton Keynes');
+
+    await expect(service.deleteSession(session.id)).rejects.toThrow(/open/i);
+    expect(await service.getOpenSession()).toBeTruthy();
+  });
+
+  test('deleting a past session while a different one is open is fine', async () => {
+    const service = await makeService('capture-service-delete-other-open');
+    const past = await service.startSession('Site A');
+    await service.endSession();
+    await service.startSession('Site B');
+
+    await service.deleteSession(past.id);
+
+    expect((await service.listSessions()).map((s) => s.name)).toEqual(['Site B']);
+  });
+});
+
+describe('deleteExportedSessions', () => {
+  async function makeDbService(dbName) {
+    const db = await openDatabase(dbName);
+    return {
+      db,
+      service: createCaptureService({ db, newId: fakeIdGenerator(), nowIso: () => FIXED_NOW }),
+    };
+  }
+
+  async function stampExported(db, sessionId, count) {
+    const stored = await db.get('sessions', sessionId);
+    await db.put('sessions', {
+      ...stored,
+      lastExportedAt: '2026-08-06T12:00:00.000Z',
+      lastExportCount: count,
+    });
+  }
+
+  test('deletes only closed sessions whose every observation has been exported', async () => {
+    const { db, service } = await makeDbService('capture-service-purge');
+    const exported = await service.startSession('Fully exported');
+    await service.saveObservation({ reading: READING, heading: null, note: '', photo: null });
+    await service.endSession();
+    await stampExported(db, exported.id, 1);
+
+    const partial = await service.startSession('Partly exported');
+    await service.saveObservation({ reading: READING, heading: null, note: '', photo: null });
+    await service.saveObservation({ reading: READING, heading: null, note: '', photo: null });
+    await service.endSession();
+    await stampExported(db, partial.id, 1); // one of two exported
+
+    const never = await service.startSession('Never exported');
+    await service.saveObservation({ reading: READING, heading: null, note: '', photo: null });
+    await service.endSession();
+
+    const result = await service.deleteExportedSessions();
+
+    expect(result).toEqual({ deletedCount: 1 });
+    const remaining = (await service.listSessions()).map((s) => s.id);
+    expect(remaining.sort()).toEqual([never.id, partial.id].sort());
+  });
+
+  test('never touches the open session, even a fully exported one', async () => {
+    const { db, service } = await makeDbService('capture-service-purge-open');
+    const open = await service.startSession('Live');
+    await service.saveObservation({ reading: READING, heading: null, note: '', photo: null });
+    await stampExported(db, open.id, 1);
+
+    const result = await service.deleteExportedSessions();
+
+    expect(result).toEqual({ deletedCount: 0 });
+    expect(await service.getOpenSession()).toBeTruthy();
+  });
+
+  test('with nothing eligible, deletes nothing and reports zero', async () => {
+    const service = await makeService('capture-service-purge-empty');
+    await service.startSession('Only session');
+    await service.endSession();
+
+    expect(await service.deleteExportedSessions()).toEqual({ deletedCount: 0 });
+    expect(await service.listSessions()).toHaveLength(1);
+  });
+});
+
 describe('updateNote', () => {
   test('replaces a saved observation note, trimmed the same way a save trims it', async () => {
     const service = await makeService('capture-service-update-note');

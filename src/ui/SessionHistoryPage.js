@@ -38,6 +38,18 @@ export function SessionHistoryPage({
   const [loadState, setLoadState] = useState('idle'); // idle | loading | error
   const [loadMessage, setLoadMessage] = useState('');
 
+  // Deleting is two-step (the TraceStrip pattern: the confirm replaces the
+  // trigger, nothing reflows) and permanent — there is no undo for a whole
+  // session.
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+
+  const [confirmingPurge, setConfirmingPurge] = useState(false);
+  const [purgeBusy, setPurgeBusy] = useState(false);
+  const [purgeMessage, setPurgeMessage] = useState('');
+  const [purgeError, setPurgeError] = useState('');
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -95,6 +107,46 @@ export function SessionHistoryPage({
     setExportMessage('');
     setLoadState('idle');
     setLoadMessage('');
+    setConfirmingDelete(false);
+    setDeleteBusy(false);
+    setDeleteError('');
+  }
+
+  async function handleDelete() {
+    setDeleteBusy(true);
+    setDeleteError('');
+    try {
+      await service.deleteSession(selected.session.id);
+      // The session is gone; back to the list, snapshot re-read.
+      setSelected(null);
+      setConfirmingDelete(false);
+      setReloadKey((key) => key + 1);
+    } catch (error) {
+      setDeleteError(error.message || 'Could not delete that session');
+    } finally {
+      setDeleteBusy(false);
+    }
+  }
+
+  async function handlePurge() {
+    if (!confirmingPurge) {
+      setConfirmingPurge(true);
+      return;
+    }
+    setPurgeBusy(true);
+    setPurgeMessage('');
+    setPurgeError('');
+    try {
+      const { deletedCount } = await service.deleteExportedSessions();
+      setPurgeMessage(`Deleted ${deletedCount} session${deletedCount === 1 ? '' : 's'}`);
+      setConfirmingPurge(false);
+      setReloadKey((key) => key + 1);
+    } catch (error) {
+      setPurgeError(error.message || 'Could not delete the exported sessions');
+      setConfirmingPurge(false);
+    } finally {
+      setPurgeBusy(false);
+    }
   }
 
   async function handleLoad() {
@@ -210,6 +262,58 @@ export function SessionHistoryPage({
               </p>`
             : null
         }
+        ${
+          // The destructive act comes last in the stack, behind a two-step
+          // confirm that REPLACES its trigger (the TraceStrip pattern). The
+          // unexported count is stated before the commit — warn, never
+          // block: the surveyor stays in charge of their own data.
+          confirmingDelete
+            ? html`
+                ${
+                  countUnexported(selected.session, selected.observations.length) > 0
+                    ? html`<p class="session-history-delete-warning warns">
+                        ${`${countUnexported(selected.session, selected.observations.length)} observation${
+                          countUnexported(selected.session, selected.observations.length) === 1
+                            ? ' has'
+                            : 's have'
+                        } never been exported`}
+                      </p>`
+                    : null
+                }
+                <span class="session-history-delete-confirm">
+                  <button
+                    type="button"
+                    class="session-history-delete-commit"
+                    disabled=${deleteBusy}
+                    onClick=${handleDelete}
+                  >
+                    ${deleteBusy ? 'Deleting…' : 'Delete permanently'}
+                  </button>
+                  <button type="button" class="link" onClick=${() => setConfirmingDelete(false)}>
+                    Keep session
+                  </button>
+                </span>
+              `
+            : html`
+                <button
+                  type="button"
+                  class="link session-history-delete"
+                  onClick=${() => {
+                    setDeleteError('');
+                    setConfirmingDelete(true);
+                  }}
+                >
+                  Delete session
+                </button>
+              `
+        }
+        ${
+          deleteError
+            ? html`<p class="session-history-delete-message panel-danger" role="alert">
+                ${deleteError}
+              </p>`
+            : null
+        }
       </main>
     `;
   }
@@ -218,6 +322,11 @@ export function SessionHistoryPage({
   // What has never left the device, totalled — the number a surveyor wants
   // before putting the phone away, not a per-session hunt.
   const unexported = visible.reduce((total, s) => total + countUnexported(s, counts[s.id] ?? 0), 0);
+  // How many listed sessions are fully exported — the badge predicate, so
+  // the purge can only ever remove what already reads Exported on screen.
+  const fullyExported = visible.filter(
+    (s) => countUnexported(s, counts[s.id] ?? 0) === 0 && Boolean(s.lastExportedAt),
+  ).length;
 
   return html`
     <main class="session-history">
@@ -295,6 +404,42 @@ export function SessionHistoryPage({
           : importMessage
             ? html`<p class="session-history-import-message" role="status">
                 <span class="save-confirmation-tick" aria-hidden="true">✓</span> ${importMessage}
+              </p>`
+            : null
+      }
+      ${
+        // The bulk clean-up, offered only when it can do something. Its
+        // eligibility is the badge predicate, so nothing still reading "not
+        // exported" on screen can be swept up; two-step via a label swap
+        // (the SessionBar pattern), with the count in the confirm label so
+        // the second tap says exactly what it will do.
+        fullyExported > 0
+          ? html`
+              <button
+                type="button"
+                class="button-outline session-history-purge"
+                disabled=${purgeBusy}
+                onClick=${handlePurge}
+              >
+                ${
+                  purgeBusy
+                    ? 'Deleting…'
+                    : confirmingPurge
+                      ? `Confirm delete ${fullyExported} exported session${fullyExported === 1 ? '' : 's'}`
+                      : 'Delete exported sessions'
+                }
+              </button>
+            `
+          : null
+      }
+      ${
+        purgeError
+          ? html`<p class="session-history-purge-message panel-danger" role="alert">
+              ${purgeError}
+            </p>`
+          : purgeMessage
+            ? html`<p class="session-history-purge-message" role="status">
+                <span class="save-confirmation-tick" aria-hidden="true">✓</span> ${purgeMessage}
               </p>`
             : null
       }
