@@ -65,9 +65,16 @@ including a perfectly good production build, while the SW is still precaching �
 flash on first launch and disappear on refresh purely because of that timing, independent of the
 "dev vs prod" question.
 
-GitHub Pages deploys are working again as of 2026-08-10 (deployment for `0c8a0ec` reports
-`state: success`, live `sw.js` carries a real precache) — `https://njakeman.github.io/survey-tool/`
-is now the primary target for on-device testing; `preview:mobile` remains for pre-deploy iteration.
+The app lives at **`https://survey.field.works/`** (as of 2026-08-12) — a custom domain on the
+GitHub Pages deploy, CNAME'd via Cloudflare, configured in the repo's Pages **settings** (an
+Actions-based deploy ignores any CNAME file; do not add one). That domain serves the project site
+from the **root**, and `njakeman.github.io/survey-tool` now redirects there — which is why
+`vite.config.js`'s `base` is `'/'`; a `'/survey-tool/'` build under the custom domain 404s its own
+manifest and hashed assets, and the redirected module scripts surface on the phone as the fatal
+"Script error. (:0:0)". The old `njakeman.github.io` origin keeps its own IndexedDB — sessions
+saved there must be exported from the old home-screen icon (it may still open in airplane mode)
+before that icon is removed. `https://survey.field.works/` is the primary target for on-device
+testing; `preview:mobile` remains for pre-deploy iteration.
 Every dev-server port is a **separate origin**, each with its own service-worker registration and
 its own IndexedDB — a home-screen icon added from 5173 shares nothing with one added from 5174 or
 4173, including saved observations. `vite.config.js` sets `strictPort: true` on both `server` and

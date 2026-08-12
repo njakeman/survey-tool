@@ -3,8 +3,14 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
-// GitHub Pages project site — served from /survey-tool/, not the domain root.
-const base = '/survey-tool/';
+// Served from the root of the custom domain (https://survey.field.works/),
+// configured in the repo's Pages settings — Actions-based deploys ignore any
+// CNAME file, so there is none. Once the domain is active, GitHub redirects
+// njakeman.github.io/survey-tool there, which is why the base must be '/':
+// a '/survey-tool/' build served at the root 404s its own manifest and
+// assets, and the redirected module scripts surface on iOS as the fatal
+// "Script error. (:0:0)".
+const base = '/';
 
 // Read (not import-assert) package.json's version, so it can be baked into
 // the bundle as __APP_VERSION__ — export filenames/manifests want a real

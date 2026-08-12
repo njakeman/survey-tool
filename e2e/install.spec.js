@@ -23,11 +23,11 @@ test('a fresh load requests no same-origin resource that 404s', async ({ page })
   // mismatch causes: an old page requesting a hashed asset that a newer
   // deploy has already pruned. Listener attached before goto() so it also
   // catches the initial document/module-script requests, not just later
-  // ones. Filtered by pathname (not full origin) so it works before the
-  // page's own origin is known.
+  // ones. Filtered to localhost so a flaky third-party response (the online
+  // imagery tiles) can never fail the install check.
   const notFound = [];
   page.on('response', (response) => {
-    if (new URL(response.url()).pathname.startsWith('/survey-tool/') && response.status() === 404) {
+    if (new URL(response.url()).hostname === 'localhost' && response.status() === 404) {
       notFound.push(response.url());
     }
   });
