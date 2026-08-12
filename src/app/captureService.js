@@ -1,6 +1,15 @@
-import { createSession, closeSession, findOpenSession } from '../domain/session.js';
+import {
+  createSession,
+  closeSession,
+  reopenSession as reopenSessionRecord,
+  findOpenSession,
+} from '../domain/session.js';
 import { createObservation } from '../domain/observation.js';
-import { putSession, listSessions as listSessionsFromStore } from '../storage/sessionStore.js';
+import {
+  getSession,
+  putSession,
+  listSessions as listSessionsFromStore,
+} from '../storage/sessionStore.js';
 import {
   listObservationsForSession,
   countObservationsForSession,
@@ -44,6 +53,21 @@ export function createCaptureService({ db, newId, nowIso }) {
     const closed = closeSession(session, nowIso());
     await putSession(db, closed);
     return closed;
+  }
+
+  // Load a past (or imported) session back into the capture interface so it
+  // can be added to. Refuses while any session is open, and must: saves find
+  // their session via findOpenSession, which silently prefers the newest of
+  // two open sessions — an unguarded reopen would not error, it would just
+  // stop the surveyor's live session receiving observations.
+  async function reopenSession(sessionId) {
+    const existing = await getOpenSession();
+    if (existing) throw new Error('reopenSession: a session is already open');
+    const session = await getSession(db, sessionId);
+    if (!session) throw new Error(`reopenSession: no session with id ${sessionId}`);
+    const reopened = reopenSessionRecord(session);
+    await putSession(db, reopened);
+    return reopened;
   }
 
   // Downscaling does not happen here — the photo arrives already downscaled
@@ -179,6 +203,7 @@ export function createCaptureService({ db, newId, nowIso }) {
     listSessions,
     startSession,
     endSession,
+    reopenSession,
     saveObservation,
     startTraceDraft,
     appendTraceVertex,

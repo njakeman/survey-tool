@@ -214,6 +214,73 @@ describe('SessionHistoryPage — detail', () => {
   });
 });
 
+describe('SessionHistoryPage — load session', () => {
+  function renderDetail({ service, onSessionLoaded = vi.fn() } = {}) {
+    render(
+      html`<${SessionHistoryPage}
+        service=${service}
+        exportSession=${vi.fn()}
+        onBack=${vi.fn()}
+        onSessionLoaded=${onSessionLoaded}
+      />`,
+    );
+    return { onSessionLoaded };
+  }
+
+  test('offers Load session in the detail view, reopening it and handing over to capture', async () => {
+    const service = createFakeService({
+      sessions: [CLOSED_A],
+      observationsBySession: { 'sess-a': [OBS] },
+    });
+    service.reopenSession = vi.fn().mockResolvedValue({ ...CLOSED_A, status: 'open' });
+    const { onSessionLoaded } = renderDetail({ service });
+    await screen.findByText('Site A');
+    fireEvent.click(screen.getByRole('button', { name: /Site A/ }));
+    await screen.findByRole('button', { name: /load session/i });
+
+    fireEvent.click(screen.getByRole('button', { name: /load session/i }));
+
+    await waitFor(() => expect(onSessionLoaded).toHaveBeenCalledTimes(1));
+    expect(service.reopenSession).toHaveBeenCalledWith('sess-a');
+  });
+
+  test('is refused while another session is open, and says why', async () => {
+    // The user decision: no auto-closing. The surveyor ends their current
+    // session deliberately, then loads.
+    const service = createFakeService({
+      openSession: OPEN_SESSION,
+      sessions: [OPEN_SESSION, CLOSED_A],
+      observationsBySession: { 'sess-a': [OBS] },
+    });
+    service.reopenSession = vi.fn();
+    renderDetail({ service });
+    await screen.findByText('Site A');
+    fireEvent.click(screen.getByRole('button', { name: /Site A/ }));
+
+    const load = await screen.findByRole('button', { name: /load session/i });
+    expect(load).toBeDisabled();
+    expect(screen.getByText(/end the current session first/i)).toBeInTheDocument();
+    expect(service.reopenSession).not.toHaveBeenCalled();
+  });
+
+  test('a failed load shows the error inline rather than crashing the page', async () => {
+    const service = createFakeService({
+      sessions: [CLOSED_A],
+      observationsBySession: { 'sess-a': [OBS] },
+    });
+    service.reopenSession = vi.fn().mockRejectedValue(new Error('a session is already open'));
+    const { onSessionLoaded } = renderDetail({ service });
+    await screen.findByText('Site A');
+    fireEvent.click(screen.getByRole('button', { name: /Site A/ }));
+    await screen.findByRole('button', { name: /load session/i });
+
+    fireEvent.click(screen.getByRole('button', { name: /load session/i }));
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/already open/));
+    expect(onSessionLoaded).not.toHaveBeenCalled();
+  });
+});
+
 describe('SessionHistoryPage — import', () => {
   function renderWithImport({ importSession, service = createFakeService() } = {}) {
     render(

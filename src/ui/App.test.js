@@ -191,6 +191,38 @@ describe('App', () => {
     expect(watchPosition).toHaveBeenCalledTimes(1); // no cold re-acquire
   });
 
+  test('loading a past session from history hands it to capture as the live session', async () => {
+    // CapturePage stays mounted while history is open and re-reads nothing
+    // on return — loading a session has to tell it explicitly, or the
+    // reopened session would sit invisible until a relaunch.
+    const past = {
+      id: 'sess-a',
+      name: 'Site A',
+      status: 'closed',
+      startedAt: '2026-08-05T09:00:00.000Z',
+    };
+    const service = createFakeService();
+    let open = null;
+    service.getOpenSession = vi.fn(() => Promise.resolve(open));
+    service.listSessions = vi.fn().mockResolvedValue([past]);
+    service.reopenSession = vi.fn(() => {
+      open = { ...past, status: 'open', endedAt: null };
+      return Promise.resolve(open);
+    });
+    renderApp({ service });
+    await screen.findByRole('button', { name: /save observation/i });
+
+    fireEvent.click(screen.getByRole('button', { name: /session history/i }));
+    await screen.findByText('Site A');
+    fireEvent.click(screen.getByRole('button', { name: /Site A/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /load session/i }));
+
+    // Straight back to capture, with the loaded session live in the bar.
+    await screen.findByRole('button', { name: /save observation/i });
+    expect(await screen.findByText('Site A')).toBeInTheDocument();
+    expect(screen.queryByText('Past sessions')).not.toBeInTheDocument();
+  });
+
   test('never touches window.location.hash — no client-side router', async () => {
     const initialHash = window.location.hash;
     renderApp();

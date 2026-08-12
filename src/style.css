@@ -1563,6 +1563,22 @@ button {
   min-height: 3.25rem;
 }
 
+/* Load session: outline under the Export accent — continuing a past session
+   is the rarer act, and Export keeps the detail view's one accent. The hint
+   explains a disabled button instead of leaving it mute. */
+.session-history-load {
+  width: 100%;
+  min-height: 3.25rem;
+  margin-top: var(--space-3);
+}
+
+.session-history-load-hint {
+  margin: var(--space-2) 0 0;
+  font-size: var(--type-small);
+  color: var(--text-secondary);
+  text-align: center;
+}
+
 /* Recording a voice note: the field sits under the photo/export row. The
    pulsing dot is the only animation in the app; it means a live microphone,
    which is worth movement. */

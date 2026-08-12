@@ -42,6 +42,10 @@ export function App({
   onSetDisplayMode,
 }) {
   const [view, setView] = useState('capture');
+  // Bumped when history loads a past session back into use. CapturePage
+  // stays mounted while history is open and re-reads nothing on return —
+  // this is the explicit signal that the open session changed under it.
+  const [sessionEpoch, setSessionEpoch] = useState(0);
 
   // CapturePage stays mounted whichever view is showing: the in-progress
   // observation (note/photo) lives only in its state until Save and must
@@ -64,6 +68,10 @@ export function App({
         importSession=${importSession}
         gridRef=${gridRef}
         onBack=${() => setView('capture')}
+        onSessionLoaded=${() => {
+          setSessionEpoch((epoch) => epoch + 1);
+          setView('capture');
+        }}
       />
     `;
   } else if (view === 'basemaps') {
@@ -121,6 +129,7 @@ export function App({
           onOpenHistory=${() => setView('history')}
           displayMode=${displayMode}
           onSetDisplayMode=${onSetDisplayMode}
+          sessionEpoch=${sessionEpoch}
         />
       </div>
       ${overlay}

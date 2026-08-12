@@ -9,8 +9,18 @@ import { ExportBadge } from './ExportBadge.js';
 // sessions stay visible and inspectable instead of vanishing once you tap
 // End — per-row edit/delete stays a Phase 6 review-screen concern. This is
 // also where sessions come *in*: Import reads a previously exported zip (or
-// bare session.geojson) back onto the device, as a copy.
-export function SessionHistoryPage({ service, exportSession, importSession, gridRef, onBack }) {
+// bare session.geojson) back onto the device, as a copy — and back *into
+// use*: Load session reopens a past session in the capture interface so it
+// can be added to (refused while another session is open, deliberately —
+// the surveyor ends their live session first, nothing is auto-closed).
+export function SessionHistoryPage({
+  service,
+  exportSession,
+  importSession,
+  gridRef,
+  onBack,
+  onSessionLoaded,
+}) {
   const [sessions, setSessions] = useState(null); // null = still loading
   const [openSessionId, setOpenSessionId] = useState(null);
   const [counts, setCounts] = useState({});
@@ -24,6 +34,9 @@ export function SessionHistoryPage({ service, exportSession, importSession, grid
   const fileInputRef = useRef(null);
   const [importState, setImportState] = useState('idle'); // idle | importing | done | error
   const [importMessage, setImportMessage] = useState('');
+
+  const [loadState, setLoadState] = useState('idle'); // idle | loading | error
+  const [loadMessage, setLoadMessage] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -80,6 +93,22 @@ export function SessionHistoryPage({ service, exportSession, importSession, grid
     });
     setExportState('idle');
     setExportMessage('');
+    setLoadState('idle');
+    setLoadMessage('');
+  }
+
+  async function handleLoad() {
+    setLoadState('loading');
+    setLoadMessage('');
+    try {
+      await service.reopenSession(selected.session.id);
+      // The session on screen just became the live one; hand straight over
+      // to capture rather than showing a list it no longer belongs on.
+      onSessionLoaded?.();
+    } catch (error) {
+      setLoadState('error');
+      setLoadMessage(error.message || 'Could not load that session');
+    }
   }
 
   async function handleExport() {
@@ -156,6 +185,28 @@ export function SessionHistoryPage({ service, exportSession, importSession, grid
           exportMessage
             ? html`<p class="session-history-export-message" role="status">
                 <span class="save-confirmation-tick" aria-hidden="true">✓</span> ${exportMessage}
+              </p>`
+            : null
+        }
+        <button
+          type="button"
+          class="button-outline session-history-load"
+          disabled=${Boolean(openSessionId) || loadState === 'loading'}
+          onClick=${handleLoad}
+        >
+          ${loadState === 'loading' ? 'Loading…' : 'Load session'}
+        </button>
+        ${
+          openSessionId
+            ? html`<p class="session-history-load-hint">
+                End the current session first to load this one
+              </p>`
+            : null
+        }
+        ${
+          loadState === 'error'
+            ? html`<p class="session-history-load-message panel-danger" role="alert">
+                ${loadMessage}
               </p>`
             : null
         }

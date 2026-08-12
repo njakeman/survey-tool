@@ -360,6 +360,44 @@ describe('CapturePage — undo lifecycle', () => {
     // Undo stays available so the surveyor can retry.
     expect(screen.getByRole('button', { name: /undo/i })).toBeInTheDocument();
   });
+
+  test('a bumped sessionEpoch re-reads the session and clears the Undo affordance', async () => {
+    // Load session (history) makes a past session the open one while this
+    // page stays mounted-but-hidden — the epoch bump is its explicit signal
+    // to re-read. Undo is cleared for the same reason start and end clear
+    // it: an Undo must never cross a session boundary, and a reopen is one.
+    const service = createFakeService({ openSession: OPEN_SESSION });
+    const { sensors, pushPosition } = createFakeSensors();
+    const { rerender } = render(
+      html`<${CapturePage}
+        service=${service}
+        sensors=${sensors}
+        downscale=${vi.fn()}
+        sessionEpoch=${0}
+      />`,
+    );
+    await screen.findByText('Ashton Keynes');
+    pushPosition(POSITION);
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /save observation/i })).not.toBeDisabled(),
+    );
+    fireEvent.click(screen.getByRole('button', { name: /save observation/i }));
+    await screen.findByRole('button', { name: /undo/i });
+
+    const loaded = { ...OPEN_SESSION, id: 'sess-2', name: 'Loaded Site' };
+    service.getOpenSession.mockResolvedValue(loaded);
+    rerender(
+      html`<${CapturePage}
+        service=${service}
+        sensors=${sensors}
+        downscale=${vi.fn()}
+        sessionEpoch=${1}
+      />`,
+    );
+
+    await screen.findByText('Loaded Site');
+    expect(screen.queryByRole('button', { name: /undo/i })).not.toBeInTheDocument();
+  });
 });
 
 describe('CapturePage — lifecycle and gesture ordering', () => {

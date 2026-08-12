@@ -106,6 +106,78 @@ describe('endSession', () => {
   });
 });
 
+describe('reopenSession', () => {
+  test('makes a past session the open one again, ready to capture into', async () => {
+    const service = await makeService('capture-service-reopen');
+    const session = await service.startSession('Ashton Keynes');
+    await service.endSession();
+
+    const reopened = await service.reopenSession(session.id);
+
+    expect(reopened.status).toBe('open');
+    expect(reopened.endedAt).toBeNull();
+    expect(await service.getOpenSession()).toEqual(reopened);
+
+    // The whole point: new observations attach to the reopened session.
+    const observation = await service.saveObservation({
+      reading: READING,
+      heading: null,
+      note: 'back again',
+      photo: null,
+    });
+    expect(observation.sessionId).toBe(session.id);
+  });
+
+  test('a reopened session can be ended again with a fresh end time', async () => {
+    let now = FIXED_NOW;
+    const service = await makeService('capture-service-reopen-end', { nowIso: () => now });
+    const session = await service.startSession('Ashton Keynes');
+    await service.endSession();
+
+    await service.reopenSession(session.id);
+    now = '2026-08-06T15:00:00.000Z';
+    const closed = await service.endSession();
+
+    expect(closed.endedAt).toBe('2026-08-06T15:00:00.000Z');
+  });
+
+  test('refuses while another session is open — reopening must never steal capture', async () => {
+    // findOpenSession silently prefers the newest open session, so a reopen
+    // that skipped this check would not error: the surveyor's live session
+    // would just stop receiving observations.
+    const service = await makeService('capture-service-reopen-busy');
+    const past = await service.startSession('Site A');
+    await service.endSession();
+    await service.startSession('Site B');
+
+    await expect(service.reopenSession(past.id)).rejects.toThrow(/already open/i);
+    expect((await service.getOpenSession()).name).toBe('Site B');
+  });
+
+  test('throws on an unknown session id', async () => {
+    const service = await makeService('capture-service-reopen-unknown');
+    await expect(service.reopenSession('no-such-session')).rejects.toThrow(/no session/i);
+  });
+
+  test('keeps the export stamps, so exported observations still read Exported', async () => {
+    const db = await openDatabase('capture-service-reopen-exported');
+    const service = createCaptureService({ db, newId: fakeIdGenerator(), nowIso: () => FIXED_NOW });
+    const session = await service.startSession('Ashton Keynes');
+    await service.endSession();
+    const stored = await db.get('sessions', session.id);
+    await db.put('sessions', {
+      ...stored,
+      lastExportedAt: '2026-08-06T12:00:00.000Z',
+      lastExportCount: 2,
+    });
+
+    const reopened = await service.reopenSession(session.id);
+
+    expect(reopened.lastExportedAt).toBe('2026-08-06T12:00:00.000Z');
+    expect(reopened.lastExportCount).toBe(2);
+  });
+});
+
 describe('saveObservation', () => {
   test('throws when no session is open, and writes nothing', async () => {
     const db = await openDatabase('capture-service-save-no-session');

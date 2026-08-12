@@ -54,6 +54,7 @@ export function CapturePage({
   visible,
   displayMode,
   onSetDisplayMode,
+  sessionEpoch,
 }) {
   const [session, setSession] = useState(null);
   const [observations, setObservations] = useState([]);
@@ -131,6 +132,18 @@ export function CapturePage({
     // session on every GPS tick.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Load session (history) makes a past session the open one while this
+  // page stays mounted-but-hidden — the epoch bump is its explicit signal
+  // to re-read; nothing else here notices a session change it didn't make.
+  // Undo is cleared for the same reason handleStart and handleEnd clear it:
+  // an Undo must never cross a session boundary, and a reopen is one.
+  useEffect(() => {
+    if (!sessionEpoch) return;
+    setLastSaved(null);
+    refreshSession();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionEpoch]);
 
   // The appender: every fix from the shared watch goes through the pure
   // recorder; only an accepted vertex is persisted — which is what keeps the

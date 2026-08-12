@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import {
   createSession,
   closeSession,
+  reopenSession,
   findOpenSession,
   isExported,
   countUnexported,
@@ -75,6 +76,64 @@ describe('closeSession', () => {
     });
     closeSession(open, '2026-08-06T12:00:00.000Z');
     expect(open.status).toBe('open');
+  });
+});
+
+describe('reopenSession', () => {
+  function closedSession() {
+    return closeSession(
+      createSession({ id: 'sess-1', name: 'Ashton Keynes', startedAt: '2026-08-06T10:00:00.000Z' }),
+      '2026-08-06T12:00:00.000Z',
+    );
+  }
+
+  test('makes a closed session open again, clearing its end time', () => {
+    const reopened = reopenSession(closedSession());
+
+    expect(reopened).toEqual({
+      id: 'sess-1',
+      name: 'Ashton Keynes',
+      startedAt: '2026-08-06T10:00:00.000Z',
+      endedAt: null,
+      status: 'open',
+    });
+  });
+
+  test('keeps the export stamps intact, so old observations still read Exported', () => {
+    // Reopening is a continuation, not a reset: what already left the device
+    // has still left it, and only what is captured afterwards should read
+    // Not exported.
+    const exported = {
+      ...closedSession(),
+      lastExportedAt: '2026-08-06T12:00:00.000Z',
+      lastExportCount: 3,
+    };
+    const reopened = reopenSession(exported);
+
+    expect(reopened.lastExportedAt).toBe('2026-08-06T12:00:00.000Z');
+    expect(reopened.lastExportCount).toBe(3);
+  });
+
+  test('throws when the session is already open, mirroring closeSession', () => {
+    const open = createSession({
+      id: 'sess-1',
+      name: 'Ashton Keynes',
+      startedAt: '2026-08-06T10:00:00.000Z',
+    });
+    expect(() => reopenSession(open)).toThrow(/already open/i);
+  });
+
+  test('does not mutate the session object passed in', () => {
+    const closed = closedSession();
+    reopenSession(closed);
+    expect(closed.status).toBe('closed');
+    expect(closed.endedAt).toBe('2026-08-06T12:00:00.000Z');
+  });
+
+  test('round-trips: a reopened session can be closed again with a fresh end time', () => {
+    const again = closeSession(reopenSession(closedSession()), '2026-08-06T15:00:00.000Z');
+    expect(again.status).toBe('closed');
+    expect(again.endedAt).toBe('2026-08-06T15:00:00.000Z');
   });
 });
 

@@ -24,6 +24,18 @@ export function closeSession(session, endedAt) {
   return { ...session, endedAt, status: 'closed' };
 }
 
+// The inverse, for loading a past session back into the capture interface.
+// A continuation, not a reset: everything else on the record — the export
+// stamps included — stays exactly as it was, so what already left the device
+// still reads Exported and only observations captured after the reopen read
+// Not exported. Ending again later just stamps a fresh endedAt.
+export function reopenSession(session) {
+  if (session.status === 'open') {
+    throw new Error(`reopenSession: session ${session.id} is already open`);
+  }
+  return { ...session, endedAt: null, status: 'open' };
+}
+
 // Whether one observation has left the device in some export. Sessions
 // record when they were last exported and how many observations that export
 // carried (sessionStore.markSessionExported); an observation was in it iff
