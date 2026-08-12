@@ -33,6 +33,7 @@ describe('createObservation', () => {
       featureId: null,
       featureLabel: null,
       positionSource: 'gps',
+      geometry: null,
       synced: false,
       syncedAt: null,
     });
@@ -127,6 +128,147 @@ describe('createObservation', () => {
     ['lon undefined', { ...baseFields, lon: undefined }],
   ])('throws for out-of-range or non-finite coordinate: %s', (_label, fields) => {
     expect(() => createObservation(fields)).toThrow(/lat|lon/i);
+  });
+
+  describe('traced geometry', () => {
+    const LINE = {
+      type: 'LineString',
+      coordinates: [
+        [-0.14, 51.5],
+        [-0.141, 51.501],
+      ],
+    };
+    const RING = [
+      [-0.14, 51.5],
+      [-0.141, 51.5],
+      [-0.141, 51.501],
+      [-0.14, 51.5],
+    ];
+
+    test('a traced path carries its LineString', () => {
+      const obs = createObservation({ ...baseFields, positionSource: 'trace', geometry: LINE });
+
+      expect(obs.positionSource).toBe('trace');
+      expect(obs.geometry).toEqual(LINE);
+    });
+
+    test('a traced boundary carries its Polygon', () => {
+      const obs = createObservation({
+        ...baseFields,
+        positionSource: 'trace',
+        geometry: { type: 'Polygon', coordinates: [RING] },
+      });
+
+      expect(obs.geometry.type).toBe('Polygon');
+    });
+
+    test('rejects half a trace, mirroring the feature-link rule', () => {
+      // A geometry without the 'trace' provenance claims a walked line came
+      // from a single fix; 'trace' without a geometry is a line that isn't
+      // there. Either half alone is worse than neither.
+      expect(() => createObservation({ ...baseFields, positionSource: 'trace' })).toThrow(
+        /geometry/,
+      );
+      expect(() => createObservation({ ...baseFields, geometry: LINE })).toThrow(/positionSource/);
+    });
+
+    test('rejects a LineString with fewer than two positions', () => {
+      expect(() =>
+        createObservation({
+          ...baseFields,
+          positionSource: 'trace',
+          geometry: { type: 'LineString', coordinates: [[-0.14, 51.5]] },
+        }),
+      ).toThrow(/two positions/i);
+    });
+
+    test('rejects an out-of-range position anywhere in the geometry', () => {
+      expect(() =>
+        createObservation({
+          ...baseFields,
+          positionSource: 'trace',
+          geometry: {
+            type: 'LineString',
+            coordinates: [
+              [-0.14, 51.5],
+              [-0.14, 91],
+            ],
+          },
+        }),
+      ).toThrow(/geometry position/i);
+    });
+
+    test('rejects an unclosed polygon ring', () => {
+      const open = [
+        [-0.14, 51.5],
+        [-0.141, 51.5],
+        [-0.141, 51.501],
+        [-0.142, 51.5],
+      ];
+      expect(() =>
+        createObservation({
+          ...baseFields,
+          positionSource: 'trace',
+          geometry: { type: 'Polygon', coordinates: [open] },
+        }),
+      ).toThrow(/ring/i);
+    });
+
+    test('rejects a polygon that is not exactly one ring — traces never have holes', () => {
+      expect(() =>
+        createObservation({
+          ...baseFields,
+          positionSource: 'trace',
+          geometry: { type: 'Polygon', coordinates: [RING, RING] },
+        }),
+      ).toThrow(/one ring/i);
+    });
+
+    test('rejects a ring with fewer than three distinct vertices', () => {
+      const flat = [
+        [-0.14, 51.5],
+        [-0.141, 51.5],
+        [-0.14, 51.5],
+        [-0.141, 51.5],
+        [-0.14, 51.5],
+      ];
+      expect(() =>
+        createObservation({
+          ...baseFields,
+          positionSource: 'trace',
+          geometry: { type: 'Polygon', coordinates: [flat] },
+        }),
+      ).toThrow(/distinct/i);
+    });
+
+    test('rejects a geometry type it does not know', () => {
+      expect(() =>
+        createObservation({
+          ...baseFields,
+          positionSource: 'trace',
+          geometry: { type: 'Point', coordinates: [-0.14, 51.5] },
+        }),
+      ).toThrow(/geometry/i);
+    });
+
+    test('accepts a self-intersecting ring — warn-save-anyway must survive re-import', () => {
+      // The finish step warns about a figure-eight but saves it; validating
+      // it here would make that saved boundary fail its own re-import.
+      const bowTie = [
+        [0, 0],
+        [2, 2],
+        [2, 0],
+        [0, 2],
+        [0, 0],
+      ];
+      const obs = createObservation({
+        ...baseFields,
+        positionSource: 'trace',
+        geometry: { type: 'Polygon', coordinates: [bowTie] },
+      });
+
+      expect(obs.geometry.coordinates[0]).toEqual(bowTie);
+    });
   });
 
   test('throws when gpsAccuracyM is negative, since a negative accuracy is meaningless', () => {
