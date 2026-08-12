@@ -178,6 +178,45 @@ describe('reopenSession', () => {
   });
 });
 
+describe('updateNote', () => {
+  test('replaces a saved observation note, trimmed the same way a save trims it', async () => {
+    const service = await makeService('capture-service-update-note');
+    await service.startSession('Ashton Keynes');
+    const saved = await service.saveObservation({
+      reading: READING,
+      heading: null,
+      note: 'gate post',
+      photo: null,
+    });
+
+    await service.updateNote(saved.id, '  hinge broken  ');
+
+    const [observation] = await service.listObservations(saved.sessionId);
+    expect(observation.note).toBe('hinge broken');
+  });
+
+  test('treats a cleared field as an empty note, like a save would', async () => {
+    const service = await makeService('capture-service-update-note-clear');
+    await service.startSession('Ashton Keynes');
+    const saved = await service.saveObservation({
+      reading: READING,
+      heading: null,
+      note: 'wrong field',
+      photo: null,
+    });
+
+    await service.updateNote(saved.id, null);
+
+    const [observation] = await service.listObservations(saved.sessionId);
+    expect(observation.note).toBe('');
+  });
+
+  test('rejects on an unknown observation id', async () => {
+    const service = await makeService('capture-service-update-note-missing');
+    await expect(service.updateNote('nope', 'anything')).rejects.toThrow(/nope/);
+  });
+});
+
 describe('saveObservation', () => {
   test('throws when no session is open, and writes nothing', async () => {
     const db = await openDatabase('capture-service-save-no-session');

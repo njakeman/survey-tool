@@ -13,6 +13,7 @@ import {
 import {
   listObservationsForSession,
   countObservationsForSession,
+  updateObservationNote,
 } from '../storage/observationStore.js';
 import { saveObservationWithPhoto } from '../storage/captureWrite.js';
 import { getAudio as getAudioFromStore } from '../storage/audioStore.js';
@@ -183,6 +184,12 @@ export function createCaptureService({ db, newId, nowIso }) {
     return listObservationsForSession(db, sessionId);
   }
 
+  // Amend a saved observation's note — the one post-save edit that exists.
+  // Trimmed here so an edit and a save can never disagree about whitespace.
+  function updateNote(id, note) {
+    return updateObservationNote(db, id, (note ?? '').trim());
+  }
+
   // Undo-last-save support. Idempotent: deleting an id that's already gone
   // (or never existed) is a no-op, not an error — the UI doesn't need to
   // track exactly what state it's in before offering Undo. One transaction
@@ -211,6 +218,7 @@ export function createCaptureService({ db, newId, nowIso }) {
     discardTraceDraft,
     countObservations,
     listObservations,
+    updateNote,
     deleteObservation,
     getAudio,
   };

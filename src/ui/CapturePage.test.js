@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/preact';
+import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/preact';
 import { html } from 'htm/preact';
 import { CapturePage } from './CapturePage.js';
 
@@ -359,6 +359,32 @@ describe('CapturePage — undo lifecycle', () => {
     await screen.findByText(/delete failed/);
     // Undo stays available so the surveyor can retry.
     expect(screen.getByRole('button', { name: /undo/i })).toBeInTheDocument();
+  });
+
+  test('editing a saved note goes through the service and refreshes the list', async () => {
+    const observation = {
+      id: 'obs-1',
+      sessionId: 'sess-1',
+      lat: 51.5,
+      lon: -0.14,
+      gpsAccuracyM: 8,
+      note: 'gate post',
+    };
+    const service = createFakeService({ openSession: OPEN_SESSION, observations: [observation] });
+    service.updateNote = vi.fn().mockResolvedValue(undefined);
+    const { sensors } = createFakeSensors();
+    render(html`<${CapturePage} service=${service} sensors=${sensors} downscale=${vi.fn()} />`);
+    await screen.findByText('Ashton Keynes');
+    await screen.findByText('gate post');
+
+    const [row] = screen.getAllByRole('listitem');
+    fireEvent.click(within(row).getByRole('button', { name: /edit note/i }));
+    fireEvent.input(within(row).getByLabelText('Note'), { target: { value: 'hinge broken' } });
+    fireEvent.click(within(row).getByRole('button', { name: /save note/i }));
+
+    await waitFor(() => expect(service.updateNote).toHaveBeenCalledWith('obs-1', 'hinge broken'));
+    // The list re-reads, so the frozen row memo re-renders with the edit.
+    await waitFor(() => expect(service.listObservations.mock.calls.length).toBeGreaterThan(1));
   });
 
   test('a bumped sessionEpoch re-reads the session and clears the Undo affordance', async () => {

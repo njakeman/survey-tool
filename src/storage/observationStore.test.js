@@ -6,6 +6,7 @@ import {
   getObservation,
   listObservationsForSession,
   markObservationSynced,
+  updateObservationNote,
   deleteObservation,
 } from './observationStore.js';
 import { createObservation } from '../domain/observation.js';
@@ -93,6 +94,38 @@ describe('markObservationSynced', () => {
     await expect(markObservationSynced(db, 'nope', '2026-08-06T18:00:00.000Z')).rejects.toThrow(
       /nope/,
     );
+    db.close();
+  });
+});
+
+describe('updateObservationNote', () => {
+  test('replaces the note and leaves every other field untouched', async () => {
+    const db = await openDatabase('obs-store-update-note');
+    const obs = makeObservation({ note: 'gate post' });
+    await putObservation(db, obs);
+
+    await updateObservationNote(db, 'obs-1', 'gate post, hinge broken');
+
+    const updated = await getObservation(db, 'obs-1');
+    expect(updated.note).toBe('gate post, hinge broken');
+    expect(updated.lat).toBe(obs.lat);
+    expect(updated.recordedAt).toBe(obs.recordedAt);
+    db.close();
+  });
+
+  test('can clear a note back to empty', async () => {
+    const db = await openDatabase('obs-store-update-note-clear');
+    await putObservation(db, makeObservation({ note: 'wrong field' }));
+
+    await updateObservationNote(db, 'obs-1', '');
+
+    expect((await getObservation(db, 'obs-1')).note).toBe('');
+    db.close();
+  });
+
+  test('throws when the observation does not exist, rather than silently creating one', async () => {
+    const db = await openDatabase('obs-store-update-note-missing');
+    await expect(updateObservationNote(db, 'nope', 'anything')).rejects.toThrow(/nope/);
     db.close();
   });
 });

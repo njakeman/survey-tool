@@ -1,5 +1,5 @@
-import { describe, expect, test } from 'vitest';
-import { render, screen, within } from '@testing-library/preact';
+import { describe, expect, test, vi } from 'vitest';
+import { render, screen, within, fireEvent, waitFor } from '@testing-library/preact';
 import { html } from 'htm/preact';
 import { ObservationsList } from './ObservationsList.js';
 
@@ -236,5 +236,60 @@ describe('ObservationsList - traced observations', () => {
     render(html`<${ObservationsList} observations=${[OBS_NO_PHOTO]} />`);
 
     expect(screen.queryByText(/Traced/)).toBeNull();
+  });
+});
+
+describe('ObservationsList — editing a note', () => {
+  test('offers no edit affordance without onEditNote — history stays read-only', () => {
+    render(html`<${ObservationsList} observations=${[OBS_NO_PHOTO, OBS_WITH_PHOTO]} />`);
+
+    expect(screen.queryByRole('button', { name: /edit note/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /add note/i })).toBeNull();
+  });
+
+  test('Edit note opens the row note in a field, and Save note hands the text back', async () => {
+    const onEditNote = vi.fn().mockResolvedValue(undefined);
+    render(html`<${ObservationsList} observations=${[OBS_NO_PHOTO]} onEditNote=${onEditNote} />`);
+
+    fireEvent.click(screen.getByRole('button', { name: /edit note/i }));
+    const field = screen.getByLabelText(/note/i);
+    expect(field).toHaveValue(OBS_NO_PHOTO.note);
+
+    fireEvent.input(field, { target: { value: 'hinge broken' } });
+    fireEvent.click(screen.getByRole('button', { name: /save note/i }));
+
+    await waitFor(() => expect(onEditNote).toHaveBeenCalledWith('obs-1', 'hinge broken'));
+    // The editor closes; the (parent-refreshed) read view returns.
+    await waitFor(() => expect(screen.queryByRole('button', { name: /save note/i })).toBeNull());
+  });
+
+  test('a row with no note offers Add note instead', () => {
+    render(html`<${ObservationsList} observations=${[OBS_WITH_PHOTO]} onEditNote=${() => {}} />`);
+
+    expect(screen.getByRole('button', { name: /add note/i })).toBeInTheDocument();
+  });
+
+  test('Cancel closes the editor without handing anything back', () => {
+    const onEditNote = vi.fn();
+    render(html`<${ObservationsList} observations=${[OBS_NO_PHOTO]} onEditNote=${onEditNote} />`);
+
+    fireEvent.click(screen.getByRole('button', { name: /edit note/i }));
+    fireEvent.input(screen.getByLabelText(/note/i), { target: { value: 'discarded change' } });
+    fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
+
+    expect(onEditNote).not.toHaveBeenCalled();
+    expect(screen.getByText(OBS_NO_PHOTO.note)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/note/i)).toBeNull();
+  });
+
+  test('a failed save shows the error inline and keeps the editor open for retry', async () => {
+    const onEditNote = vi.fn().mockRejectedValue(new Error('write failed'));
+    render(html`<${ObservationsList} observations=${[OBS_NO_PHOTO]} onEditNote=${onEditNote} />`);
+
+    fireEvent.click(screen.getByRole('button', { name: /edit note/i }));
+    fireEvent.click(screen.getByRole('button', { name: /save note/i }));
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/write failed/));
+    expect(screen.getByRole('button', { name: /save note/i })).toBeInTheDocument();
   });
 });

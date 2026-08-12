@@ -56,10 +56,70 @@ function SavedVoiceNote({ audioId, loadAudio }) {
   `;
 }
 
-// Read-only, live-updating record of what's been saved this session — a
-// visual indicator of accumulated observations, not a review/edit screen
-// (that's Phase 6). No thumbnail fetch: a plain indicator avoids pulling
-// storage access into a presentational component.
+// The note on a saved row, editable in place when the parent offers
+// onEditNote (the capture page, for the open session — history never passes
+// it, which is what keeps that view read-only). Row-local state like
+// SavedVoiceNote: the editor's draft belongs to this row alone, and a
+// failed save stays open with its error so the surveyor can retry.
+function EditableNote({ observation, onEditNote }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [state, setState] = useState('idle'); // idle | saving | error
+  const [error, setError] = useState('');
+
+  if (!editing) {
+    return html`
+      ${observation.note ? html`<p class="observations-note">${observation.note}</p>` : null}
+      <button
+        type="button"
+        class="link observations-note-edit"
+        onClick=${() => {
+          setDraft(observation.note ?? '');
+          setState('idle');
+          setError('');
+          setEditing(true);
+        }}
+      >
+        ${observation.note ? 'Edit note' : 'Add note'}
+      </button>
+    `;
+  }
+
+  async function save() {
+    setState('saving');
+    setError('');
+    try {
+      await onEditNote(observation.id, draft);
+      setEditing(false);
+      setState('idle');
+    } catch (err) {
+      setState('error');
+      setError(err.message || 'Could not save the note');
+    }
+  }
+
+  return html`
+    <div class="observations-note-editor">
+      <label class="field">
+        <span class="field-label">Note</span>
+        <textarea value=${draft} onInput=${(event) => setDraft(event.target.value)} />
+      </label>
+      <div class="observations-note-editor-actions">
+        <button type="button" class="button-outline" disabled=${state === 'saving'} onClick=${save}>
+          ${state === 'saving' ? 'Saving…' : 'Save note'}
+        </button>
+        <button type="button" class="link" onClick=${() => setEditing(false)}>Cancel</button>
+      </div>
+      ${state === 'error' ? html`<p class="panel-danger" role="alert">${error}</p>` : null}
+    </div>
+  `;
+}
+
+// Live-updating record of what's been saved this session — a visual
+// indicator of accumulated observations, not a review screen (that's Phase
+// 6); the one in-place edit is the note, above, and only when the parent
+// offers it. No thumbnail fetch: a plain indicator avoids pulling storage
+// access into a presentational component.
 //
 // A card list rather than the six-column table this replaced. Six columns
 // cannot be read one-handed, and the two values a surveyor checks straight
@@ -67,7 +127,7 @@ function SavedVoiceNote({ audioId, loadAudio }) {
 // furthest apart. The card also has room for the whole note, which retires
 // the clip-to-40-characters-and-hope-for-a-tooltip workaround: touch has no
 // hover, so that text was effectively unreachable.
-export function ObservationsList({ observations, gridRef, loadAudio }) {
+export function ObservationsList({ observations, gridRef, loadAudio, onEditNote }) {
   if (observations.length === 0) {
     return html`<p class="observations-empty">No observations saved yet</p>`;
   }
@@ -125,7 +185,13 @@ export function ObservationsList({ observations, gridRef, loadAudio }) {
             }
             ${gridReference ? html`<p class="observations-gridref">${gridReference}</p>` : null}
             <p class="observations-meta">${meta}</p>
-            ${obs.note ? html`<p class="observations-note">${obs.note}</p>` : null}
+            ${
+              onEditNote
+                ? html`<${EditableNote} observation=${obs} onEditNote=${onEditNote} />`
+                : obs.note
+                  ? html`<p class="observations-note">${obs.note}</p>`
+                  : null
+            }
             ${
               obs.photoId
                 ? html`<p class="observations-photo">

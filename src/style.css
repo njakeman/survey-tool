@@ -2001,6 +2001,28 @@ button {
   text-wrap: pretty;
 }
 
+/* Editing a saved note in place. The affordance is a quiet link — every row
+   carries one, and a row of buttons would out-shout the observations. The
+   open editor reuses the capture form's field pattern, so amending a note
+   looks like writing one. */
+.observations-note-edit {
+  margin-top: 3px;
+  font-size: var(--type-meta);
+}
+
+.observations-note-editor {
+  margin-top: 5px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.observations-note-editor-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
 .observations-photo,
 .observations-poor {
   display: flex;
