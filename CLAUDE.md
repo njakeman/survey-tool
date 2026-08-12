@@ -4,10 +4,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-Built and field-usable offline: capture (GPS/compass readings, photo, voice note, save), session
+Built and field-usable offline: capture (GPS/compass readings, photo, voice note, save — with
+in-place **note editing** on the open session's rows only, `updateNote`/`updateObservationNote`;
+history stays read-only), session
 history, zip export and **import** (always a copy under fresh ids; the **Exported** badge —
 `src/ui/ExportBadge.js` — derives from `lastExportedAt`/`lastExportCount`, stamped only by a
-completed export), the offline PMTiles basemap with multi-region storage, **feature layers**
+completed export), **Load session** (history detail → `reopenSession`, the deliberate
+continuation path import is not: refuses while any session is open — an unguarded reopen would
+silently steal capture via `findOpenSession` — keeps the export stamps, and signals the
+always-mounted CapturePage through App's `sessionEpoch` bump, which also clears Undo),
+the offline PMTiles basemap with multi-region storage, **feature layers**
 (the surveyor's own GeoJSON, tappable, with the amber selection highlight and "Record here" —
 which on a polygon records the centroid via `src/geo/centroid.js`), **OS grid references**
 (OSTN15, offline), **marking a point the surveyor cannot reach** (`positionSource: 'map'` — the

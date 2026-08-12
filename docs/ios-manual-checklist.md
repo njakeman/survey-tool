@@ -339,8 +339,9 @@ replay.
 so it only shows pictures while there is signal. The property that must hold is the inverse: **no
 amount of missing signal may break the map.**
 
-- [ ] With signal: select it from Maps and layers; imagery renders, the Esri attribution shows,
-      and the position dot, observations and any enabled feature layers draw over it
+- [ ] With signal: select it from Maps and layers; imagery renders, the attribution ⓘ sits
+      collapsed and expands on tap to the Esri credit, and the position dot, observations and any
+      enabled feature layers draw over it
 - [ ] Zoom to z19 and beyond — past the deepest tile it should go blurry, never blank or clamped
 - [ ] **Airplane mode with imagery active, then relaunch:** the app opens, the map panel appears
       (grey tiles are fine), overlays and picking still work, and there is **no error banner**
@@ -423,6 +424,37 @@ styled state, so only eyes on the real screen can sign it off.
       shows on the home screen and the splash; check it reads at a glance in a full app grid
 - [ ] Export moved to the page foot: confirm exporting the open session still works end-to-end
       from there (share sheet, badge flip)
+
+## Online streetmaps, compact attribution, Load session, note editing (2026-08-12)
+
+Four additions in one pass: three OpenFreeMap basemaps (Light/Simple/Dark) beside the aerial
+imagery, the attribution control starting collapsed, reopening a past session from history, and
+editing a saved observation's note.
+
+- [ ] **Attribution everywhere:** on every basemap (archive, imagery, the three streetmaps) the
+      map opens with the ⓘ collapsed; tapping it shows the right credit (OpenFreeMap ©
+      OpenMapTiles / OSM on the streetmaps, Esri on imagery, OSM · Protomaps on a vector
+      archive); tapping again collapses it
+- [ ] **Each streetmap renders with signal:** Light, Simple and Dark all show labelled streets
+      at survey zoom; overlays (fix marker, observations, traces, feature layers) draw over all
+      three; Dark under night mode still reads as terrain
+- [ ] A labelled feature layer over a streetmap shows its labels (their glyph server, not ours —
+      the silent-failure case)
+- [ ] **Airplane mode with a streetmap active, then relaunch:** the app opens on a blank paper
+      ground with **no error banner**; the fix marker, saved observations and feature layers all
+      still work; switching to a downloaded region renders fully
+- [ ] In airplane mode the three streetmap rows are disabled, like imagery
+- [ ] **Load session:** end a session, open it from history — Load session returns to capture
+      with its name in the bar, its observations listed, and new saves landing in it; the
+      already-exported rows still read Exported, the new save Not exported
+- [ ] With a session open, the Load button in history is disabled and says to end the current
+      session first
+- [ ] Load an **imported** session and add an observation to it — the continuation path import
+      deliberately does not provide
+- [ ] **Edit note, gloved:** on a saved row, Edit note opens the note in place pre-filled; Save
+      note persists (still there after force-quit relaunch); Cancel discards; Add note appears
+      on a bare row; the history view offers no editing anywhere
+- [ ] An edited note survives the export/import round trip with the edited text
 
 ## Later phases (fill in as each lands)
 
