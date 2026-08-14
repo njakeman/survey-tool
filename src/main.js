@@ -304,6 +304,17 @@ async function main() {
     await putSetting(db, 'displayMode', mode);
   }
 
+  // Which end of the session the observations list leads with — a persisted
+  // preference like displayMode (render-then-persist, same chain). 'oldest'
+  // is the order the store returns and what shipped before the toggle.
+  const storedObservationOrder = (await getSetting(db, 'observationOrder')) ?? 'oldest';
+
+  async function setObservationOrder(order) {
+    state.observationOrder = order;
+    renderApp();
+    await putSetting(db, 'observationOrder', order);
+  }
+
   // What the OS scheme currently resolves to, for Auto's footer caption
   // ("Following the system — dark"). Owned here and passed down as a prop,
   // the sensor-adapter rule: components never read matchMedia themselves.
@@ -355,6 +366,7 @@ async function main() {
     featureLayers: [],
     displayMode: storedDisplayMode,
     systemScheme: darkSchemeQuery?.matches ? 'dark' : 'light',
+    observationOrder: storedObservationOrder,
   };
 
   function renderApp() {
@@ -390,6 +402,8 @@ async function main() {
         displayMode=${state.displayMode}
         onSetDisplayMode=${setDisplayMode}
         systemScheme=${state.systemScheme}
+        observationOrder=${state.observationOrder}
+        onSetObservationOrder=${setObservationOrder}
       />`,
       container,
     );
@@ -422,6 +436,14 @@ async function main() {
       renderApp();
     },
   );
+
+  // Ask the browser to exempt this origin's storage from eviction. Best
+  // effort and fire-and-forget: iOS grants it silently to installed PWAs,
+  // and nothing prompts. Without it, storage pressure can evict IndexedDB —
+  // every session gone — which in the field reads as "the update deleted my
+  // data" (report, 2026-08-14). The probe page's storage row shows whether
+  // it stuck.
+  navigator.storage?.persist?.().catch(() => {});
 
   // Phase 4 stored a single archive under the fixed id 'basemap'. Nothing
   // references it now, so left alone it would sit on the device forever as

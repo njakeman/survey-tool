@@ -63,7 +63,10 @@ export function countUnexported(session, observationCount) {
 // state without ever clearing anything.
 export function isChangedSinceExport(session, observation) {
   return (
-    Boolean(session?.lastExportedAt) &&
+    // Only an observation the export actually carried can be stale in it —
+    // one recorded after the export and then edited is honestly still
+    // "Not exported", not "Changed".
+    isExported(session, observation) &&
     Boolean(observation.changedAt) &&
     observation.changedAt > session.lastExportedAt
   );

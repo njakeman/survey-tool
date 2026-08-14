@@ -170,8 +170,9 @@ test.describe('capture flow', () => {
     await page.getByRole('button', { name: 'Delete photo' }).click();
     await expect(page.getByRole('dialog')).toHaveCount(0);
 
-    // The empty slot offers Add photo (a link, not a chip), and adding one
-    // lands the strip back on a chip that opens.
+    // The empty slot offers Add photo (a link, not a chip), and the added
+    // photo shows straight away as the thumbnail — no second tap (field
+    // report, 2026-08-14).
     const row = page.locator('li.observations-row').first();
     await expect(row.getByText('Add photo')).toBeVisible();
     await row.locator('input[capture="environment"]').setInputFiles({
@@ -179,6 +180,6 @@ test.describe('capture flow', () => {
       mimeType: 'image/png',
       buffer: PHOTO,
     });
-    await expect(row.getByRole('button', { name: 'Photo', exact: true })).toBeVisible();
+    await expect(row.locator('img.observations-photo-thumb')).toBeVisible();
   });
 });

@@ -96,6 +96,15 @@ describe('observationsFeatureCollection', () => {
     expect(collection.features.map((f) => f.properties.exported)).toEqual([false, true]);
   });
 
+  test('carries changed-since-export state, so a stale marker can go hollow again', () => {
+    const collection = observationsFeatureCollection([
+      { ...observation, exported: true, changed: true },
+      { ...observation, id: 'obs-2', exported: true },
+    ]);
+
+    expect(collection.features.map((f) => f.properties.changed)).toEqual([true, false]);
+  });
+
   test('an empty session is still a valid empty FeatureCollection', () => {
     expect(observationsFeatureCollection([])).toEqual({ type: 'FeatureCollection', features: [] });
   });
@@ -113,10 +122,12 @@ describe('observationPaint', () => {
   test('distinguishes exported from not by fill, not only by colour', () => {
     const paint = observationPaint();
 
-    // A 'case' expression on `exported`, whose two branches differ.
+    // A 'case' expression, filled only when the export is still good —
+    // exported AND not edited since (an edited-since-export record's data
+    // is no longer safely off the device, which is what hollow means).
     const [operator, condition, whenExported, whenUnexported] = paint['circle-color'];
     expect(operator).toBe('case');
-    expect(condition).toEqual(['get', 'exported']);
+    expect(condition).toEqual(['all', ['get', 'exported'], ['!', ['get', 'changed']]]);
     // Exported is filled; unexported is hollow. The shapes differ before the
     // colours do.
     expect(whenExported).not.toBe('transparent');
@@ -177,7 +188,7 @@ describe('observationShapesCollection', () => {
 
     expect(fc.features).toHaveLength(1);
     expect(fc.features[0].geometry).toEqual(LINE);
-    expect(fc.features[0].properties).toEqual({ obs_id: 'obs-2', exported: false });
+    expect(fc.features[0].properties).toEqual({ obs_id: 'obs-2', exported: false, changed: false });
   });
 
   test('is an empty collection for no observations', () => {
@@ -197,13 +208,13 @@ describe('traceShapeLayers', () => {
     // Solid-versus-dashed is the line-scale analogue of the markers
     // filled-versus-hollow: it must survive greyscale. Two layers rather
     // than a data-driven dasharray, which MapLibre does not support.
-    const exported = lines.find(
-      (l) =>
-        l.filter &&
-        JSON.stringify(l.filter).includes('"get","exported"') &&
-        !JSON.stringify(l.filter).includes('"!"'),
-    );
-    const pending = lines.find((l) => JSON.stringify(l.filter).includes('"!"'));
+    // Solid only while the export is still good — an edited-since-export
+    // trace goes dashed again, like its marker goes hollow.
+    const solidFilter = ['all', ['get', 'exported'], ['!', ['get', 'changed']]];
+    const exported = lines.find((l) => l.id === 'trace-line-exported');
+    const pending = lines.find((l) => l.id === 'trace-line-pending');
+    expect(exported.filter).toEqual(solidFilter);
+    expect(pending.filter).toEqual(['!', solidFilter]);
     expect(exported.paint['line-dasharray']).toBeUndefined();
     expect(pending.paint['line-dasharray']).toBeDefined();
   });

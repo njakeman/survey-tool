@@ -466,3 +466,45 @@ observation, `?? null`.
   telling — never colour alone. A changed session refuses to purge as "fully exported" and
   drops out of the history page's fully-exported count; a completed re-export resolves the
   state by moving `lastExportedAt` past the stamp — nothing is ever cleared.
+
+## Field fixes 2 (2026-08-14): the second round of device reports
+
+Six reports against the deployed pass-4 build, three of them defects in it.
+
+- **`box-sizing` postscript — the history map had no width.** `.session-history` is
+  `align-items: flex-start`, and `.history-map` was the one child that never opted out of
+  fit-content: it rendered as a zero-width, 300px-tall backdrop band — the reported
+  "unnecessary whitespace" between the session name and the observations was the invisible
+  map. `align-self: stretch` fixes it; the detail page now actually shows the read-only map.
+- **The history pages' header sticks** (`.session-history .page-header`): paper ground,
+  full-bleed across the shell padding, the negative-top-margin trick so scrolled content can't
+  peek above it, `z-index: 2` (above the map, far below the lightbox's 10). BasemapPicker
+  keeps the flow header — its list is short.
+- **Add photo lands on the thumbnail, not a chip.** `SavedPhoto` now owns the empty slot
+  (renders the Add photo link itself), so it never unmounts across an add — the parent
+  refresh repoints `photoId` and the same effect that serves a retake fetches the new bytes.
+  While a fetch is in flight the chip shape holds (`attachment-chip-loading`) rather than a
+  broken `<img>`. Both file inputs clear their `value` (same file twice must still fire), and
+  the add path gets the retake's busy treatment ("Adding…").
+- **Changed since export earns its highlight.** The predicate now requires the observation to
+  have been _in_ the export (`isChangedSinceExport` includes `isExported` — a post-export save
+  that gets edited is honestly still Not exported). The badge takes its own register:
+  `badge-changed`, dashed (pending family) in `--accent-deep` warning ink instead of the muted
+  secondary — an edit flags the row, it doesn't fade it. Map markers and trace lines follow:
+  filled/solid only while `exported && !changed` (`SAFELY_EXPORTED` in `overlays.js`) — an
+  edited-since-export marker goes hollow again, its trace dashed. The aggregates now agree
+  with the purge predicate: the Session-history button shows a `Changed since export` chip
+  when everything is "sent" but stale, the history page adds "N sessions changed since
+  export" to its summary, and the capture footer hints "Changed since the last export —
+  export again" under Export while the open session is stale.
+- **The purge names its count on the first tap** ("Delete N exported sessions") — housekeeping
+  wording was hiding a bulk delete. And `main.js` now requests
+  **`navigator.storage.persist()`** at startup (fire-and-forget; the probe page's storage row
+  reports whether it stuck): storage eviction was the one way sessions could vanish without a
+  deliberate tap, and it reads in the field as "the update deleted my data".
+- **The observations list is orderable** in a live session: an `OBSERVATIONS` field with a
+  two-cell segmented row (the display row's shape), Oldest first · Newest first, withheld
+  until there are two rows. A persisted preference (`observationOrder` in settings, the
+  displayMode chain); the flip is a plain reverse of the store's chronological order — never
+  a recordedAt sort, whose same-second ties the monotonic ULID order already resolves.
+  History detail deliberately keeps chronological order.

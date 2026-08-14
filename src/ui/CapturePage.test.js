@@ -51,6 +51,8 @@ function renderPage({
   recordAudio,
   displayMode = 'auto',
   onSetDisplayMode = vi.fn(),
+  observationOrder = 'oldest',
+  onSetObservationOrder = vi.fn(),
 } = {}) {
   return render(
     html`<${CapturePage}
@@ -63,6 +65,8 @@ function renderPage({
       recordAudio=${recordAudio}
       displayMode=${displayMode}
       onSetDisplayMode=${onSetDisplayMode}
+      observationOrder=${observationOrder}
+      onSetObservationOrder=${onSetObservationOrder}
     />`,
   );
 }
@@ -242,6 +246,119 @@ describe('CapturePage — session gating (design pass 3 §5a/5b)', () => {
     const button = await screen.findByRole('button', { name: /session history/i });
     await waitFor(() => expect(button).toHaveTextContent('1 session'));
     expect(button).not.toHaveTextContent(/unsent/i);
+  });
+
+  test('a session edited after its export flags the history button', async () => {
+    // Everything is "sent", but the export on disk is stale — the button
+    // must say so, or the phone goes in the pocket carrying the only good
+    // copy (field report, 2026-08-14).
+    const service = createFakeService({ openSession: null });
+    service.listSessions = vi.fn().mockResolvedValue([
+      {
+        id: 's1',
+        status: 'closed',
+        lastExportedAt: '2026-08-10T00:00:00.000Z',
+        lastExportCount: 2,
+        changedSinceExportAt: '2026-08-11T00:00:00.000Z',
+      },
+    ]);
+    service.countObservations = vi.fn().mockResolvedValue(2);
+    const { sensors } = createFakeSensors();
+    renderPage({ service, sensors });
+
+    const button = await screen.findByRole('button', { name: /session history/i });
+    await waitFor(() => expect(button).toHaveTextContent(/changed since export/i));
+    expect(button).not.toHaveTextContent(/unsent/i);
+  });
+
+  test('an open session edited after its export hints beside Export', async () => {
+    const service = createFakeService({
+      openSession: {
+        ...OPEN_SESSION,
+        lastExportedAt: '2026-08-10T00:00:00.000Z',
+        lastExportCount: 1,
+        changedSinceExportAt: '2026-08-11T00:00:00.000Z',
+      },
+      observations: [
+        {
+          id: 'obs-1',
+          sessionId: 'sess-1',
+          lat: 51.5,
+          lon: -0.14,
+          gpsAccuracyM: 8,
+          note: '',
+          photoId: null,
+          recordedAt: '2026-08-09T00:00:00.000Z',
+        },
+      ],
+    });
+    const { sensors } = createFakeSensors();
+    renderPage({ service, sensors });
+    await screen.findByText('Ashton Keynes');
+
+    expect(await screen.findByText(/changed since the last export/i)).toBeInTheDocument();
+  });
+
+  test('the order toggle flips the list and reports the choice — session only', async () => {
+    // Field request: a long live session is read newest-first; the choice is
+    // a persisted preference, so the page only reports it upward.
+    const observations = [
+      { id: 'obs-1', lat: 51.5, lon: -0.14, gpsAccuracyM: 8, note: 'first gate', photoId: null },
+      { id: 'obs-2', lat: 51.6, lon: -0.15, gpsAccuracyM: 8, note: 'second stile', photoId: null },
+    ];
+    const service = createFakeService({ openSession: OPEN_SESSION, observations });
+    const onSetObservationOrder = vi.fn();
+    const { sensors } = createFakeSensors();
+    const { rerender } = render(
+      html`<${CapturePage}
+        service=${service}
+        sensors=${sensors}
+        downscale=${vi.fn()}
+        observationOrder="oldest"
+        onSetObservationOrder=${onSetObservationOrder}
+      />`,
+    );
+    await screen.findByText('first gate');
+
+    const group = screen.getByRole('radiogroup', { name: /observations/i });
+    const newest = within(group).getByRole('radio', { name: /newest first/i });
+    expect(within(group).getByRole('radio', { name: /oldest first/i })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+    // Oldest first: the store's own order.
+    let rows = screen.getAllByRole('listitem');
+    expect(rows[0]).toHaveTextContent('first gate');
+
+    fireEvent.click(newest);
+    expect(onSetObservationOrder).toHaveBeenCalledWith('newest');
+
+    rerender(
+      html`<${CapturePage}
+        service=${service}
+        sensors=${sensors}
+        downscale=${vi.fn()}
+        observationOrder="newest"
+        onSetObservationOrder=${onSetObservationOrder}
+      />`,
+    );
+    await waitFor(() => {
+      const flipped = screen.getAllByRole('listitem');
+      expect(flipped[0]).toHaveTextContent('second stile');
+    });
+    expect(within(group).getByRole('radio', { name: /newest first/i })).toHaveAttribute(
+      'aria-checked',
+      'true',
+    );
+  });
+
+  test('no session, no order toggle', async () => {
+    const service = createFakeService({ openSession: null });
+    const { sensors } = createFakeSensors();
+    renderPage({ service, sensors });
+    await screen.findByLabelText(/session name/i);
+
+    expect(screen.queryByRole('radiogroup', { name: /observations/i })).toBeNull();
   });
 
   test('Session history is offered without a session and stands down during one', async () => {

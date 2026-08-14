@@ -391,11 +391,18 @@ standalone })`, browser globals injected same as `probe/capabilities.js`, so it'
   post-save edits — a photo retake/delete/add or a note edit — additionally stamp `changedAt`
   on the observation and `changedSinceExportAt` on the session (`storage/photoWrite.js`,
   `updateObservationNote`), which the badge compares against `lastExportedAt` to show
-  **CHANGED SINCE EXPORT** (`isChangedSinceExport`/`hasChangedSinceExport`, domain/session.js).
-  A changed session must not purge as fully exported; nothing is ever cleared — a completed
-  re-export resolves the state by moving `lastExportedAt` past the stamp. These two fields are
-  the only per-observation/deliberate second writer; do not add a third quietly. The
-  observation `synced`/`syncedAt` fields still exist in stored records, unused — leave them.
+  **CHANGED SINCE EXPORT** (`isChangedSinceExport`/`hasChangedSinceExport`, domain/session.js;
+  the per-observation predicate also requires `isExported` — an observation the export never
+  carried stays honestly Not exported). The state drives every surface: the badge (its own
+  `badge-changed` warning register), the map (filled/solid only while `exported && !changed` —
+  `SAFELY_EXPORTED` in overlays.js), the history summaries and the capture footer's
+  export-again hint. A changed session must not purge as fully exported; nothing is ever
+  cleared — a completed re-export resolves the state by moving `lastExportedAt` past the
+  stamp. These two fields are the only per-observation/deliberate second writer; do not add a
+  third quietly. The observation `synced`/`syncedAt` fields still exist in stored records,
+  unused — leave them. `main.js` requests `navigator.storage.persist()` at startup (evicted
+  IndexedDB reads in the field as "the update deleted my sessions"; the probe page reports
+  whether persistence stuck).
 - `domain/geojson.js` emits the session itself as a `survey_session` foreign member (RFC 7946) —
   it is what makes exports importable with fidelity. No exported-at timestamp goes **inside** the
   file: identical data must keep producing identical bytes.

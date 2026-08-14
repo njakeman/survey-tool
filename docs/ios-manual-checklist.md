@@ -600,3 +600,21 @@ read-only map above the list, on whichever basemap is currently active.
       recorded before this pass reads "Voice note" on its chip and still plays
 - [ ] An old export (no audio_duration_ms) still imports; a new export imported back shows the
       duration on the copy's chip
+
+## Field fixes 2 (2026-08-14)
+
+- [ ] History detail: the session's read-only map is actually visible (it was a zero-width
+      band), full width, observations fitted
+- [ ] History list and detail: the back bar stays pinned under the status bar while scrolling
+      a long list; nothing scrolls above it; the photo view still covers it
+- [ ] Delete a photo, then Add photo: the new shot appears as the 64px thumbnail immediately —
+      no second tap on a chip
+- [ ] Add the same photo twice in a row (cancel between): the second pick still registers
+- [ ] On an exported session, retake a photo: the row chip reads CHANGED SINCE EXPORT in
+      warning ink, its map marker goes hollow, Export's footer hints "export again", and after
+      ending the session the history button carries the changed chip
+- [ ] The purge button names its count before the first tap ("Delete 2 exported sessions")
+- [ ] Device probe → storage row: Persistent storage reads yes on the installed app (the app
+      now requests it at launch)
+- [ ] With two or more saved observations: the OBSERVATIONS row flips the list newest-first,
+      the choice survives a relaunch, and the toggle is absent below two rows

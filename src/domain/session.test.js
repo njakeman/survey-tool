@@ -240,6 +240,17 @@ describe('isChangedSinceExport / hasChangedSinceExport', () => {
     ).toBe(false);
   });
 
+  test('an observation the export never carried reads Not exported, not Changed', () => {
+    // Recorded after the export, then edited: nothing stale exists on
+    // anyone's laptop — "Changed since export" would claim otherwise.
+    expect(
+      isChangedSinceExport(exportedSession, {
+        recordedAt: '2026-08-06T12:30:00.000Z',
+        changedAt: '2026-08-06T13:00:00.000Z',
+      }),
+    ).toBe(false);
+  });
+
   test('never-edited and never-exported records are simply not changed', () => {
     expect(isChangedSinceExport(exportedSession, { recordedAt: '2026-08-06T11:00:00.000Z' })).toBe(
       false,

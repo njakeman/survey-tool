@@ -17,7 +17,9 @@ import { html } from 'htm/preact';
 // which kind.
 export function ExportBadge({ exported, changed = false }) {
   if (changed) {
-    return html`<span class="chip badge-not-exported">Changed since export</span>`;
+    // Its own register (badge-changed): dashed like the pending family, but
+    // warning-weight ink — an edit must flag the row, not de-emphasise it.
+    return html`<span class="chip badge-changed">Changed since export</span>`;
   }
   if (exported) {
     return html`<span class="chip badge-exported"

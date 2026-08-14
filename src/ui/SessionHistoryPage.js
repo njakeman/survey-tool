@@ -366,6 +366,7 @@ export function SessionHistoryPage({
       // count (or purge) as fully exported until re-exported.
       !hasChangedSinceExport(s),
   ).length;
+  const changedSessions = visible.filter((s) => hasChangedSinceExport(s)).length;
 
   return html`
     <main class="session-history">
@@ -377,6 +378,17 @@ export function SessionHistoryPage({
         unexported > 0
           ? html`<p class="session-history-unsynced">
               <${ExportBadge} exported=${false} /> ${unexported} observations not yet exported
+            </p>`
+          : null
+      }
+      ${
+        // Zero unsent is not all-clear when an export has gone stale: a
+        // fully-exported-then-edited session needs re-exporting, and this
+        // summary must agree with the purge predicate that refuses it.
+        changedSessions > 0
+          ? html`<p class="session-history-unsynced">
+              <${ExportBadge} exported=${true} changed=${true} />
+              ${` ${changedSessions} session${changedSessions === 1 ? '' : 's'} changed since export`}
             </p>`
           : null
       }
@@ -462,11 +474,15 @@ export function SessionHistoryPage({
                 onClick=${handlePurge}
               >
                 ${
+                  // The count rides on BOTH taps (field report, 2026-08-14):
+                  // "Delete exported sessions" alone reads like housekeeping,
+                  // when it is about to remove every fully-exported session
+                  // at once.
                   purgeBusy
                     ? 'Deleting…'
                     : confirmingPurge
                       ? `Confirm delete ${fullyExported} exported session${fullyExported === 1 ? '' : 's'}`
-                      : 'Delete exported sessions'
+                      : `Delete ${fullyExported} exported session${fullyExported === 1 ? '' : 's'}`
                 }
               </button>
             `

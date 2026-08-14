@@ -160,10 +160,6 @@ function SavedPhoto({ observation, gridReference, loadPhoto, onSetPhoto, onDelet
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [photoId, state]);
 
-  if (!loadPhoto) {
-    return html`<p class="observations-photo">${cameraGlyph}Photo</p>`;
-  }
-
   async function open() {
     setState('loading');
     try {
@@ -182,6 +178,9 @@ function SavedPhoto({ observation, gridReference, loadPhoto, onSetPhoto, onDelet
 
   async function handleRetake(event) {
     const file = event.target.files?.[0];
+    // Clearing the value is what lets the same file be picked twice — a
+    // repeated selection otherwise fires no change event.
+    event.target.value = '';
     if (!file || !onSetPhoto) return;
     setBusy(true);
     try {
@@ -189,6 +188,45 @@ function SavedPhoto({ observation, gridReference, loadPhoto, onSetPhoto, onDelet
     } finally {
       setBusy(false);
     }
+  }
+
+  // Adding after the fact rides the retake machinery: this component now
+  // owns the empty slot too, so it never unmounts across the add — the
+  // parent refresh repoints photoId and the effect above fetches it, which
+  // is what makes the new thumbnail appear without another tap (field
+  // report, 2026-08-14).
+  async function handleAdd(event) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    setBusy(true);
+    try {
+      await onSetPhoto(observation.id, file);
+      setState('thumb');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!photoId) {
+    // 7e: a link, not a chip — the chips mean "there is something here to
+    // open", and an empty slot is not that. Offered only where the parent
+    // passes onSetPhoto (the open session); history renders nothing.
+    if (!onSetPhoto) return null;
+    return html`<label class="attachment-add-photo link">
+      ${cameraGlyph} ${busy ? 'Adding…' : 'Add photo'}
+      <input
+        type="file"
+        accept="image/*"
+        capture="environment"
+        disabled=${busy}
+        onChange=${handleAdd}
+      />
+    </label>`;
+  }
+
+  if (!loadPhoto) {
+    return html`<p class="observations-photo">${cameraGlyph}Photo</p>`;
   }
 
   async function handleDelete() {
@@ -205,6 +243,14 @@ function SavedPhoto({ observation, gridReference, loadPhoto, onSetPhoto, onDelet
 
   if (state === 'error') {
     return html`<p class="observations-photo">Photo could not be loaded</p>`;
+  }
+
+  if ((state === 'thumb' || state === 'full') && !url) {
+    // The fetch for a just-added (or just-repointed) photo is in flight —
+    // hold the chip shape rather than a broken <img>.
+    return html`<button type="button" class="attachment-chip attachment-chip-loading" disabled>
+      ${cameraGlyph} Photo
+    </button>`;
   }
 
   if (state === 'thumb' || state === 'full') {
@@ -428,7 +474,10 @@ function ObservationRow({
         hasStrip && !editingNote
           ? html`<div class="attachment-strip">
               ${
-                obs.photoId
+                // SavedPhoto owns the empty slot too (it renders Add photo
+                // when photoId is null), so it never unmounts across an add
+                // and the fresh thumbnail appears without another tap.
+                obs.photoId || onSetPhoto
                   ? html`<${SavedPhoto}
                       observation=${obs}
                       gridReference=${gridReference}
@@ -436,20 +485,7 @@ function ObservationRow({
                       onSetPhoto=${onSetPhoto}
                       onDeletePhoto=${onDeletePhoto}
                     />`
-                  : onSetPhoto
-                    ? html`<label class="attachment-add-photo link">
-                        ${cameraGlyph} Add photo
-                        <input
-                          type="file"
-                          accept="image/*"
-                          capture="environment"
-                          onChange=${(event) => {
-                            const file = event.target.files?.[0];
-                            if (file) onSetPhoto(obs.id, file);
-                          }}
-                        />
-                      </label>`
-                    : null
+                  : null
               }
               ${
                 obs.audioId

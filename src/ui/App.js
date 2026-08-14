@@ -41,6 +41,8 @@ export function App({
   displayMode,
   onSetDisplayMode,
   systemScheme,
+  observationOrder,
+  onSetObservationOrder,
 }) {
   const [view, setView] = useState('capture');
   // Bumped when history loads a past session back into use. CapturePage
@@ -135,6 +137,8 @@ export function App({
           displayMode=${displayMode}
           onSetDisplayMode=${onSetDisplayMode}
           systemScheme=${systemScheme}
+          observationOrder=${observationOrder}
+          onSetObservationOrder=${onSetObservationOrder}
           sessionEpoch=${sessionEpoch}
         />
       </div>

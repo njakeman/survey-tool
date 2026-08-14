@@ -106,6 +106,29 @@ describe('SessionHistoryPage — list', () => {
     expect(screen.queryByText(/not yet exported/i)).not.toBeInTheDocument();
   });
 
+  test('the top summary counts sessions changed since export, not only unsent rows', async () => {
+    // A fully-exported-then-edited session has zero unsent observations but
+    // a stale export — the summary must not read all-clear.
+    const service = createFakeService({
+      sessions: [
+        {
+          ...CLOSED_A,
+          lastExportedAt: '2026-08-05T12:00:00.000Z',
+          lastExportCount: 1,
+          changedSinceExportAt: '2026-08-05T13:00:00.000Z',
+        },
+      ],
+      observationsBySession: { 'sess-a': [OBS] },
+    });
+    render(
+      html`<${SessionHistoryPage} service=${service} exportSession=${vi.fn()} onBack=${vi.fn()} />`,
+    );
+
+    await screen.findByText('Site A');
+    expect(screen.getByText(/1 session changed since export/i)).toBeInTheDocument();
+    expect(screen.queryByText(/not yet exported/i)).not.toBeInTheDocument();
+  });
+
   test('a session edited after its export reads Changed since export in the list', async () => {
     // A photo retake (or note edit) after an export makes the zip on
     // someone's laptop stale — the badge says so instead of "Exported".
@@ -125,7 +148,9 @@ describe('SessionHistoryPage — list', () => {
     );
 
     await screen.findByText('Site A');
-    expect(screen.getByText(/changed since export/i)).toBeInTheDocument();
+    // Scoped to the row: the top summary now carries the phrase too.
+    const row = screen.getByRole('button', { name: /Site A/ });
+    expect(within(row).getByText(/changed since export/i)).toBeInTheDocument();
     expect(screen.queryByText(/^Exported$/)).not.toBeInTheDocument();
   });
 
@@ -540,7 +565,7 @@ describe('SessionHistoryPage — purge exported sessions', () => {
     );
     await screen.findByText('Site A');
 
-    expect(screen.getByRole('button', { name: /delete exported sessions/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /delete 1 exported session/i })).toBeInTheDocument();
   });
 
   test('hides the purge when nothing has been fully exported', async () => {
@@ -553,7 +578,7 @@ describe('SessionHistoryPage — purge exported sessions', () => {
     );
     await screen.findByText('Site A');
 
-    expect(screen.queryByRole('button', { name: /delete exported sessions/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /delete .*exported session/i })).toBeNull();
   });
 
   test('purges two-step, reports the count and refreshes the list', async () => {
@@ -567,7 +592,7 @@ describe('SessionHistoryPage — purge exported sessions', () => {
     );
     await screen.findByText('Site A');
 
-    fireEvent.click(screen.getByRole('button', { name: /delete exported sessions/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^delete 1 exported session/i }));
     expect(service.deleteExportedSessions).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole('button', { name: /confirm delete 1 exported session/i }));

@@ -700,6 +700,11 @@ button {
    of its controls. Position:relative for the night-mode red multiply. */
 .history-map {
   position: relative;
+  /* .session-history is align-items: flex-start, and this was the one child
+     that never opted out of fit-content — it rendered as a zero-width,
+     300px-tall band (the reported "whitespace" between the session name and
+     the observations). Stretch like every sibling does. */
+  align-self: stretch;
   height: 300px;
   margin-inline: calc(var(--space-4) * -1);
   margin-bottom: var(--space-3);
@@ -1947,6 +1952,25 @@ button {
   font-weight: 700;
 }
 
+/* The history pages' header sticks (field report, 2026-08-14): a long
+   session list otherwise buries the way back. Full-bleed across the shell's
+   side padding with its own paper ground, and the negative top margin +
+   matching padding swallow the shell's top padding so scrolled content
+   can't peek above the bar. z-index 2: above the (z-auto) history map,
+   far below the photo lightbox's 10. BasemapPicker keeps the plain flow
+   header — its list is short. */
+.session-history .page-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--paper);
+  margin-inline: calc(var(--space-4) * -1);
+  margin-top: calc(var(--space-4) * -1);
+  width: auto;
+  align-self: stretch;
+  padding: var(--space-4) var(--space-4) var(--space-2);
+}
+
 /* Auto | Light | Dark | Night (design pass 3 §6), in the footer with the
    other twice-a-day controls, under a DISPLAY label. One exclusive row of
    four — forcing a scheme is a field requirement, not a preference; Night
@@ -2607,6 +2631,16 @@ button {
   background: var(--ink);
   color: var(--paper);
   border-color: var(--ink);
+}
+
+/* Changed since export: the dashed (pending) shape, but in the warning
+   register (.observations-poor's accent-deep) rather than the muted
+   secondary — the edit must flag the row, not fade it. Word + shape still
+   carry the state without colour. */
+.badge-changed {
+  border-style: dashed;
+  border-color: var(--accent-deep);
+  color: var(--accent-deep);
 }
 
 /* Full-bleed above every view. An accent fill rather than the 25% orange

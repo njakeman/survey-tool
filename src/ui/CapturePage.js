@@ -14,7 +14,12 @@ import { TraceStrip } from './TraceStrip.js';
 import { TraceGlyph } from './traceGlyphs.js';
 import { formatLatLon } from '../sensors/format.js';
 import { chooseActive } from '../map/basemapSelection.js';
-import { countUnexported, isExported, isChangedSinceExport } from '../domain/session.js';
+import {
+  countUnexported,
+  isExported,
+  isChangedSinceExport,
+  hasChangedSinceExport,
+} from '../domain/session.js';
 import { polygonCentroid, polygonExtentM } from '../geo/centroid.js';
 import {
   acceptFix,
@@ -55,6 +60,8 @@ export function CapturePage({
   displayMode,
   onSetDisplayMode,
   systemScheme,
+  observationOrder = 'oldest',
+  onSetObservationOrder,
   sessionEpoch,
 }) {
   const [session, setSession] = useState(null);
@@ -137,6 +144,10 @@ export function CapturePage({
           (total, stored, index) => total + countUnexported(stored, counts[index]),
           0,
         ),
+        // Fully exported but edited since: zero unsent, yet the export on
+        // disk is stale — the purge predicate honours this and the badge
+        // here must agree with it.
+        changedSessions: sessions.filter((stored) => hasChangedSinceExport(stored)).length,
       });
     } else {
       setHistorySummary(null);
@@ -459,15 +470,18 @@ export function CapturePage({
   // Exported-or-not is derived here, once per change, and travels with each
   // observation to both the list and the map markers — neither consumer has
   // to know how it is worked out.
-  const decoratedObservations = useMemo(
-    () =>
-      observations.map((obs) => ({
-        ...obs,
-        exported: isExported(session, obs),
-        changed: isChangedSinceExport(session, obs),
-      })),
-    [observations, session],
-  );
+  const decoratedObservations = useMemo(() => {
+    const decorated = observations.map((obs) => ({
+      ...obs,
+      exported: isExported(session, obs),
+      changed: isChangedSinceExport(session, obs),
+    }));
+    // A plain reverse of the store's chronological order, never a
+    // recordedAt sort — two saves in the same second are tiebroken by the
+    // monotonic ULID, which recordedAt alone would shuffle. The map reads
+    // the same array; marker order is meaningless there.
+    return observationOrder === 'newest' ? decorated.reverse() : decorated;
+  }, [observations, session, observationOrder]);
 
   // The GPS watch re-renders this component about once a second, and the
   // list re-formats every saved row each time — a per-row Date and
@@ -829,6 +843,33 @@ export function CapturePage({
             </div>`
           : null
       }
+      ${
+        // Which end the list leads with (field request, 2026-08-14): a long
+        // live session is read newest-first. The display row's segmented
+        // shape, two cells; withheld until there are two rows to order.
+        session && observations.length > 1
+          ? html`<div class="field">
+              <span class="field-label" id="observation-order-label">Observations</span>
+              <div class="mode-switch" role="radiogroup" aria-labelledby="observation-order-label">
+                ${[
+                  ['oldest', 'Oldest first'],
+                  ['newest', 'Newest first'],
+                ].map(
+                  ([value, label]) =>
+                    html`<button
+                      type="button"
+                      class="mode-switch-option"
+                      role="radio"
+                      aria-checked=${observationOrder === value}
+                      onClick=${() => onSetObservationOrder?.(value)}
+                    >
+                      ${label}
+                    </button>`,
+                )}
+              </div>
+            </div>`
+          : null
+      }
       ${session ? observationsList : null}
       ${
         // At the page foot with the other session-level controls, not in the
@@ -856,7 +897,13 @@ export function CapturePage({
           ? html`<p class="capture-page-export-hint">
               Nothing to export yet — save an observation first
             </p>`
-          : null
+          : session && hasChangedSinceExport(session)
+            ? // The one session-scoped signal while a session runs: an edit
+              // after the export makes the zip on someone's laptop stale.
+              html`<p class="capture-page-export-hint warns">
+                Changed since the last export — export again
+              </p>`
+            : null
       }
       ${
         exportMessage
@@ -913,7 +960,9 @@ export function CapturePage({
                   ? html`<span class="chip badge-not-exported"
                       >${historySummary.unexported} unsent</span
                     >`
-                  : null
+                  : historySummary && historySummary.changedSessions > 0
+                    ? html`<span class="chip badge-changed">Changed since export</span>`
+                    : null
               }
               <span class="session-history-button-chevron" aria-hidden="true">›</span>
             </button>`

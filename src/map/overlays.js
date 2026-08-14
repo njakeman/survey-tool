@@ -62,12 +62,18 @@ const MARKER_OUTLINE = '#f4f0e8';
 // would need a symbol layer with two bundled sprite images. Fill-versus-
 // hollow carries the distinction on its own, so the sprites stay unbuilt —
 // see docs/styling.md if the dash turns out to matter on a real archive.
+// Filled only while the export is still good: an observation edited after
+// the export that carried it (`changed`, decorated from isChangedSinceExport)
+// goes hollow again — its data is no longer safely off the device, which is
+// exactly what hollow means.
+const SAFELY_EXPORTED = ['all', ['get', 'exported'], ['!', ['get', 'changed']]];
+
 export function observationPaint() {
   return {
     'circle-radius': 7,
-    'circle-color': ['case', ['get', 'exported'], MARKER_INK, 'transparent'],
+    'circle-color': ['case', SAFELY_EXPORTED, MARKER_INK, 'transparent'],
     'circle-stroke-width': 2,
-    'circle-stroke-color': ['case', ['get', 'exported'], MARKER_OUTLINE, MARKER_INK],
+    'circle-stroke-color': ['case', SAFELY_EXPORTED, MARKER_OUTLINE, MARKER_INK],
   };
 }
 
@@ -110,9 +116,10 @@ export function observationsFeatureCollection(observations) {
         obs_id: observation.id,
         // Exported-or-not has to stay visible wherever observations are
         // shown (CLAUDE.md), markers included. The caller decorates each
-        // observation (domain/session.js isExported) — this module keeps no
-        // opinion about what "exported" means.
+        // observation (domain/session.js isExported/isChangedSinceExport) —
+        // this module keeps no opinion about what either means.
         exported: Boolean(observation.exported),
+        changed: Boolean(observation.changed),
       },
     })),
   };
@@ -135,6 +142,7 @@ export function observationShapesCollection(observations) {
         properties: {
           obs_id: observation.id,
           exported: Boolean(observation.exported),
+          changed: Boolean(observation.changed),
         },
       })),
   };
@@ -178,14 +186,16 @@ export function traceShapeLayers() {
     id: 'trace-line-exported',
     type: 'line',
     source,
-    filter: ['get', 'exported'],
+    // Solid only while the export is still good — an edited-since-export
+    // trace goes dashed again, the line-scale analogue of hollow.
+    filter: SAFELY_EXPORTED,
     paint: { 'line-color': MARKER_INK, 'line-width': 3 },
   };
   const pending = {
     id: 'trace-line-pending',
     type: 'line',
     source,
-    filter: ['!', ['get', 'exported']],
+    filter: ['!', SAFELY_EXPORTED],
     paint: { 'line-color': MARKER_INK, 'line-width': 3, 'line-dasharray': [2, 2] },
   };
   return [

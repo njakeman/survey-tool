@@ -528,6 +528,90 @@ describe('ObservationsList — retake, delete and add photo (design pass 4 §7e)
     expect(screen.queryByText(/add photo/i)).toBeNull();
   });
 
+  test('a freshly added photo shows its thumbnail without another tap', async () => {
+    // Field report: Add photo used to land the strip back on a chip; the
+    // component now survives the refresh and loads the new id itself.
+    const loadPhoto = vi
+      .fn()
+      .mockResolvedValue({ id: 'photo-9', contentType: 'image/jpeg', blob: new Blob(['y']) });
+    const onSetPhoto = vi.fn().mockResolvedValue(undefined);
+    const { rerender } = render(
+      html`<${ObservationsList}
+        observations=${[OBS_NO_PHOTO]}
+        loadPhoto=${loadPhoto}
+        onSetPhoto=${onSetPhoto}
+      />`,
+    );
+
+    const input = screen
+      .getByText(/add photo/i)
+      .closest('label')
+      .querySelector('input');
+    fireEvent.change(input, { target: { files: [FILE] } });
+    await waitFor(() => expect(onSetPhoto).toHaveBeenCalledWith('obs-1', FILE));
+
+    // The parent refresh delivers the repointed record.
+    rerender(
+      html`<${ObservationsList}
+        observations=${[{ ...OBS_NO_PHOTO, photoId: 'photo-9' }]}
+        loadPhoto=${loadPhoto}
+        onSetPhoto=${onSetPhoto}
+      />`,
+    );
+
+    await screen.findByRole('img', { name: /photo for this observation/i });
+    expect(loadPhoto).toHaveBeenCalledWith('photo-9');
+  });
+
+  test('the add input clears its value, so the same file can be picked twice', async () => {
+    const onSetPhoto = vi.fn().mockResolvedValue(undefined);
+    render(
+      html`<${ObservationsList}
+        observations=${[OBS_NO_PHOTO]}
+        loadPhoto=${vi.fn()}
+        onSetPhoto=${onSetPhoto}
+      />`,
+    );
+
+    const input = screen
+      .getByText(/add photo/i)
+      .closest('label')
+      .querySelector('input');
+    fireEvent.change(input, { target: { files: [FILE] } });
+
+    await waitFor(() => expect(onSetPhoto).toHaveBeenCalledTimes(1));
+    expect(input.value).toBe('');
+  });
+
+  test('while the added photo is being processed the label says so and disables', async () => {
+    let resolveSet;
+    const onSetPhoto = vi.fn(() => new Promise((resolve) => (resolveSet = resolve)));
+    render(
+      html`<${ObservationsList}
+        observations=${[OBS_NO_PHOTO]}
+        loadPhoto=${vi.fn()}
+        onSetPhoto=${onSetPhoto}
+      />`,
+    );
+
+    const input = screen
+      .getByText(/add photo/i)
+      .closest('label')
+      .querySelector('input');
+    fireEvent.change(input, { target: { files: [FILE] } });
+
+    await screen.findByText(/adding…/i);
+    expect(
+      screen
+        .getByText(/adding…/i)
+        .closest('label')
+        .querySelector('input'),
+    ).toHaveProperty('disabled', true);
+    await act(async () => {
+      resolveSet();
+    });
+  });
+
   test('a repointed photoId (a retake) refetches and revokes the stale URL', async () => {
     const loadPhoto = vi
       .fn()
