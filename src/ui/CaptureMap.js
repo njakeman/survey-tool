@@ -59,6 +59,15 @@ export function CaptureMap({
   const [follow, setFollow] = useState(createFollowState);
   const [error, setError] = useState(null);
 
+  // Where the outgoing map was looking, stashed in the build effect's
+  // cleanup so a region switch reopens on the same ground instead of the
+  // new region's default centre (all four online regions share the GB
+  // centroid — the map visibly relocated to the North Pennines on every
+  // switch to one of them). Best-effort: a broken adapter has no view worth
+  // keeping, so a failed read just means the defaults — never the panel
+  // error, which is for failures the surveyor must act on.
+  const lastViewRef = useRef(null);
+
   // The tap handler is a fresh closure on every render, but the map is built
   // once per region — so the adapter would hold the very first one forever,
   // and every tap would land in a handler closed over a stale session. A ref
@@ -87,6 +96,7 @@ export function CaptureMap({
     setError(null);
     createMap({
       container: containerRef.current,
+      view: lastViewRef.current ?? undefined,
       onUserPan: () => setFollow((current) => onUserPan(current)),
       // Suppressed while picking: inspecting a feature and placing a point
       // are two different intents, and a tap that did both would do neither
@@ -112,6 +122,17 @@ export function CaptureMap({
 
     return () => {
       cancelled = true;
+      // Stash the outgoing view before the teardown — cleanup runs before
+      // the next effect body, so the replacement build reads a fresh stash.
+      const outgoing = adapterRef.current;
+      if (outgoing) {
+        try {
+          const { lat, lon } = outgoing.getCenter();
+          lastViewRef.current = { center: [lon, lat], zoom: outgoing.getZoom() };
+        } catch {
+          // A broken adapter has no view worth keeping.
+        }
+      }
       // Tear the outgoing map down here rather than on unmount alone, so
       // switching region releases the archive it was holding.
       adapterRef.current?.destroy();

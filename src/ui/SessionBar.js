@@ -67,7 +67,14 @@ export function SessionBar({
               disabled=${busy}
               onClick=${() => onEnd?.()}
             >
-              Confirm end session
+              ${
+                // An empty session is deleted on end, not closed
+                // (captureService.endSession) — the confirm tap is where the
+                // surveyor learns that, before it happens.
+                observationCount === 0
+                  ? 'Nothing recorded — discard session'
+                  : 'Confirm end session'
+              }
             </button>`
           : html`<button
               type="button"

@@ -20,6 +20,8 @@ function fakeAdapter() {
     centreOn: vi.fn(),
     resize: vi.fn(),
     destroy: vi.fn(),
+    getCenter: vi.fn(() => ({ lat: 51.6, lon: -0.2 })),
+    getZoom: vi.fn(() => 14),
   };
 }
 
@@ -88,6 +90,42 @@ describe('CaptureMap — showing a region', () => {
 
     await waitFor(() => expect(createMap).toHaveBeenCalledTimes(2));
     expect(south.destroy).toHaveBeenCalled();
+  });
+
+  test('the replacement map opens where the old one was looking — view carried, not reset', async () => {
+    // The reported bug: every region default (online regions share the GB
+    // centroid) relocated the map on a switch. The rebuild must carry the
+    // outgoing centre and zoom.
+    const south = fakeAdapter();
+    const north = fakeAdapter();
+    const createMap = vi.fn().mockResolvedValueOnce(south).mockResolvedValueOnce(north);
+    const { rerender } = renderMap({ createMap });
+    await waitFor(() => expect(createMap).toHaveBeenCalledTimes(1));
+    expect(createMap.mock.calls[0][0].view).toBeUndefined();
+
+    rerender({ activeRegionId: 'north' });
+
+    await waitFor(() => expect(createMap).toHaveBeenCalledTimes(2));
+    expect(createMap.mock.calls[1][0].view).toEqual({ center: [-0.2, 51.6], zoom: 14 });
+  });
+
+  test('a broken outgoing adapter means no carried view, not an error', async () => {
+    // The stash is best-effort: a map that cannot say where it was looking
+    // has no view worth keeping, and the surveyor needs no message about it.
+    const south = fakeAdapter();
+    south.getCenter = vi.fn(() => {
+      throw new Error('gone');
+    });
+    const north = fakeAdapter();
+    const createMap = vi.fn().mockResolvedValueOnce(south).mockResolvedValueOnce(north);
+    const { rerender, container } = renderMap({ createMap });
+    await waitFor(() => expect(createMap).toHaveBeenCalledTimes(1));
+
+    rerender({ activeRegionId: 'north' });
+
+    await waitFor(() => expect(createMap).toHaveBeenCalledTimes(2));
+    expect(createMap.mock.calls[1][0].view).toBeUndefined();
+    expect(container.querySelector('.capture-map-error')).toBeNull();
   });
 
   test('the replacement map is given the current fix and observations', async () => {

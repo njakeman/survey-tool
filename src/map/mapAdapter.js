@@ -104,6 +104,7 @@ export async function createMapAdapter({
   tileSize,
   attribution,
   fit = null,
+  view = null,
   onUserPan,
   onFeatureTap,
   onError,
@@ -161,13 +162,15 @@ export async function createMapAdapter({
   // undefined falls back to the vendored stack inside featureLayerLayers.
   const labelFontStack = remoteStyleLoaded ? online.featureFontStack : undefined;
 
-  // A caller-supplied fit (the history map, fitting a past session's
-  // observations) replaces the opening centre/zoom pair in either branch —
-  // applied at construction, not as a post-load fitBounds(), so the map
-  // never visibly jumps from the archive centre. fitViewport has already
-  // decided the degenerate single-point case in pure code; MapLibre only
-  // ever sees bounds with real extent. A fit outside the archive's
-  // maxBounds clamps to the nearest edge — honest, and on the checklist.
+  // Two callers can override the opening centre/zoom, in precedence order:
+  // `fit` (the history map, framing a past session's observations — bounds,
+  // zoom decided by fitViewport) then `view` (CaptureMap's region switch,
+  // carrying the outgoing map's exact { center: [lon, lat], zoom } so the
+  // ground doesn't move under the surveyor). Both are applied at
+  // construction, not as a post-load call, so the map never visibly jumps
+  // from the region default. In the archive branch minZoom/maxBounds still
+  // apply over either, so an out-of-coverage fit or view clamps to the
+  // archive edge — honest, and on the checklist.
   const fitted = fitViewport(fit, { maxZoom: SURVEY_ZOOM });
   const viewport = online
     ? // No bounds and no zoom floor: the imagery covers the world, and a
@@ -175,12 +178,13 @@ export async function createMapAdapter({
       // (viewport.js). Opens at survey zoom over the provider's fixed centre
       // — the same open-at-a-centre-then-follow behaviour an archive has —
       // and the first fix centres it on the surveyor.
-      (fitted ?? { center: [online.centre.lon, online.centre.lat], zoom: SURVEY_ZOOM })
+      (fitted ?? view ?? { center: [online.centre.lon, online.centre.lat], zoom: SURVEY_ZOOM })
     : {
-        ...(fitted ?? {
-          center: [header.centerLon, header.centerLat],
-          zoom: initialZoomFromHeader(header, SURVEY_ZOOM),
-        }),
+        ...(fitted ??
+          view ?? {
+            center: [header.centerLon, header.centerLat],
+            zoom: initialZoomFromHeader(header, SURVEY_ZOOM),
+          }),
         // A floor only where the archive has one: below its lowest tile zoom
         // there is nothing to draw. maxZoom stays unset so overzoom past the
         // deepest tile still works — blurry beats blank; clamping the map to

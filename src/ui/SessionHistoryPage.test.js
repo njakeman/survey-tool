@@ -235,6 +235,37 @@ describe('SessionHistoryPage — detail', () => {
     await waitFor(() => expect(service.getPhoto).toHaveBeenCalledWith('obs-1'));
   });
 
+  test('a pre-fix empty session offers no live Export — disabled, with the reason beside it', async () => {
+    // The app no longer produces empty sessions (ending one discards it),
+    // but ones from before the change can still sit in history.
+    const service = createFakeService({ sessions: [CLOSED_A] });
+    render(
+      html`<${SessionHistoryPage} service=${service} exportSession=${vi.fn()} onBack=${vi.fn()} />`,
+    );
+    await screen.findByText('Site A');
+    fireEvent.click(screen.getByRole('button', { name: /Site A/ }));
+
+    await screen.findByText(/no observations saved yet/i);
+    expect(screen.getByRole('button', { name: /^export$/i })).toBeDisabled();
+    expect(screen.getByText(/nothing recorded in this session/i)).toBeInTheDocument();
+  });
+
+  test('a session with observations keeps its live Export and no hint', async () => {
+    const service = createFakeService({
+      sessions: [CLOSED_A],
+      observationsBySession: { 'sess-a': [OBS] },
+    });
+    render(
+      html`<${SessionHistoryPage} service=${service} exportSession=${vi.fn()} onBack=${vi.fn()} />`,
+    );
+    await screen.findByText('Site A');
+    fireEvent.click(screen.getByRole('button', { name: /Site A/ }));
+
+    await screen.findByText(/51\.500000, -0\.140000/);
+    expect(screen.getByRole('button', { name: /^export$/i })).not.toBeDisabled();
+    expect(screen.queryByText(/nothing recorded in this session/i)).toBeNull();
+  });
+
   test('a "back to list" control in the detail view returns to the session list, not the top-level view', async () => {
     const service = createFakeService({
       sessions: [CLOSED_A],

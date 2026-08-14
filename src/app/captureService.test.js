@@ -63,6 +63,8 @@ describe('listSessions', () => {
   test('returns every session regardless of open/closed status', async () => {
     const service = await makeService('capture-service-list-sessions-all');
     const first = await service.startSession('Site A');
+    // Ending an empty session discards it, so the closed one needs a record.
+    await service.saveObservation({ reading: READING, heading: null, note: '', photo: null });
     await service.endSession();
     const second = await service.startSession('Site B');
 
@@ -91,15 +93,57 @@ describe('startSession', () => {
   });
 });
 
-describe('endSession', () => {
-  test('sets endedAt and status closed', async () => {
-    const service = await makeService('capture-service-end');
-    await service.startSession('Ashton Keynes');
-    const closed = await service.endSession();
-    expect(closed.status).toBe('closed');
-    expect(closed.endedAt).toBe(FIXED_NOW);
+describe('endSession — a session with nothing recorded is discarded', () => {
+  // User decision (2026-08-14): an empty session is a mistaken start, not a
+  // record. Ending it deletes it — one transaction via deleteSessionWithData,
+  // so an abandoned trace draft cannot orphan either. Note the accepted
+  // consequence: reopening a pre-fix empty closed session and ending it
+  // again discards it, export stamps included — there is nothing in it for
+  // the stamps to describe.
+  test('ending at zero observations resolves discarded and removes the session', async () => {
+    const db = await openDatabase('capture-service-end-discard');
+    const service = createCaptureService({ db, newId: fakeIdGenerator(), nowIso: () => FIXED_NOW });
+    const session = await service.startSession('Mistaken start');
+
+    const result = await service.endSession();
+
+    expect(result.discarded).toBe(true);
+    expect(result.session.id).toBe(session.id);
+    expect(await db.get('sessions', session.id)).toBeUndefined();
+    expect(await service.listSessions()).toEqual([]);
   });
 
+  test('an abandoned trace draft goes with the discarded session', async () => {
+    const db = await openDatabase('capture-service-end-discard-draft');
+    const service = createCaptureService({ db, newId: fakeIdGenerator(), nowIso: () => FIXED_NOW });
+    await service.startSession('Mistaken start');
+    const draft = await service.startTraceDraft({ mode: 'path' });
+    await service.appendTraceVertex(draft.id, { lat: 51.5, lon: -0.14, accuracyM: 8, seq: 0 });
+
+    const result = await service.endSession();
+
+    expect(result.discarded).toBe(true);
+    expect(await db.get('traceDrafts', draft.id)).toBeUndefined();
+    expect(await db.getAll('traceVertices')).toEqual([]);
+  });
+
+  test('a session with observations closes as ever, and says so', async () => {
+    const service = await makeService('capture-service-end-kept');
+    await service.startSession('Real work');
+    await service.saveObservation({ reading: READING, heading: null, note: '', photo: null });
+
+    const result = await service.endSession();
+
+    expect(result.discarded).toBe(false);
+    expect(result.session.status).toBe('closed');
+    expect(result.session.endedAt).toBe(FIXED_NOW);
+    expect((await service.listSessions()).map(({ id }) => id)).toEqual([result.session.id]);
+  });
+});
+
+describe('endSession', () => {
+  // The closed status/endedAt happy path lives in the discard describe above
+  // ("a session with observations closes as ever").
   test('throws when no session is open', async () => {
     const service = await makeService('capture-service-end-none');
     await expect(service.endSession()).rejects.toThrow(/no open session/);
@@ -110,6 +154,7 @@ describe('reopenSession', () => {
   test('makes a past session the open one again, ready to capture into', async () => {
     const service = await makeService('capture-service-reopen');
     const session = await service.startSession('Ashton Keynes');
+    await service.saveObservation({ reading: READING, heading: null, note: '', photo: null });
     await service.endSession();
 
     const reopened = await service.reopenSession(session.id);
@@ -132,11 +177,12 @@ describe('reopenSession', () => {
     let now = FIXED_NOW;
     const service = await makeService('capture-service-reopen-end', { nowIso: () => now });
     const session = await service.startSession('Ashton Keynes');
+    await service.saveObservation({ reading: READING, heading: null, note: '', photo: null });
     await service.endSession();
 
     await service.reopenSession(session.id);
     now = '2026-08-06T15:00:00.000Z';
-    const closed = await service.endSession();
+    const { session: closed } = await service.endSession();
 
     expect(closed.endedAt).toBe('2026-08-06T15:00:00.000Z');
   });
@@ -147,6 +193,7 @@ describe('reopenSession', () => {
     // would just stop receiving observations.
     const service = await makeService('capture-service-reopen-busy');
     const past = await service.startSession('Site A');
+    await service.saveObservation({ reading: READING, heading: null, note: '', photo: null });
     await service.endSession();
     await service.startSession('Site B');
 
@@ -163,6 +210,7 @@ describe('reopenSession', () => {
     const db = await openDatabase('capture-service-reopen-exported');
     const service = createCaptureService({ db, newId: fakeIdGenerator(), nowIso: () => FIXED_NOW });
     const session = await service.startSession('Ashton Keynes');
+    await service.saveObservation({ reading: READING, heading: null, note: '', photo: null });
     await service.endSession();
     const stored = await db.get('sessions', session.id);
     await db.put('sessions', {
@@ -272,6 +320,7 @@ describe('deleteExportedSessions', () => {
   test('with nothing eligible, deletes nothing and reports zero', async () => {
     const service = await makeService('capture-service-purge-empty');
     await service.startSession('Only session');
+    await service.saveObservation({ reading: READING, heading: null, note: '', photo: null });
     await service.endSession();
 
     expect(await service.deleteExportedSessions()).toEqual({ deletedCount: 0 });

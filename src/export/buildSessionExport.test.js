@@ -43,6 +43,7 @@ describe('buildSessionExport', () => {
   test('derives the filename from the slugified session name and its start date', async () => {
     const db = await openDatabase('export-filename');
     await putSession(db, makeSession({ name: 'Ashton Keynes: North Field!' }));
+    await putObservation(db, makeObservation());
 
     const { filename } = await buildSessionExport(db, { sessionId: 'sess-1', appVersion: '0.1.0' });
 
@@ -65,15 +66,16 @@ describe('buildSessionExport', () => {
     expect(geojsonEntry.input).toBe(expected);
   });
 
-  test('a session with no observations still produces a valid empty-features geojson entry', async () => {
+  test('refuses a session with no observations — a metadata-only zip is nothing to share', async () => {
+    // The stamp such an export would earn (lastExportCount: 0) also made the
+    // badge arithmetic read the session as fully Exported, purge included.
+    // Import stays permissive: pre-fix zero-feature files must still load.
     const db = await openDatabase('export-empty-session');
     await putSession(db, makeSession());
 
-    const { entries } = await buildSessionExport(db, { sessionId: 'sess-1', appVersion: '0.1.0' });
-
-    expect(entries).toHaveLength(1);
-    expect(entries[0].name).toBe('session.geojson');
-    expect(JSON.parse(entries[0].input).features).toEqual([]);
+    await expect(
+      buildSessionExport(db, { sessionId: 'sess-1', appVersion: '0.1.0' }),
+    ).rejects.toThrow(/nothing to export/i);
   });
 
   test('includes a photos/<id>.jpg entry with the real Blob for observations with a photo', async () => {

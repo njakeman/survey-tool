@@ -51,12 +51,23 @@ export function createCaptureService({ db, newId, nowIso }) {
     return session;
   }
 
+  // Ends the open session — or discards it: a session with nothing recorded
+  // is a mistaken start, not a record, so it is deleted rather than closed
+  // (user decision, 2026-08-14). deleteSessionWithData is one transaction
+  // over every store a session can reach, so an abandoned trace draft goes
+  // with it. Returns { session, discarded } — the closed record, or the
+  // pre-delete snapshot when discarded.
   async function endSession() {
     const session = await getOpenSession();
     if (!session) throw new Error('endSession: no open session');
+    const count = await countObservationsForSession(db, session.id);
+    if (count === 0) {
+      await deleteSessionWithData(db, session.id);
+      return { session, discarded: true };
+    }
     const closed = closeSession(session, nowIso());
     await putSession(db, closed);
-    return closed;
+    return { session: closed, discarded: false };
   }
 
   // Load a past (or imported) session back into the capture interface so it

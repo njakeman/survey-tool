@@ -49,12 +49,25 @@ describe('SessionBar — open session', () => {
 
   test('End session requires a second confirming tap before onEnd fires', () => {
     const onEnd = vi.fn();
+    render(html`<${SessionBar} session=${session} observationCount=${3} onEnd=${onEnd} />`);
+
+    fireEvent.click(screen.getByRole('button', { name: /end session/i }));
+    expect(onEnd).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm end session' }));
+    expect(onEnd).toHaveBeenCalledTimes(1);
+  });
+
+  test('ending with nothing recorded says the session will be discarded, still two-tap', () => {
+    // endSession deletes an empty session rather than closing it; the
+    // confirm step is where the surveyor learns that, before it happens.
+    const onEnd = vi.fn();
     render(html`<${SessionBar} session=${session} observationCount=${0} onEnd=${onEnd} />`);
 
     fireEvent.click(screen.getByRole('button', { name: /end session/i }));
     expect(onEnd).not.toHaveBeenCalled();
 
-    fireEvent.click(screen.getByRole('button', { name: /confirm/i }));
+    fireEvent.click(screen.getByRole('button', { name: /nothing recorded — discard session/i }));
     expect(onEnd).toHaveBeenCalledTimes(1);
   });
 });

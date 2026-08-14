@@ -26,6 +26,14 @@ export async function buildSessionExport(db, { sessionId, appVersion, gridRef })
   }
 
   const observations = await listObservationsForSession(db, sessionId);
+  // A metadata-only zip is nothing to share — and the stamp it would earn
+  // (lastExportCount: 0) made countUnexported read the session as fully
+  // Exported, purge-eligible included. Both UI surfaces disable Export at
+  // zero; this is the seam that guarantees it. Import stays permissive for
+  // pre-fix zero-feature files.
+  if (observations.length === 0) {
+    throw new Error('Nothing to export — the session has no observations');
+  }
 
   // Photos are resolved before the GeoJSON is serialised so the two can't
   // disagree: an orphan photoId (record missing) is skipped rather than

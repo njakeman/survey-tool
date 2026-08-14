@@ -244,11 +244,18 @@ export function SessionHistoryPage({
         <button
           type="button"
           class="button-primary session-history-export"
-          disabled=${exportState === 'exporting'}
+          disabled=${exportState === 'exporting' || selected.observations.length === 0}
           onClick=${handleExport}
         >
           ${exportState === 'exporting' ? 'Exporting…' : 'Export'}
         </button>
+        ${
+          // Reachable only for empty sessions from before ending-discards-
+          // them — exactly who needs the reason (the Load-hint precedent).
+          selected.observations.length === 0
+            ? html`<p class="session-history-export-hint">Nothing recorded in this session</p>`
+            : null
+        }
         ${
           exportMessage
             ? html`<p class="session-history-export-message" role="status">

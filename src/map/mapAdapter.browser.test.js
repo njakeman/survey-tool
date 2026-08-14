@@ -569,6 +569,22 @@ describe('an online imagery region whose server is unreachable', () => {
     expect(adapter.container.querySelector('canvas')).toBeTruthy();
   });
 
+  test('a carried view opens there, not at the provider centre — the region-switch case', async () => {
+    // The reported bug: switching to Esri imagery relocated the map to the
+    // shared GB-centroid opening centre (54.5, -2.5). A view carried from
+    // the outgoing map must win over it, zoom included.
+    const adapter = await createOnlineAdapter({
+      onError: () => {},
+      view: { center: [-0.25, 51.5], zoom: 14 },
+    });
+    await adapter.ready;
+
+    const { lat, lon } = adapter.getCenter();
+    expect(lon).toBeCloseTo(-0.25, 4);
+    expect(lat).toBeCloseTo(51.5, 4);
+    expect(adapter.getZoom()).toBe(14);
+  });
+
   test('overlays and feature layers still work over the missing imagery', async () => {
     const adapter = await createOnlineAdapter({ onError: () => {} });
     await adapter.ready;
@@ -833,5 +849,49 @@ describe('opening viewport fitted to session data (the history map)', () => {
     expect(lon).toBeLessThanOrEqual(0.5);
     expect(lat).toBeGreaterThanOrEqual(51);
     expect(lat).toBeLessThanOrEqual(52);
+  });
+});
+
+describe('opening viewport carried over a region switch (the view option)', () => {
+  // The vector fixture covers lon -1..0.5, lat 51..52.
+
+  test('a view inside the archive opens exactly there, zoom preserved — not survey zoom', async () => {
+    const adapter = await createAdapter({ view: { center: [-0.5, 51.5], zoom: 13 } });
+    await adapter.ready;
+
+    const { lat, lon } = adapter.getCenter();
+    expect(lon).toBeCloseTo(-0.5, 4);
+    expect(lat).toBeCloseTo(51.5, 4);
+    expect(adapter.getZoom()).toBe(13);
+  });
+
+  test('a view outside the archive clamps to its coverage rather than leaving the tiles', async () => {
+    // The clamp is MapLibre's own maxBounds behaviour — this test is what
+    // lets the rest of the code rely on it instead of assuming.
+    const adapter = await createAdapter({ view: { center: [10, 40], zoom: 13 } });
+    await adapter.ready;
+
+    const { lat, lon } = adapter.getCenter();
+    expect(lon).toBeGreaterThanOrEqual(-1);
+    expect(lon).toBeLessThanOrEqual(0.5);
+    expect(lat).toBeGreaterThanOrEqual(51);
+    expect(lat).toBeLessThanOrEqual(52);
+  });
+
+  test('an explicit fit outranks a carried view — the history map owns its opening frame', async () => {
+    const adapter = await createAdapter({
+      fit: [
+        [-0.5, 51.3],
+        [-0.3, 51.5],
+      ],
+      view: { center: [0.4, 51.9], zoom: 8 },
+    });
+    await adapter.ready;
+
+    const { lat, lon } = adapter.getCenter();
+    expect(lon).toBeGreaterThan(-0.5);
+    expect(lon).toBeLessThan(-0.3);
+    expect(lat).toBeGreaterThan(51.3);
+    expect(lat).toBeLessThan(51.5);
   });
 });
