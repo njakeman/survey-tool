@@ -9,6 +9,7 @@ import {
   updateObservationNote,
   deleteObservation,
 } from './observationStore.js';
+import { putSession, getSession } from './sessionStore.js';
 import { createObservation } from '../domain/observation.js';
 
 function makeObservation(overrides = {}) {
@@ -126,6 +127,26 @@ describe('updateObservationNote', () => {
   test('throws when the observation does not exist, rather than silently creating one', async () => {
     const db = await openDatabase('obs-store-update-note-missing');
     await expect(updateObservationNote(db, 'nope', 'anything')).rejects.toThrow(/nope/);
+    db.close();
+  });
+
+  test('stamps the change marks on observation and session when given a changedAt', async () => {
+    // An edit after an export makes that export stale; the badge derives it
+    // from these two stamps (isChangedSinceExport / hasChangedSinceExport).
+    const db = await openDatabase('obs-store-update-note-stamps');
+    await putSession(db, {
+      id: 'sess-1',
+      name: 'Site A',
+      startedAt: '2026-08-06T09:00:00.000Z',
+      endedAt: null,
+      status: 'open',
+    });
+    await putObservation(db, makeObservation({ note: 'gate post' }));
+
+    await updateObservationNote(db, 'obs-1', 'gate post, hinge broken', '2026-08-14T10:00:00.000Z');
+
+    expect((await getObservation(db, 'obs-1')).changedAt).toBe('2026-08-14T10:00:00.000Z');
+    expect((await getSession(db, 'sess-1')).changedSinceExportAt).toBe('2026-08-14T10:00:00.000Z');
     db.close();
   });
 });

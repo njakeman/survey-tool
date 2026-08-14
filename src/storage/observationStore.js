@@ -25,17 +25,29 @@ export function deleteObservation(db, id) {
   return db.delete('observations', id);
 }
 
-// The one field a surveyor can amend after saving: the note. A
-// read-modify-write in a single transaction, and a missing id throws rather
-// than upserting — editing is only ever offered on a row that exists, so a
-// miss is a bug worth hearing about, not a record worth inventing.
-export async function updateObservationNote(db, id, note) {
-  const tx = db.transaction('observations', 'readwrite');
-  const observation = await tx.store.get(id);
+// The note, amendable after saving. A read-modify-write in a single
+// transaction, and a missing id throws rather than upserting — editing is
+// only ever offered on a row that exists, so a miss is a bug worth hearing
+// about, not a record worth inventing. When `changedAt` is given the edit
+// also stamps the change marks (observation.changedAt +
+// session.changedSinceExportAt) that flag a stale export — same pair as
+// photoWrite.js.
+export async function updateObservationNote(db, id, note, changedAt = null) {
+  const stores = changedAt ? ['observations', 'sessions'] : ['observations'];
+  const tx = db.transaction(stores, 'readwrite');
+  const observations = tx.objectStore('observations');
+  const observation = await observations.get(id);
   if (!observation) {
     throw new Error(`updateObservationNote: no observation with id ${id}`);
   }
-  await tx.store.put({ ...observation, note });
+  observations.put(changedAt ? { ...observation, note, changedAt } : { ...observation, note });
+  if (changedAt) {
+    const sessions = tx.objectStore('sessions');
+    const session = await sessions.get(observation.sessionId);
+    if (session) {
+      sessions.put({ ...session, changedSinceExportAt: changedAt });
+    }
+  }
   await tx.done;
 }
 

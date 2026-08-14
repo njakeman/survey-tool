@@ -5,11 +5,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project status
 
 Built and field-usable offline: capture (GPS/compass readings, photo, voice note, save — with
-in-place **note editing** on the open session's rows only, `updateNote`/`updateObservationNote`;
-history stays read-only), session
+in-place **note editing** and **photo retake/delete/add** on the open session's rows only
+(`updateNote`, `setPhoto`/`deletePhoto` over `storage/photoWrite.js`; the photo edits live in
+the full-screen view, which renders through `BodyPortal` in `ObservationsList.js` — NOT
+`preact/compat`'s createPortal, whose import re-aliases `onChange` app-wide as a side effect);
+history stays read-only by not being passed the callbacks), session
 history, zip export and **import** (always a copy under fresh ids; the **Exported** badge —
 `src/ui/ExportBadge.js` — derives from `lastExportedAt`/`lastExportCount`, stamped only by a
-completed export), **Load session** (history detail → `reopenSession`, the deliberate
+completed export, plus the **CHANGED SINCE EXPORT** third state below), **Load session**
+(history detail → `reopenSession`, the deliberate
 continuation path import is not: refuses while any session is open — an unguarded reopen would
 silently steal capture via `findOpenSession` — keeps the export stamps, and signals the
 always-mounted CapturePage through App's `sessionEpoch` bump, which also clears Undo),
@@ -381,10 +385,17 @@ standalone })`, browser globals injected same as `probe/capabilities.js`, so it'
   arrives closed, and every feature is validated back through `createObservation` so a malformed
   file fails on the tap with a named reason. It never overwrites, merges, or deletes.
 - The exported-or-not distinction must stay visible wherever observations are shown (list rows,
-  history, map markers — filled vs hollow). It derives entirely from `lastExportedAt` +
-  `lastExportCount` on the session, stamped by a completed export (`markSessionExported`) — never
-  from per-observation writes. A dismissed share sheet stamps nothing. The observation
-  `synced`/`syncedAt` fields still exist in stored records, unused — leave them.
+  history, map markers — filled vs hollow). It derives from `lastExportedAt` +
+  `lastExportCount` on the session, stamped by a completed export (`markSessionExported`). A
+  dismissed share sheet stamps nothing. **Amended (design pass 4, user decision 2026-08-14)**:
+  post-save edits — a photo retake/delete/add or a note edit — additionally stamp `changedAt`
+  on the observation and `changedSinceExportAt` on the session (`storage/photoWrite.js`,
+  `updateObservationNote`), which the badge compares against `lastExportedAt` to show
+  **CHANGED SINCE EXPORT** (`isChangedSinceExport`/`hasChangedSinceExport`, domain/session.js).
+  A changed session must not purge as fully exported; nothing is ever cleared — a completed
+  re-export resolves the state by moving `lastExportedAt` past the stamp. These two fields are
+  the only per-observation/deliberate second writer; do not add a third quietly. The
+  observation `synced`/`syncedAt` fields still exist in stored records, unused — leave them.
 - `domain/geojson.js` emits the session itself as a `survey_session` foreign member (RFC 7946) —
   it is what makes exports importable with fidelity. No exported-at timestamp goes **inside** the
   file: identical data must keep producing identical bytes.
@@ -415,6 +426,8 @@ standalone })`, browser globals injected same as `probe/capabilities.js`, so it'
   which rows happened to be linked. Read with `?? null`, because records predating the fields would
   otherwise export `undefined`, which `canonicalStringify` drops. Note this changed the exported
   bytes of existing sessions — free while nothing diffs old exports against new ones.
+  `audio_duration_ms` (design pass 4) follows the same rules: on every observation, `?? null`,
+  parsed back on import; `changedAt`/`changedSinceExportAt` are deliberately NOT exported.
 - **A position can be marked on the map instead of measured**, for a thing the surveyor can see
   but not reach. It produces an ordinary observation — the data model gains exactly one field,
   `positionSource` (`'gps' | 'map'`) — but `gpsAccuracyM` then holds the **map precision at the

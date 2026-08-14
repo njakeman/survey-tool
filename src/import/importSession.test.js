@@ -59,7 +59,12 @@ async function seedSession(dbName, { withPhoto = true, endSession = true } = {})
     heading: null,
     note: 'stile',
     photo: null,
-    audio: { blob: new Blob([new Uint8Array([9, 8, 7])], { type: 'audio/webm;codecs=opus' }) },
+    audio: {
+      blob: new Blob([new Uint8Array([9, 8, 7])], { type: 'audio/webm;codecs=opus' }),
+      // Round-trips as audio_duration_ms, so the copy's voice chip can still
+      // read 0:12 without loading the blob.
+      durationMs: 12_400,
+    },
     pickedPoint: { lat: 51.61, lon: -0.16, accuracyM: 12 },
   });
   if (endSession) await service.endSession();
@@ -243,6 +248,31 @@ describe('parseSessionExport rejections and tolerance', () => {
 
     expect(parsed.observations[0].photoId).toBe(null);
     expect(parsed.photos).toHaveLength(0);
+  });
+
+  test('an export from before audio_duration_ms existed still imports, duration null', () => {
+    const text = JSON.stringify({
+      type: 'FeatureCollection',
+      survey_session: { id: 's', name: 'S', started_at: FIXED_NOW, ended_at: FIXED_NOW },
+      features: [
+        {
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [-0.14, 51.5] },
+          properties: {
+            obs_id: 'o1',
+            recorded_at: FIXED_NOW,
+            fix_at: FIXED_NOW,
+            lat: 51.5,
+            lon: -0.14,
+            gps_accuracy_m: 5,
+          },
+        },
+      ],
+    });
+
+    const parsed = parseSessionExport([entry('session.geojson', text)]);
+
+    expect(parsed.observations[0].audioDurationMs).toBeNull();
   });
 
   test('reconstructs the session from features when survey_session is absent (older zips)', () => {

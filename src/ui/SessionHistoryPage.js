@@ -1,7 +1,12 @@
 import { html } from 'htm/preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { formatDate } from '../sensors/format.js';
-import { isExported, countUnexported } from '../domain/session.js';
+import {
+  isExported,
+  countUnexported,
+  isChangedSinceExport,
+  hasChangedSinceExport,
+} from '../domain/session.js';
 import { ObservationsList } from './ObservationsList.js';
 import { ExportBadge } from './ExportBadge.js';
 import { HistoryMap } from './HistoryMap.js';
@@ -109,7 +114,11 @@ export function SessionHistoryPage({
     const observations = await service.listObservations(session.id);
     setSelected({
       session,
-      observations: observations.map((obs) => ({ ...obs, exported: isExported(session, obs) })),
+      observations: observations.map((obs) => ({
+        ...obs,
+        exported: isExported(session, obs),
+        changed: isChangedSinceExport(session, obs),
+      })),
     });
     setExportState('idle');
     setExportMessage('');
@@ -196,6 +205,7 @@ export function SessionHistoryPage({
             observations: current.observations.map((obs) => ({
               ...obs,
               exported: isExported(session, obs),
+              changed: isChangedSinceExport(session, obs),
             })),
           };
         });
@@ -225,6 +235,7 @@ export function SessionHistoryPage({
               countUnexported(selected.session, selected.observations.length) === 0 &&
               Boolean(selected.session.lastExportedAt)
             }
+            changed=${hasChangedSinceExport(selected.session)}
           />
         </p>
         <${HistoryMap}
@@ -348,7 +359,12 @@ export function SessionHistoryPage({
   // How many listed sessions are fully exported — the badge predicate, so
   // the purge can only ever remove what already reads Exported on screen.
   const fullyExported = visible.filter(
-    (s) => countUnexported(s, counts[s.id] ?? 0) === 0 && Boolean(s.lastExportedAt),
+    (s) =>
+      countUnexported(s, counts[s.id] ?? 0) === 0 &&
+      Boolean(s.lastExportedAt) &&
+      // Edited since that export — the zip on disk is stale, so it must not
+      // count (or purge) as fully exported until re-exported.
+      !hasChangedSinceExport(s),
   ).length;
 
   return html`
@@ -393,6 +409,7 @@ export function SessionHistoryPage({
                               countUnexported(session, counts[session.id] ?? 0) === 0 &&
                               Boolean(session.lastExportedAt)
                             }
+                            changed=${hasChangedSinceExport(session)}
                           />
                           <span class="session-history-chevron" aria-hidden="true">›</span>
                         </button>

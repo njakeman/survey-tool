@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/preact';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/preact';
 import { html } from 'htm/preact';
 import { SessionHistoryPage } from './SessionHistoryPage.js';
 
@@ -104,6 +104,29 @@ describe('SessionHistoryPage — list', () => {
 
     await screen.findByText('Site A');
     expect(screen.queryByText(/not yet exported/i)).not.toBeInTheDocument();
+  });
+
+  test('a session edited after its export reads Changed since export in the list', async () => {
+    // A photo retake (or note edit) after an export makes the zip on
+    // someone's laptop stale — the badge says so instead of "Exported".
+    const service = createFakeService({
+      sessions: [
+        {
+          ...CLOSED_A,
+          lastExportedAt: '2026-08-05T12:00:00.000Z',
+          lastExportCount: 1,
+          changedSinceExportAt: '2026-08-05T13:00:00.000Z',
+        },
+      ],
+      observationsBySession: { 'sess-a': [OBS] },
+    });
+    render(
+      html`<${SessionHistoryPage} service=${service} exportSession=${vi.fn()} onBack=${vi.fn()} />`,
+    );
+
+    await screen.findByText('Site A');
+    expect(screen.getByText(/changed since export/i)).toBeInTheDocument();
+    expect(screen.queryByText(/^Exported$/)).not.toBeInTheDocument();
   });
 
   test('lists multiple past sessions newest first', async () => {
@@ -230,9 +253,16 @@ describe('SessionHistoryPage — detail', () => {
     await screen.findByText('Site A');
     fireEvent.click(screen.getByRole('button', { name: /Site A/ }));
 
-    fireEvent.click(await screen.findByRole('button', { name: /show photo/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Photo' }));
 
     await waitFor(() => expect(service.getPhoto).toHaveBeenCalledWith('obs-1'));
+
+    // Reads only: history passes no onSetPhoto/onDeletePhoto, so the full
+    // view offers no Retake or Delete (design pass 4 §7e).
+    fireEvent.click(await screen.findByRole('img', { name: /photo for this observation/i }));
+    const dialog = screen.getByRole('dialog', { name: /photo/i });
+    expect(within(dialog).queryByText(/retake/i)).toBeNull();
+    expect(within(dialog).queryByText(/delete/i)).toBeNull();
   });
 
   test('a pre-fix empty session offers no live Export — disabled, with the reason beside it', async () => {

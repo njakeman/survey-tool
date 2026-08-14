@@ -99,6 +99,20 @@ describe('ObservationsList', () => {
     render(html`<${ObservationsList} observations=${[OBS_NO_PHOTO, OBS_WITH_PHOTO]} />`);
     expect(screen.getAllByRole('listitem')).toHaveLength(2);
   });
+
+  test('an observation edited after its export reads Changed since export, not Exported', () => {
+    // The export on someone's laptop no longer matches this record — a third
+    // badge state (design pass 4), never a silent "Exported" lie.
+    render(
+      html`<${ObservationsList}
+        observations=${[{ ...OBS_NO_PHOTO, exported: true, changed: true }]}
+      />`,
+    );
+
+    const [row] = screen.getAllByRole('listitem');
+    expect(within(row).getByText(/changed since export/i)).toBeInTheDocument();
+    expect(within(row).queryByText(/^Exported$/)).not.toBeInTheDocument();
+  });
 });
 
 describe('ObservationsList — grid references', () => {
@@ -263,14 +277,14 @@ describe('ObservationsList — viewing a photo', () => {
     render(html`<${ObservationsList} observations=${[OBS_WITH_PHOTO]} />`);
 
     expect(screen.getByText(/photo/i)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /show photo/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /photo/i })).toBeNull();
   });
 
   test('Show photo fetches the photo once and renders it as a thumbnail', async () => {
     const loadPhoto = vi.fn().mockResolvedValue(photoRecord);
     render(html`<${ObservationsList} observations=${[OBS_WITH_PHOTO]} loadPhoto=${loadPhoto} />`);
 
-    fireEvent.click(screen.getByRole('button', { name: /show photo/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Photo' }));
 
     const img = await screen.findByRole('img', { name: /photo for this observation/i });
     expect(loadPhoto).toHaveBeenCalledWith('obs-2');
@@ -283,7 +297,7 @@ describe('ObservationsList — viewing a photo', () => {
     const loadPhoto = vi.fn().mockResolvedValue(undefined);
     render(html`<${ObservationsList} observations=${[OBS_WITH_PHOTO]} loadPhoto=${loadPhoto} />`);
 
-    fireEvent.click(screen.getByRole('button', { name: /show photo/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Photo' }));
 
     await waitFor(() => expect(screen.getByText(/photo could not be loaded/i)).toBeInTheDocument());
   });
@@ -292,7 +306,7 @@ describe('ObservationsList — viewing a photo', () => {
     const loadPhoto = vi.fn().mockRejectedValue(new Error('gone'));
     render(html`<${ObservationsList} observations=${[OBS_WITH_PHOTO]} loadPhoto=${loadPhoto} />`);
 
-    fireEvent.click(screen.getByRole('button', { name: /show photo/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Photo' }));
 
     await waitFor(() => expect(screen.getByText(/photo could not be loaded/i)).toBeInTheDocument());
   });
@@ -301,7 +315,7 @@ describe('ObservationsList — viewing a photo', () => {
     const loadPhoto = vi.fn().mockResolvedValue(photoRecord);
     render(html`<${ObservationsList} observations=${[OBS_WITH_PHOTO]} loadPhoto=${loadPhoto} />`);
 
-    fireEvent.click(screen.getByRole('button', { name: /show photo/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Photo' }));
     fireEvent.click(await screen.findByRole('img', { name: /photo for this observation/i }));
 
     const dialog = screen.getByRole('dialog', { name: /photo/i });
@@ -309,13 +323,34 @@ describe('ObservationsList — viewing a photo', () => {
     expect(full).toHaveAttribute('src', savedUrls[0]);
     // One fetch, one URL — the lightbox reuses the thumbnail's decode.
     expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
+    // Portalled to the body (design pass 4 §7c): a row-owned fixed overlay
+    // is one ancestor filter away from laying out inside its own <li>.
+    expect(dialog.closest('li')).toBeNull();
+    expect(document.body.contains(dialog)).toBe(true);
+  });
+
+  test('the full view captions the record — time and grid reference', async () => {
+    const loadPhoto = vi.fn().mockResolvedValue(photoRecord);
+    render(
+      html`<${ObservationsList}
+        observations=${[OBS_WITH_PHOTO]}
+        loadPhoto=${loadPhoto}
+        gridRef=${() => 'TQ 30619 06075'}
+      />`,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Photo' }));
+    fireEvent.click(await screen.findByRole('img', { name: /photo for this observation/i }));
+
+    const dialog = screen.getByRole('dialog', { name: /photo/i });
+    expect(dialog.querySelector('.photo-lightbox-caption')).toHaveTextContent('TQ 30619 06075');
   });
 
   test('Close shuts the full-screen view; the thumbnail stays', async () => {
     const loadPhoto = vi.fn().mockResolvedValue(photoRecord);
     render(html`<${ObservationsList} observations=${[OBS_WITH_PHOTO]} loadPhoto=${loadPhoto} />`);
 
-    fireEvent.click(screen.getByRole('button', { name: /show photo/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Photo' }));
     fireEvent.click(await screen.findByRole('img', { name: /photo for this observation/i }));
     fireEvent.click(screen.getByRole('button', { name: /close/i }));
 
@@ -327,7 +362,7 @@ describe('ObservationsList — viewing a photo', () => {
     const loadPhoto = vi.fn().mockResolvedValue(photoRecord);
     render(html`<${ObservationsList} observations=${[OBS_WITH_PHOTO]} loadPhoto=${loadPhoto} />`);
 
-    fireEvent.click(screen.getByRole('button', { name: /show photo/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Photo' }));
     fireEvent.click(await screen.findByRole('img', { name: /photo for this observation/i }));
     fireEvent.click(screen.getByRole('dialog', { name: /photo/i }));
 
@@ -340,7 +375,7 @@ describe('ObservationsList — viewing a photo', () => {
       html`<${ObservationsList} observations=${[OBS_WITH_PHOTO]} loadPhoto=${loadPhoto} />`,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /show photo/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Photo' }));
     await screen.findByRole('img', { name: /photo for this observation/i });
     // Flush the url effect so its cleanup is registered before unmount —
     // Preact schedules effects asynchronously.
@@ -391,11 +426,184 @@ describe('ObservationsList — voice-note lifecycle', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: /voice note/i }));
-    await waitFor(() => expect(container.querySelector('audio')).not.toBeNull());
+    await waitFor(() => expect(container.querySelector('.voice-transport')).not.toBeNull());
     await act(() => {});
     unmount();
 
     expect(URL.revokeObjectURL).toHaveBeenCalledWith(savedUrls[0]);
+  });
+});
+
+describe('ObservationsList — retake, delete and add photo (design pass 4 §7e)', () => {
+  beforeEach(() => {
+    URL.createObjectURL = vi.fn(() => 'blob:fake-0');
+    URL.revokeObjectURL = vi.fn();
+  });
+  afterEach(() => {
+    delete URL.createObjectURL;
+    delete URL.revokeObjectURL;
+  });
+
+  const photoRecord = { id: 'obs-2', contentType: 'image/jpeg', blob: new Blob(['x']) };
+  const FILE = new File(['bytes'], 'photo.jpg', { type: 'image/jpeg' });
+
+  async function openFullView(extraProps = {}) {
+    const loadPhoto = vi.fn().mockResolvedValue(photoRecord);
+    render(
+      html`<${ObservationsList}
+        observations=${[OBS_WITH_PHOTO]}
+        loadPhoto=${loadPhoto}
+        onSetPhoto=${extraProps.onSetPhoto}
+        onDeletePhoto=${extraProps.onDeletePhoto}
+      />`,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Photo' }));
+    fireEvent.click(await screen.findByRole('img', { name: /photo for this observation/i }));
+    return screen.getByRole('dialog', { name: /photo/i });
+  }
+
+  test('without the callbacks the full view is read-only — no Retake, no Delete', async () => {
+    // History passes neither; absence is the read-only flag, as with
+    // onEditNote.
+    const dialog = await openFullView();
+
+    expect(within(dialog).queryByText(/retake/i)).toBeNull();
+    expect(within(dialog).queryByText(/delete/i)).toBeNull();
+  });
+
+  test('Retake hands the picked file up and keeps the view open', async () => {
+    const onSetPhoto = vi.fn().mockResolvedValue(undefined);
+    const dialog = await openFullView({ onSetPhoto, onDeletePhoto: vi.fn() });
+
+    const input = dialog.querySelector('input[capture="environment"]');
+    fireEvent.change(input, { target: { files: [FILE] } });
+
+    await waitFor(() => expect(onSetPhoto).toHaveBeenCalledWith('obs-2', FILE));
+    // Retaking keeps the view open so the second attempt can be judged.
+    expect(screen.getByRole('dialog', { name: /photo/i })).toBeInTheDocument();
+  });
+
+  test('Delete is two-step: the confirm replaces the action row, Keep it escapes', async () => {
+    const onDeletePhoto = vi.fn();
+    const dialog = await openFullView({ onSetPhoto: vi.fn(), onDeletePhoto });
+
+    fireEvent.click(within(dialog).getByRole('button', { name: /^delete$/i }));
+
+    // The commit takes the row; Retake leaves while the confirm is up.
+    expect(within(dialog).getByRole('button', { name: /delete photo/i })).toBeInTheDocument();
+    expect(within(dialog).queryByText(/retake/i)).toBeNull();
+    expect(onDeletePhoto).not.toHaveBeenCalled();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: /keep it/i }));
+
+    expect(within(dialog).queryByRole('button', { name: /delete photo/i })).toBeNull();
+    expect(within(dialog).getByText(/retake/i)).toBeInTheDocument();
+  });
+
+  test('confirming Delete photo hands up and closes the view — nothing left to look at', async () => {
+    const onDeletePhoto = vi.fn().mockResolvedValue(undefined);
+    const dialog = await openFullView({ onSetPhoto: vi.fn(), onDeletePhoto });
+
+    fireEvent.click(within(dialog).getByRole('button', { name: /^delete$/i }));
+    fireEvent.click(within(dialog).getByRole('button', { name: /delete photo/i }));
+
+    await waitFor(() => expect(onDeletePhoto).toHaveBeenCalledWith('obs-2'));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  test('a row without a photo offers Add photo — only when onSetPhoto is provided', () => {
+    const onSetPhoto = vi.fn();
+    render(html`<${ObservationsList} observations=${[OBS_NO_PHOTO]} onSetPhoto=${onSetPhoto} />`);
+
+    const label = screen.getByText(/add photo/i).closest('label');
+    const input = label.querySelector('input[capture="environment"]');
+    fireEvent.change(input, { target: { files: [FILE] } });
+
+    expect(onSetPhoto).toHaveBeenCalledWith('obs-1', FILE);
+  });
+
+  test('without onSetPhoto an empty photo slot stays empty — history stays read-only', () => {
+    render(html`<${ObservationsList} observations=${[OBS_NO_PHOTO]} />`);
+
+    expect(screen.queryByText(/add photo/i)).toBeNull();
+  });
+
+  test('a repointed photoId (a retake) refetches and revokes the stale URL', async () => {
+    const loadPhoto = vi
+      .fn()
+      .mockResolvedValueOnce(photoRecord)
+      .mockResolvedValueOnce({ id: 'photo-2', contentType: 'image/jpeg', blob: new Blob(['y']) });
+    const { rerender } = render(
+      html`<${ObservationsList} observations=${[OBS_WITH_PHOTO]} loadPhoto=${loadPhoto} />`,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Photo' }));
+    await screen.findByRole('img', { name: /photo for this observation/i });
+    await act(() => {});
+
+    rerender(
+      html`<${ObservationsList}
+        observations=${[{ ...OBS_WITH_PHOTO, photoId: 'photo-2' }]}
+        loadPhoto=${loadPhoto}
+      />`,
+    );
+
+    await waitFor(() => expect(loadPhoto).toHaveBeenCalledWith('photo-2'));
+  });
+});
+
+describe('ObservationsList — the voice chip (design pass 4 §7a/7b)', () => {
+  beforeEach(() => {
+    URL.createObjectURL = vi.fn(() => 'blob:audio-0');
+    URL.revokeObjectURL = vi.fn();
+  });
+  afterEach(() => {
+    delete URL.createObjectURL;
+    delete URL.revokeObjectURL;
+  });
+
+  const OBS_WITH_AUDIO = {
+    id: 'obs-3',
+    fixAt: '2026-08-06T10:00:00.000Z',
+    lat: 51.5,
+    lon: -0.14,
+    gpsAccuracyM: 8,
+    headingDeg: null,
+    note: '',
+    photoId: null,
+    audioId: 'obs-3',
+  };
+
+  test('the chip reads the stored duration — the thing that decides play now or later', () => {
+    render(
+      html`<${ObservationsList}
+        observations=${[{ ...OBS_WITH_AUDIO, audioDurationMs: 12_400 }]}
+        loadAudio=${vi.fn()}
+      />`,
+    );
+
+    expect(screen.getByRole('button', { name: /voice note.*0:12/i })).toBeInTheDocument();
+  });
+
+  test('a legacy note without a stored duration reads Voice note until tapped', () => {
+    render(html`<${ObservationsList} observations=${[OBS_WITH_AUDIO]} loadAudio=${vi.fn()} />`);
+
+    expect(screen.getByRole('button', { name: 'Voice note' })).toBeInTheDocument();
+  });
+
+  test('tapping the chip loads the note into the shared transport, with no delete control', async () => {
+    // 7b: deleting a voice note off a saved observation is a different act
+    // from abandoning one mid-compose, and is not offered on a scanned row.
+    const loadAudio = vi
+      .fn()
+      .mockResolvedValue({ id: 'obs-3', contentType: 'audio/mp4', blob: new Blob(['x']) });
+    const { container } = render(
+      html`<${ObservationsList} observations=${[OBS_WITH_AUDIO]} loadAudio=${loadAudio} />`,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /voice note/i }));
+
+    await waitFor(() => expect(container.querySelector('.voice-transport')).not.toBeNull());
+    expect(screen.queryByRole('button', { name: /delete voice note/i })).toBeNull();
   });
 });
 

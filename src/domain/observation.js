@@ -111,6 +111,15 @@ export function createObservation({
   // point — a path's distance-midpoint, a boundary's centroid — and
   // gpsAccuracyM the worst vertex accuracy of the walk.
   geometry = null,
+  // The voice note's length, measured at record time — the one thing that
+  // decides whether you play it now or later, so a list row can say 0:12
+  // without loading the blob.
+  audioDurationMs = null,
+  // Stamped when a saved observation is edited after the fact (photo
+  // retaken/deleted/added, note amended). Compared against the session's
+  // lastExportedAt to mark records whose export is stale — see
+  // isChangedSinceExport in session.js.
+  changedAt = null,
 }) {
   if (!id) throw new Error('createObservation: id is required');
   if (!sessionId) throw new Error('createObservation: sessionId is required');
@@ -146,6 +155,12 @@ export function createObservation({
   }
   if (geometry) validateGeometry(geometry);
 
+  if (audioDurationMs !== null && (!Number.isFinite(audioDurationMs) || audioDurationMs < 0)) {
+    throw new Error(
+      `createObservation: audioDurationMs must be a non-negative number or null (got ${audioDurationMs})`,
+    );
+  }
+
   // Both halves or neither. A feature id without its layer cannot be joined
   // back to any dataset; a layer without a feature says only "somewhere in
   // there". Either half on its own is worse than nothing, because it looks
@@ -179,6 +194,8 @@ export function createObservation({
     featureLabel: linked ? featureLabel : null,
     positionSource,
     geometry,
+    audioDurationMs,
+    changedAt,
     synced: false,
     syncedAt: null,
   };

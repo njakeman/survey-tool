@@ -575,3 +575,28 @@ read-only map above the list, on whichever basemap is currently active.
       changes while the app is open
 - [ ] Night still enters and leaves only by its own tap; leaving Night lands on whatever the
       row says, never on a surprise scheme
+
+## Design pass 4: the saved row, the transport, the photo view (2026-08-14)
+
+- [ ] The Photo button no longer overhangs its column, and Photo · Voice note sit at equal
+      heights (the box-sizing fix — check the basemap picker rows and the history button too)
+- [ ] Rotate to landscape mid-session: the map shrinks and the readings, note and Save stay
+      reachable — the app draws, compressed, rather than refusing
+- [ ] A saved row shows one attachment line: photo chip, voice chip (with its duration for a
+      new recording), Edit note at the right — three stacked orange links gone
+- [ ] Tap the photo chip: a 64px square thumbnail, not a 180px block
+- [ ] Tap the thumbnail: the full-screen view **covers the whole page** — the original bug —
+      with the ✕ top-right inside the notch inset, and the time · grid ref caption
+- [ ] Retake opens the camera directly; after shooting, the open view swaps to the new image
+- [ ] Delete asks (Delete photo / Keep it, replacing Retake's row), closes on commit, and the
+      row then offers Add photo as a link; adding one lands back on a chip
+- [ ] On an exported session, a retake flips the row (and the session in history) to
+      CHANGED SINCE EXPORT; re-exporting returns it to ✓ EXPORTED; "Delete exported sessions"
+      refuses it while changed
+- [ ] Voice note recording: the bars animate as a repeating pattern with the timer counting;
+      Stop is the accent; the recorded row is the drawn transport (play/pause, bars darkening
+      with position, times) — no grey iOS pill anywhere
+- [ ] A voice note on a saved row: chip → transport on tap; plays and pauses on iOS; a note
+      recorded before this pass reads "Voice note" on its chip and still plays
+- [ ] An old export (no audio_duration_ms) still imports; a new export imported back shows the
+      duration on the copy's chip

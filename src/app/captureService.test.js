@@ -326,6 +326,30 @@ describe('deleteExportedSessions', () => {
     expect(await service.deleteExportedSessions()).toEqual({ deletedCount: 0 });
     expect(await service.listSessions()).toHaveLength(1);
   });
+
+  test('refuses a session edited after its export — the export on disk is stale', async () => {
+    const { db, service } = await makeDbService('capture-service-purge-changed');
+    const session = await service.startSession('Edited after export');
+    const saved = await service.saveObservation({
+      reading: READING,
+      heading: null,
+      note: '',
+      photo: null,
+    });
+    await service.endSession();
+    await stampExported(db, session.id, 1);
+    // The edit lands after the export stamp (FIXED_NOW < the stamp, so use a
+    // later service clock for the edit itself).
+    const later = createCaptureService({
+      db,
+      newId: fakeIdGenerator('late'),
+      nowIso: () => '2026-08-06T13:00:00.000Z',
+    });
+    await later.updateNote(saved.id, 'amended');
+
+    expect(await service.deleteExportedSessions()).toEqual({ deletedCount: 0 });
+    expect(await service.listSessions()).toHaveLength(1);
+  });
 });
 
 describe('updateNote', () => {
@@ -364,6 +388,69 @@ describe('updateNote', () => {
   test('rejects on an unknown observation id', async () => {
     const service = await makeService('capture-service-update-note-missing');
     await expect(service.updateNote('nope', 'anything')).rejects.toThrow(/nope/);
+  });
+
+  test('stamps the change marks, so an export made before the edit reads stale', async () => {
+    const service = await makeService('capture-service-update-note-changed');
+    const session = await service.startSession('Ashton Keynes');
+    const saved = await service.saveObservation({
+      reading: READING,
+      heading: null,
+      note: 'gate post',
+      photo: null,
+    });
+
+    await service.updateNote(saved.id, 'hinge broken');
+
+    const [observation] = await service.listObservations(session.id);
+    expect(observation.changedAt).toBe(FIXED_NOW);
+    const [stored] = await service.listSessions();
+    expect(stored.changedSinceExportAt).toBe(FIXED_NOW);
+  });
+});
+
+describe('setPhoto / deletePhoto — the post-save photo edits', () => {
+  const JPEG = () => new Blob(['retaken jpeg'], { type: 'image/jpeg' });
+
+  test('setPhoto attaches under a fresh id and stamps the change marks', async () => {
+    const service = await makeService('capture-service-set-photo');
+    const session = await service.startSession('Ashton Keynes');
+    const saved = await service.saveObservation({
+      reading: READING,
+      heading: null,
+      note: '',
+      photo: { blob: new Blob(['first jpeg'], { type: 'image/jpeg' }) },
+    });
+
+    await service.setPhoto(saved.id, { blob: JPEG() });
+
+    const [observation] = await service.listObservations(session.id);
+    expect(observation.photoId).not.toBe(saved.photoId);
+    expect(observation.changedAt).toBe(FIXED_NOW);
+    // The old record is gone; the new one reads back.
+    expect(await service.getPhoto(saved.photoId)).toBeUndefined();
+    const photo = await service.getPhoto(observation.photoId);
+    expect(await photo.blob.text()).toBe('retaken jpeg');
+  });
+
+  test('deletePhoto clears the link, deletes the record and stamps the marks', async () => {
+    const service = await makeService('capture-service-delete-photo');
+    const session = await service.startSession('Ashton Keynes');
+    const saved = await service.saveObservation({
+      reading: READING,
+      heading: null,
+      note: '',
+      photo: { blob: JPEG() },
+    });
+
+    await service.deletePhoto(saved.id);
+
+    const [observation] = await service.listObservations(session.id);
+    expect(observation.photoId).toBeNull();
+    expect(observation.changedAt).toBe(FIXED_NOW);
+    expect(await service.getPhoto(saved.photoId)).toBeUndefined();
+    const [stored] = await service.listSessions();
+    expect(stored.changedSinceExportAt).toBe(FIXED_NOW);
   });
 });
 
@@ -443,6 +530,24 @@ describe('saveObservation', () => {
     const stored = await getPhoto(db, obs.id);
     expect(stored.contentType).toBe('image/jpeg');
     expect(await stored.blob.text()).toBe('fake jpeg bytes');
+  });
+
+  test('a voice note save carries its measured duration onto the record', async () => {
+    // The recorder measures durationMs at stop; keeping it on the observation
+    // is what lets a list row say 0:12 without loading the blob.
+    const service = await makeService('capture-service-save-audio-duration');
+    await service.startSession('Ashton Keynes');
+
+    const obs = await service.saveObservation({
+      reading: READING,
+      heading: null,
+      note: '',
+      photo: null,
+      audio: { blob: new Blob(['opus bytes'], { type: 'audio/webm' }), durationMs: 12_400 },
+    });
+
+    expect(obs.audioId).toBe(obs.id);
+    expect(obs.audioDurationMs).toBe(12_400);
   });
 
   test('position-only (no heading): headingDeg and headingAccuracyDeg are null, save succeeds', async () => {

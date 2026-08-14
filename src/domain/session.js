@@ -55,6 +55,33 @@ export function countUnexported(session, observationCount) {
   return Math.max(0, observationCount - (session.lastExportCount ?? 0));
 }
 
+// Whether one observation was edited after the export that carried it —
+// the export is then stale for this record, and the badge says so rather
+// than lying "exported" or pretending the record never left. `changedAt` is
+// stamped by the post-save edits (photo retake/delete/add, note edit); a
+// completed re-export moves lastExportedAt past it, which resolves the
+// state without ever clearing anything.
+export function isChangedSinceExport(session, observation) {
+  return (
+    Boolean(session?.lastExportedAt) &&
+    Boolean(observation.changedAt) &&
+    observation.changedAt > session.lastExportedAt
+  );
+}
+
+// The session-level twin, answerable from the session record alone (the
+// list-row rule countUnexported follows): `changedSinceExportAt` is stamped
+// alongside every observation `changedAt`, so history rows and the purge
+// predicate can refuse to treat a stale export as complete without loading
+// any observations.
+export function hasChangedSinceExport(session) {
+  return (
+    Boolean(session?.lastExportedAt) &&
+    Boolean(session.changedSinceExportAt) &&
+    session.changedSinceExportAt > session.lastExportedAt
+  );
+}
+
 // The newest open session if more than one is somehow open (ULIDs sort
 // chronologically, so the greatest id is the newest) — a surveyor in the
 // field must not be blocked by a data-integrity assertion; the newest open

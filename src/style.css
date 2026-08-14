@@ -34,6 +34,16 @@
   font-display: swap;
 }
 
+/* Design pass 4 §7d: without this, every `width: 100%` control with side
+ * padding and a border rendered wider than its track (the Photo button's
+ * 34px overhang on device was exactly that). One declaration, not per-
+ * component patches, so it cannot recur. */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 :root {
   color-scheme: light dark;
 
@@ -95,6 +105,9 @@
   --danger-strong: #7d2208;
   --danger-bg: #fdece4;
   --danger-rule: #b3300b;
+  /* The danger pair's one light-on-dark value, for the photo view's scrim —
+     #7d2208 is invisible on near-black (design pass 4 §7e). Scrim only. */
+  --danger-on-dark: #ff8a66;
 
   --suggestion-bg: #fdf6e3;
   --map-backdrop: #e8e4dc;
@@ -670,6 +683,16 @@ button {
 .capture-map-canvas {
   width: 100%;
   height: 100%;
+}
+
+/* Design pass 4 §7d: iOS cannot lock orientation in an installed PWA, so
+ * landscape has to work rather than be refused. The one thing that broke was
+ * this 300px map eating a ~390px-tall viewport — cap it and the readings,
+ * note and Save stay on the fold. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .capture-map {
+    height: 180px;
+  }
 }
 
 /* The history detail's read-only map: the capture panel's footprint (same
@@ -1733,26 +1756,32 @@ button {
   border-radius: 1px;
 }
 
-.voice-note-recorded {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  width: 100%;
-}
-
-.voice-note-recorded .voice-note-player {
+/* The recording row's activity bars: a fixed, repeating pattern —
+   deliberately NOT live levels (design pass 4, user decision), and visibly
+   so: it repeats predictably, animated only to say the microphone is on.
+   The reduced-motion guard above stills it, and the accent edge + timer
+   still carry the state. */
+.voice-note-bars {
   flex: 1;
   min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 26px;
+  overflow: hidden;
 }
 
-.voice-note-delete {
-  flex: none;
-  min-width: var(--touch-target);
-  min-height: var(--touch-target);
-  font-size: 18px;
-  background: transparent;
-  color: var(--danger-strong);
-  border: none;
+.voice-note-bars span {
+  flex: 1;
+  background: color-mix(in srgb, var(--ink) 80%, transparent);
+  border-radius: 1px;
+  animation: voice-note-bar 1.9s ease-in-out infinite;
+}
+
+@keyframes voice-note-bar {
+  50% {
+    opacity: 0.25;
+  }
 }
 
 .voice-note-dot {
@@ -1769,10 +1798,98 @@ button {
   }
 }
 
-.voice-note-player,
-.observations-audio-player {
+/* The shared playback transport (design pass 4, 5c states 3/4 + 7b): one
+   row for the compose field and the saved rows alike. Position is the bars
+   darkening left to right — the same sixteen bars for every note, since the
+   pattern is fixed, not a waveform. */
+.voice-transport {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   width: 100%;
-  max-width: 24rem;
+  min-height: 3.5rem;
+  padding: 8px 10px 8px 8px;
+  background: var(--surface);
+  border: 1px solid var(--control-rule);
+  border-radius: var(--radius);
+}
+
+.voice-transport-toggle {
+  flex: none;
+  width: var(--touch-target);
+  height: var(--touch-target);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--control-rule);
+  border-radius: var(--radius);
+}
+
+.glyph-pause {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.glyph-pause span {
+  width: 4px;
+  height: 15px;
+  background: currentColor;
+  border-radius: 1px;
+}
+
+.voice-transport-bars {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 22px;
+  overflow: hidden;
+}
+
+.voice-transport-bar {
+  flex: 1;
+  background: color-mix(in srgb, var(--ink) 30%, transparent);
+  border-radius: 1px;
+}
+
+.voice-transport-bar-played {
+  background: var(--ink);
+}
+
+/* Elapsed is bold, total is not: at arm's length you read the number that
+   is moving. */
+.voice-transport-time {
+  flex: none;
+  font-family: var(--font-label);
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+
+.voice-transport-total {
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.voice-transport-delete {
+  flex: none;
+  width: var(--touch-target);
+  height: var(--touch-target);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--danger-strong);
+  border: none;
+}
+
+/* Delete is withheld mid-playback rather than moved; this keeps the row
+   from changing width under a thumb. */
+.voice-transport-spacer {
+  flex: none;
+  width: var(--touch-target);
 }
 
 .voice-note-error {
@@ -2030,7 +2147,7 @@ button {
 }
 
 .capture-actions .voice-note-field:has(.voice-note-recording),
-.capture-actions .voice-note-field:has(.voice-note-player) {
+.capture-actions .voice-note-field:has(.voice-transport) {
   flex-basis: 100%;
 }
 
@@ -2281,26 +2398,87 @@ button {
   color: var(--text-secondary);
 }
 
-/* The photo trigger is a quiet link like Edit note — the row's photo is a
-   read, not a step toward saving, so it never competes with Save for the
-   surface's one accent fill. */
-button.observations-photo {
-  color: var(--accent-ink);
-  text-decoration: underline;
+/* The attachment strip (design pass 4 §7a): the row's photo and voice note
+   become two 44px chips on the row's own paper — the same treatment as
+   every other secondary control — with Edit note staying a link, pushed
+   right because it changes the record rather than reading it. One line
+   whose height no longer varies with what the row happens to carry; a
+   loaded voice transport wraps to its own full-width line. */
+.attachment-strip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
 }
 
-.observations-photo-thumb {
-  display: block;
-  margin: 7px 0 0;
-  max-width: 100%;
-  max-height: 180px;
+.attachment-strip .voice-transport {
+  flex-basis: 100%;
+}
+
+.attachment-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: var(--touch-target);
+  padding: 0 11px;
+  font-size: var(--type-meta);
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--control-rule);
   border-radius: var(--radius);
 }
 
-/* Full-screen view: a scrim, the photo, one Close. Fixed and row-owned —
-   there is no router to give it a route, and it dies with its row. The
-   scrim is near-black in both modes; Close is .button-inverse, which the
-   night rules already turn into an accent hairline. No accent fill here. */
+/* Loading keeps the chip's own content, so the strip's width never jumps;
+   the dashed border is the pending treatment. */
+.attachment-chip-loading {
+  border-style: dashed;
+  color: var(--text-muted);
+}
+
+/* A link, not a chip: the chips mean "there is something here to open", and
+   an empty slot is not that (§7e). Same hidden-input structure as the
+   photo field, so the camera opens directly. */
+.attachment-add-photo {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: var(--touch-target);
+  cursor: pointer;
+}
+
+.attachment-add-photo input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  overflow: hidden;
+}
+
+.attachment-strip .observations-note-edit {
+  margin-left: auto;
+  margin-top: 0;
+}
+
+/* 64px in the strip's own line, not a 180px block that pushes the next row
+   off the screen (§7a): a saved list is an index, and the full view is one
+   tap away. Cover, so a portrait and a landscape shot make the same shape. */
+.observations-photo-thumb {
+  display: block;
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border: 1px solid var(--control-rule);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+/* Full-screen view (design pass 4 §7c): the scrim is this app's near-black
+   at 0.94 rather than pure black, Close is a 44px ✕ inside the safe-area
+   inset rather than a paper bar (which read as an iOS action sheet and was
+   the brightest thing on a screen whose subject is a photograph), and one
+   caption line says which record this is. Rendered through a body portal —
+   see BodyPortal in ObservationsList.js. */
 .photo-lightbox {
   position: fixed;
   inset: 0;
@@ -2310,20 +2488,99 @@ button.observations-photo {
   align-items: center;
   justify-content: center;
   gap: var(--space-3);
-  padding: var(--space-3);
-  background: rgba(0, 0, 0, 0.9);
+  padding: calc(env(safe-area-inset-top, 0px) + var(--space-3)) var(--space-3)
+    calc(env(safe-area-inset-bottom, 0px) + var(--space-3));
+  background: rgba(13, 14, 17, 0.94);
 }
 
 .photo-lightbox-image {
   max-width: 100%;
-  max-height: calc(100% - var(--touch-target) - var(--space-3) * 2);
+  /* The whole remaining box: viewport minus the close row, the caption and
+     the action row. dvh, so iOS's collapsing chrome can't hide the foot. */
+  max-height: calc(
+    100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 10rem
+  );
   object-fit: contain;
 }
 
 .photo-lightbox-close {
-  min-height: var(--touch-target);
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + var(--space-2));
+  right: var(--space-2);
+  width: var(--touch-target);
+  height: var(--touch-target);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  border-radius: var(--radius);
+}
+
+.photo-lightbox-caption {
+  margin: 0;
+  font-size: var(--type-fine);
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+/* Retake and Delete (§7e), above the home indicator. Neither is filled —
+   the photograph is the subject of this screen. Retake is the outlined
+   control (nearly always the same subject shot again); Delete a quiet
+   link pushed away from it. The confirm REPLACES the row (the
+   trace-discard shape) so nothing reflows under the thumb. */
+.photo-lightbox-actions {
+  display: flex;
+  align-items: center;
+  gap: 9px;
   width: 100%;
   max-width: 24rem;
+}
+
+.photo-lightbox-retake {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: var(--touch-target);
+  padding: 0 12px;
+  font-size: var(--type-meta);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.photo-lightbox-retake input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  overflow: hidden;
+}
+
+.photo-lightbox-link {
+  margin-left: auto;
+  min-height: var(--touch-target);
+  padding: 0 var(--space-1);
+  background: none;
+  border: none;
+  font-size: var(--type-meta);
+  color: rgba(255, 255, 255, 0.8);
+  text-decoration: underline;
+}
+
+/* The one place the danger pair needs a light-on-dark value: on the scrim,
+   --danger-strong (#7d2208) is invisible — the same move .button-inverse
+   makes at night. Used nowhere off the scrim. */
+.photo-lightbox-delete-commit {
+  min-height: var(--touch-target);
+  padding: 0 12px;
+  font-size: var(--type-meta);
+  background: transparent;
+  color: var(--danger-on-dark);
+  border: 1px solid var(--danger-on-dark);
+  border-radius: var(--radius);
 }
 
 /* A photograph is the one thing night mode must not red-shift into

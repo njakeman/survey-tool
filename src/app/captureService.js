@@ -4,6 +4,7 @@ import {
   reopenSession as reopenSessionRecord,
   findOpenSession,
   countUnexported,
+  hasChangedSinceExport,
 } from '../domain/session.js';
 import { createObservation } from '../domain/observation.js';
 import {
@@ -17,6 +18,7 @@ import {
   updateObservationNote,
 } from '../storage/observationStore.js';
 import { saveObservationWithPhoto } from '../storage/captureWrite.js';
+import { setObservationPhoto, deleteObservationPhoto } from '../storage/photoWrite.js';
 import { getAudio as getAudioFromStore } from '../storage/audioStore.js';
 import { getPhoto as getPhotoFromStore } from '../storage/photoStore.js';
 import { deleteObservationWithPhoto } from '../storage/captureDelete.js';
@@ -151,6 +153,9 @@ export function createCaptureService({ db, newId, nowIso }) {
       featureLabel: feature?.featureId ? (feature.title ?? null) : null,
       positionSource: trace ? 'trace' : pickedPoint ? 'map' : 'gps',
       geometry: trace ? trace.geometry : null,
+      // Measured by the recorder at stop — the one thing that lets a list
+      // row say 0:12 without loading the blob.
+      audioDurationMs: audio?.durationMs ?? null,
     });
 
     await saveObservationWithPhoto(db, {
@@ -221,6 +226,10 @@ export function createCaptureService({ db, newId, nowIso }) {
     let deletedCount = 0;
     for (const session of sessions) {
       if (session.status !== 'closed' || !session.lastExportedAt) continue;
+      // An edit after the export makes that export stale — the zip on
+      // someone's laptop no longer matches this data, so it must not purge
+      // as "fully exported" until re-exported.
+      if (hasChangedSinceExport(session)) continue;
       const count = await countObservationsForSession(db, session.id);
       if (countUnexported(session, count) !== 0) continue;
       await deleteSessionWithData(db, session.id);
@@ -229,10 +238,29 @@ export function createCaptureService({ db, newId, nowIso }) {
     return { deletedCount };
   }
 
-  // Amend a saved observation's note — the one post-save edit that exists.
-  // Trimmed here so an edit and a save can never disagree about whitespace.
+  // Amend a saved observation's note. Trimmed here so an edit and a save can
+  // never disagree about whitespace. The nowIso stamp marks the record (and
+  // its session) changed, so an export made before the edit reads stale.
   function updateNote(id, note) {
-    return updateObservationNote(db, id, (note ?? '').trim());
+    return updateObservationNote(db, id, (note ?? '').trim(), nowIso());
+  }
+
+  // The post-save photo edits (design pass 4): retake/add writes a NEW photo
+  // record under a fresh id — repointing photoId is what busts a row's
+  // cached object URL — and delete clears the link. Both stamp the change
+  // marks in the same transaction (photoWrite.js). The service stays
+  // permissive like updateNote: read-only surfaces simply aren't handed the
+  // callbacks (absence-is-the-flag, as with onEditNote).
+  function setPhoto(observationId, photo) {
+    return setObservationPhoto(db, {
+      observationId,
+      photo: { id: newId(), blob: photo.blob },
+      changedAt: nowIso(),
+    });
+  }
+
+  function deletePhoto(observationId) {
+    return deleteObservationPhoto(db, observationId, nowIso());
   }
 
   // Undo-last-save support. Idempotent: deleting an id that's already gone
@@ -271,6 +299,8 @@ export function createCaptureService({ db, newId, nowIso }) {
     countObservations,
     listObservations,
     updateNote,
+    setPhoto,
+    deletePhoto,
     deleteObservation,
     deleteSession,
     deleteExportedSessions,

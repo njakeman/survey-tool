@@ -40,6 +40,11 @@ function observationToFeature(obs, session, appVersion, gridRef, audioFilename) 
       // because the extension depends on the recording's contentType, which
       // lives with the bytes in the audio store, not on the observation.
       audio: obs.audioId ? (audioFilename?.(obs.audioId) ?? null) : null,
+      // Measured at record time — the one attachment fact a consumer can use
+      // without opening the file. `?? null` for records saved before the
+      // field existed (canonicalStringify drops undefined, which would cost
+      // the column).
+      audio_duration_ms: obs.audioDurationMs ?? null,
       // The feature the observation was started from, if any. Emitted even
       // when null: a GIS consumer takes its columns from the features it
       // sees, so omitting the keys would make the column set depend on which

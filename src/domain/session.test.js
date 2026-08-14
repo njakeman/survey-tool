@@ -6,6 +6,8 @@ import {
   findOpenSession,
   isExported,
   countUnexported,
+  isChangedSinceExport,
+  hasChangedSinceExport,
 } from './session.js';
 
 describe('createSession', () => {
@@ -207,5 +209,70 @@ describe('isExported / countUnexported', () => {
 
   test('never goes negative when an undo shrank the session after an export', () => {
     expect(countUnexported(exportedSession, 1)).toBe(0);
+  });
+});
+
+describe('isChangedSinceExport / hasChangedSinceExport', () => {
+  // Design pass 4: editing a saved observation (photo retake/delete/add, note
+  // edit) after an export makes that export stale. The badge must say so —
+  // a third state, not a silent lie and not a flip back to never-exported.
+  const exportedSession = {
+    id: 'sess-1',
+    lastExportedAt: '2026-08-06T12:00:00.000Z',
+    lastExportCount: 2,
+  };
+
+  test('an observation edited after the last export reads as changed', () => {
+    expect(
+      isChangedSinceExport(exportedSession, {
+        recordedAt: '2026-08-06T11:00:00.000Z',
+        changedAt: '2026-08-06T13:00:00.000Z',
+      }),
+    ).toBe(true);
+  });
+
+  test('an edit the last export already carried does not', () => {
+    expect(
+      isChangedSinceExport(exportedSession, {
+        recordedAt: '2026-08-06T11:00:00.000Z',
+        changedAt: '2026-08-06T11:30:00.000Z',
+      }),
+    ).toBe(false);
+  });
+
+  test('never-edited and never-exported records are simply not changed', () => {
+    expect(isChangedSinceExport(exportedSession, { recordedAt: '2026-08-06T11:00:00.000Z' })).toBe(
+      false,
+    );
+    expect(isChangedSinceExport({ id: 's' }, { changedAt: '2026-08-06T13:00:00.000Z' })).toBe(
+      false,
+    );
+    expect(isChangedSinceExport(null, { changedAt: '2026-08-06T13:00:00.000Z' })).toBe(false);
+  });
+
+  test('a session edited after its last export reads as changed until re-exported', () => {
+    expect(
+      hasChangedSinceExport({
+        ...exportedSession,
+        changedSinceExportAt: '2026-08-06T13:00:00.000Z',
+      }),
+    ).toBe(true);
+    // A completed re-export moves lastExportedAt past the edit — resolved
+    // without ever clearing anything.
+    expect(
+      hasChangedSinceExport({
+        ...exportedSession,
+        lastExportedAt: '2026-08-06T14:00:00.000Z',
+        changedSinceExportAt: '2026-08-06T13:00:00.000Z',
+      }),
+    ).toBe(false);
+  });
+
+  test('unexported and untouched sessions are not changed', () => {
+    expect(
+      hasChangedSinceExport({ id: 's', changedSinceExportAt: '2026-08-06T13:00:00.000Z' }),
+    ).toBe(false);
+    expect(hasChangedSinceExport(exportedSession)).toBe(false);
+    expect(hasChangedSinceExport(null)).toBe(false);
   });
 });

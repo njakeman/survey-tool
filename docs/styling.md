@@ -402,3 +402,67 @@ the voice recorder's **fallback** flavour (native player kept); Photo and Voice 
   two must stay in lockstep (commented at the block). Forced positions pin both `theme-color`
   metas to one colour (the night precedent); Auto restores the per-scheme pair. The map's
   night boolean stays derived (`displayMode === 'night'`).
+
+## The fourth design pass (2026-08-14): the saved row, the transport, the photo view
+
+Design handoff turn 7 plus 5c in full, from field screenshots. Three decisions taken with the
+user at the time: a photo change on a saved observation marks the record **Changed since
+export** (a third badge state, not a silent flip and not a lie); the recording bars are a
+**predictable repeating animation, deliberately not live levels** — visibly a rhythm, not a
+meter (no AnalyserNode, no stored peaks); and `audio_duration_ms` rides in the export on every
+observation, `?? null`.
+
+- **`box-sizing: border-box`, globally** (§7d). The sheet had none, so every `width: 100%`
+  control with side padding overflowed its track — the Photo button's 34px overhang on device
+  was exactly that, with `.session-history-button` (26px), `.basemap-picker-row` (24px) and
+  `.voice-note-recording` (22px) quietly doing the same. One declaration at the top of the
+  sheet, not per-component patches, so it cannot recur.
+- **Landscape works rather than being refused** (§7d): iOS cannot lock orientation in an
+  installed PWA, so `@media (orientation: landscape) and (max-height: 500px)` caps
+  `.capture-map` at 180px and the readings, note and Save stay on the fold. The manifest's
+  `orientation: portrait` was already present; `screen.orientation.lock()` was skipped — it
+  benefits only Android, which is not a target.
+- **The attachment strip** (§7a): a saved row's three stacked orange links became one line —
+  the photo as a 44px `--surface` chip (`.attachment-chip`), the voice note as a chip reading
+  its stored duration (`0:12`) or `Voice note` for legacy records, and **Edit note staying a
+  link pushed right** (it changes the record; the chips read it). Loading keeps the chip's own
+  content so the strip's width never jumps; the dashed border is the pending treatment. A
+  loaded photo chip becomes the **64px square thumbnail** (`object-fit: cover`) — the 180px
+  block is gone; a saved list is an index.
+- **The voice transport** (`src/ui/VoiceTransport.js`, 5c states 3/4 + §7b): one component for
+  the compose field (with the ✕) and the saved rows (without — deleting a saved voice note is
+  a different act and is not offered). 44px play/pause, sixteen **fixed-pattern** bars whose
+  darkening left-to-right is the playback position, elapsed bold / total regular in
+  `--font-label` tabular. Delete is **withheld mid-playback** with a 44px spacer holding the
+  row's width. No scrubber — the drawing has none. The recording state
+  (`.voice-note-recording`) gains the same sixteen bars animated on a loop
+  (`.voice-note-bars`, per-bar `animation-delay`, stilled by the reduced-motion guard) beside
+  the dot, a `role="timer"` elapsed, and the accent Stop.
+- **The photo view** (§7c): rendered through a **body portal** (`BodyPortal` in
+  `ObservationsList.js` — hand-rolled with Preact's own `render`; `preact/compat`'s
+  `createPortal` was tried and rejected, because importing compat re-aliases `onChange`
+  app-wide as a side effect and broke every file input). The scrim is this app's near-black
+  (`rgba(13,14,17,.94)`), Close is a **44px ✕ top-right** inside the safe-area inset (the
+  full-width paper bar read as an iOS action sheet and outshone the photograph), the image
+  takes the remaining box in `dvh` minus insets, and one caption line — time · grid reference
+  — says which record is on screen. Backdrop-tap-to-close and night's `brightness(0.55)`
+  stay. The containing-block bug the handoff inferred was **not found in the code** (no
+  ancestor carries a filter/transform); the portal makes the question moot.
+- **Retake · Delete · Add photo** (§7e): in the full view only, and only where the parent
+  passes `onSetPhoto`/`onDeletePhoto` — history passes neither, the same
+  absence-is-the-flag rule as `onEditNote`. Retake is an outlined-on-dark label wrapping a
+  `capture="environment"` input (the camera opens directly; the retaken file runs the same
+  1600px downscale, and the view stays open to judge the second attempt). Delete is a quiet
+  link pushed away from Retake; its confirm **replaces the action row** (the trace-discard
+  shape) with the commit in `--danger-on-dark` (#ff8a66) — the danger pair's one
+  light-on-dark value, used nowhere off the scrim — and `Keep it` under the finger.
+  Deleting closes the view; the emptied slot offers **Add photo** as a link, not a chip
+  ("an empty slot is not something to open"). A voice note is deliberately not addable after
+  the fact — recorded somewhere else, minutes later, it describes the wrong place.
+- **CHANGED SINCE EXPORT** — the badge's third state. A photo retake/delete/add or a note
+  edit stamps `changedAt` on the observation and `changedSinceExportAt` on its session
+  (one transaction, `storage/photoWrite.js` / `updateObservationNote`); the badge compares
+  them against `lastExportedAt`. The dashed (pending) chip shape with the words doing the
+  telling — never colour alone. A changed session refuses to purge as "fully exported" and
+  drops out of the history page's fully-exported count; a completed re-export resolves the
+  state by moving `lastExportedAt` past the stamp — nothing is ever cleared.

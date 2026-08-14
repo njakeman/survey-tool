@@ -14,7 +14,7 @@ import { TraceStrip } from './TraceStrip.js';
 import { TraceGlyph } from './traceGlyphs.js';
 import { formatLatLon } from '../sensors/format.js';
 import { chooseActive } from '../map/basemapSelection.js';
-import { countUnexported, isExported } from '../domain/session.js';
+import { countUnexported, isExported, isChangedSinceExport } from '../domain/session.js';
 import { polygonCentroid, polygonExtentM } from '../geo/centroid.js';
 import {
   acceptFix,
@@ -460,7 +460,12 @@ export function CapturePage({
   // observation to both the list and the map markers — neither consumer has
   // to know how it is worked out.
   const decoratedObservations = useMemo(
-    () => observations.map((obs) => ({ ...obs, exported: isExported(session, obs) })),
+    () =>
+      observations.map((obs) => ({
+        ...obs,
+        exported: isExported(session, obs),
+        changed: isChangedSinceExport(session, obs),
+      })),
     [observations, session],
   );
 
@@ -478,6 +483,19 @@ export function CapturePage({
     await service.updateNote(id, text);
     await refreshSession();
   };
+  // The post-save photo edits (design pass 4 §7e): the raw camera file goes
+  // through the same downscale pipeline as a compose-time photo, so the
+  // 1600px JPEG rule holds and the stored thumbnail stays the only size that
+  // exists. History passes neither callback — that absence is the read-only
+  // rule, exactly as with onEditNote.
+  const setRowPhoto = async (id, file) => {
+    await service.setPhoto(id, await downscale(file));
+    await refreshSession();
+  };
+  const deleteRowPhoto = async (id) => {
+    await service.deletePhoto(id);
+    await refreshSession();
+  };
   const observationsList = useMemo(
     () =>
       html`<${ObservationsList}
@@ -486,9 +504,11 @@ export function CapturePage({
         loadAudio=${loadAudio}
         loadPhoto=${loadPhoto}
         onEditNote=${editNote}
+        onSetPhoto=${setRowPhoto}
+        onDeletePhoto=${deleteRowPhoto}
       />`,
-    // loadAudio, loadPhoto and editNote are fresh closures every render but
-    // only wrap the stable service — deliberately not dependencies.
+    // The handlers are fresh closures every render but only wrap the stable
+    // service + downscale — deliberately not dependencies.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [decoratedObservations, gridRef],
   );

@@ -89,14 +89,32 @@ test.describe('capture flow', () => {
     await page.getByRole('button', { name: 'Save observation' }).click();
     await expect(page.getByText('1 saved')).toBeVisible();
 
-    // Tap-to-load in the open session's list, then the full-screen view.
-    await page.getByRole('button', { name: /show photo/i }).click();
+    // Tap-to-load in the open session's list (the attachment strip's chip),
+    // scoped to the row: the compose field's file input is also a button
+    // named "Photo" to ARIA. exact: "Add photo" is a near-miss.
+    await page
+      .locator('li.observations-row')
+      .getByRole('button', { name: 'Photo', exact: true })
+      .click();
     const thumb = page.locator('img.observations-photo-thumb');
     await expect(thumb).toBeVisible();
-    expect(await thumb.getAttribute('src')).toMatch(/^blob:/);
+    const firstUrl = await thumb.getAttribute('src');
+    expect(firstUrl).toMatch(/^blob:/);
 
     await thumb.click();
     await expect(page.getByRole('dialog', { name: /photo/i })).toBeVisible();
+
+    // Retake (design pass 4 §7e): the picked file runs the real downscale
+    // pipeline, the record repoints, and the open view swaps the image.
+    await page
+      .locator('.photo-lightbox input[capture="environment"]')
+      .setInputFiles({ name: 'retake.png', mimeType: 'image/png', buffer: PHOTO });
+    await expect
+      .poll(async () => page.locator('.photo-lightbox-image').getAttribute('src'))
+      .not.toBe(firstUrl);
+    // The edit marks the record: the row now reads Changed since export
+    // once exported — here it was never exported, so Not exported stands.
+
     // exact: the Boundary trace button's caption ("Closes back to the
     // start") substring-matches 'Close'.
     await page.getByRole('button', { name: 'Close', exact: true }).click();
@@ -107,7 +125,60 @@ test.describe('capture flow', () => {
     await page.getByRole('button', { name: 'Confirm end session' }).click();
     await page.getByRole('button', { name: 'Session history' }).click();
     await page.getByRole('button', { name: /Photo Session/ }).click();
-    await page.getByRole('button', { name: /show photo/i }).click();
+    await page
+      .locator('li.observations-row')
+      .getByRole('button', { name: 'Photo', exact: true })
+      .click();
     await expect(page.locator('img.observations-photo-thumb')).toBeVisible();
+    // Read-only there: the full view offers no Retake or Delete.
+    await page.locator('img.observations-photo-thumb').click();
+    await expect(page.getByRole('dialog', { name: /photo/i })).toBeVisible();
+    await expect(page.getByText('Retake')).toHaveCount(0);
+  });
+
+  test('a saved photo can be deleted — two-step — and another added in its place', async ({
+    page,
+    context,
+  }) => {
+    await context.grantPermissions(['geolocation']);
+    await context.setGeolocation({ latitude: 51.5, longitude: -0.14, accuracy: 10 });
+
+    await page.goto('/');
+    await page.getByLabel(/session name/i).fill('Delete Photo Session');
+    await page.getByRole('button', { name: 'Start session' }).click();
+    await expect(page.getByRole('button', { name: 'Save observation' })).toBeEnabled({
+      timeout: 15_000,
+    });
+    await page.locator('input[capture="environment"]').setInputFiles({
+      name: 'photo.png',
+      mimeType: 'image/png',
+      buffer: PHOTO,
+    });
+    await expect(page.getByRole('button', { name: 'Remove photo' })).toBeVisible();
+    await page.getByRole('button', { name: 'Save observation' }).click();
+    await expect(page.getByText('1 saved')).toBeVisible();
+
+    await page
+      .locator('li.observations-row')
+      .getByRole('button', { name: 'Photo', exact: true })
+      .click();
+    await page.locator('img.observations-photo-thumb').click();
+    await expect(page.getByRole('dialog', { name: /photo/i })).toBeVisible();
+
+    // Two-step: Delete arms, Delete photo commits, the view closes.
+    await page.getByRole('button', { name: 'Delete', exact: true }).click();
+    await page.getByRole('button', { name: 'Delete photo' }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+
+    // The empty slot offers Add photo (a link, not a chip), and adding one
+    // lands the strip back on a chip that opens.
+    const row = page.locator('li.observations-row').first();
+    await expect(row.getByText('Add photo')).toBeVisible();
+    await row.locator('input[capture="environment"]').setInputFiles({
+      name: 'added.png',
+      mimeType: 'image/png',
+      buffer: PHOTO,
+    });
+    await expect(row.getByRole('button', { name: 'Photo', exact: true })).toBeVisible();
   });
 });

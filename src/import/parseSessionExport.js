@@ -99,6 +99,7 @@ function observationFrom(feature, index, sessionId) {
       // the mirror of export's "never claim a file the zip doesn't contain".
       photoId: props.photo ? props.photo.replace(/\.jpg$/i, '') : null,
       audioId: props.audio ? props.audio.replace(/\.(webm|m4a)$/i, '') : null,
+      audioDurationMs: props.audio_duration_ms ?? null,
       featureLayerId: props.feature_layer ?? null,
       featureId: props.feature_id ?? null,
       featureLabel: props.feature_label ?? null,

@@ -73,6 +73,7 @@ describe('sessionToFeatureCollection', () => {
           note: 'gate post',
           photo: 'obs-1.jpg',
           audio: null,
+          audio_duration_ms: null,
           feature_layer: null,
           feature_id: null,
           feature_label: null,
@@ -84,6 +85,32 @@ describe('sessionToFeatureCollection', () => {
         },
       },
     ]);
+  });
+
+  test('carries the voice note duration, and null for a legacy record without one', () => {
+    // Emitted on every row (?? null, the feature-link precedent): a GIS
+    // consumer's column set must not depend on which rows carry audio.
+    const withDuration = createObservation({
+      id: 'obs-1',
+      sessionId: 'sess-1',
+      recordedAt: '2026-08-06T10:00:00.000Z',
+      fixAt: '2026-08-06T09:59:20.000Z',
+      lat: 51.5,
+      lon: -0.14,
+      gpsAccuracyM: 8.2,
+      audioId: 'obs-1',
+      audioDurationMs: 12_400,
+    });
+    const legacy = { ...withDuration, id: 'obs-2' };
+    delete legacy.audioDurationMs;
+
+    const fc = sessionToFeatureCollection(session, [withDuration, legacy], {
+      appVersion: '0.1.0',
+      audioFilename: (id) => `audio/${id}.webm`,
+    });
+
+    expect(fc.features[0].properties.audio_duration_ms).toBe(12_400);
+    expect(fc.features[1].properties).toHaveProperty('audio_duration_ms', null);
   });
 
   test('carries the OS grid reference when one can be worked out', () => {

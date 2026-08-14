@@ -1,10 +1,7 @@
 import { html } from 'htm/preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-
-function formatElapsed(ms) {
-  const seconds = Math.floor(ms / 1000);
-  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
-}
+import { VoiceTransport, TRANSPORT_BAR_HEIGHTS } from './VoiceTransport.js';
+import { formatDuration } from './format.js';
 
 // A voice note on the observation being captured — record, hear it back,
 // remove it. Mirrors PhotoField's contract: the recorded value lives in
@@ -69,24 +66,33 @@ export function VoiceNoteField({ audio, error, onRecorded, onRemove, onError, re
     }
   }
 
-  // Native <audio controls> for playback: play/pause/scrub for free, and iOS
-  // renders it with touch-sized controls. The URL is revoked when the blob
-  // changes or the field unmounts.
+  // The URL is revoked when the blob changes or the field unmounts; the
+  // transport owns the Audio element it plays through.
   const audioUrl = useMemo(() => (audio ? URL.createObjectURL(audio.blob) : null), [audio]);
   useEffect(() => () => audioUrl && URL.revokeObjectURL(audioUrl), [audioUrl]);
 
-  // Design pass 3 §5c, the fallback flavour: the idle and recording states
-  // are purpose-drawn, the playback stays the native player — most of the
-  // gain, none of the lifecycle risk of owning play/pause/scrub.
+  // Design pass 4: 5c in full. Recording is the accent-edged row — dot,
+  // activity bars, timer, Stop; recorded/playing is the shared VoiceTransport
+  // (also used by the saved rows). The recording bars are a repeating
+  // pattern, deliberately not live levels (user decision) — visibly a
+  // rhythm, not a meter, animated to say the microphone is on.
   return html`
     <div class="voice-note-field">
       ${
         recording
           ? html`
-              <span class="voice-note-recording">
-                <span class="voice-note-elapsed" role="status">
-                  <span class="voice-note-dot" aria-hidden="true"></span>
-                  Recording · ${formatElapsed(elapsedMs)}
+              <span class="voice-note-recording" aria-label="Recording voice note">
+                <span class="voice-note-dot" aria-hidden="true"></span>
+                <span class="voice-note-bars" aria-hidden="true">
+                  ${TRANSPORT_BAR_HEIGHTS.map(
+                    (height, index) =>
+                      html`<span
+                        style="height:${height}px; animation-delay:${index * 0.12}s"
+                      ></span>`,
+                  )}
+                </span>
+                <span class="voice-note-elapsed" role="timer" aria-label="Recording time">
+                  ${formatDuration(elapsedMs)}
                 </span>
                 <button type="button" class="voice-note-stop" onClick=${stopRecording}>
                   <span class="glyph-stop" aria-hidden="true"></span>
@@ -96,17 +102,11 @@ export function VoiceNoteField({ audio, error, onRecorded, onRemove, onError, re
             `
           : audio
             ? html`
-                <span class="voice-note-recorded">
-                  <audio controls src=${audioUrl} class="voice-note-player"></audio>
-                  <button
-                    type="button"
-                    class="voice-note-delete"
-                    onClick=${onRemove}
-                    aria-label="Delete voice note"
-                  >
-                    ✕
-                  </button>
-                </span>
+                <${VoiceTransport}
+                  src=${audioUrl}
+                  durationMs=${audio.durationMs ?? null}
+                  onDelete=${onRemove}
+                />
               `
             : html`
                 <button type="button" class="voice-note-idle" onClick=${startRecording}>

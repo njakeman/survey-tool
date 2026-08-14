@@ -519,9 +519,49 @@ describe('CapturePage — undo lifecycle', () => {
     await screen.findByText('gate post');
 
     const [row] = screen.getAllByRole('listitem');
-    fireEvent.click(within(row).getByRole('button', { name: /show photo/i }));
+    fireEvent.click(within(row).getByRole('button', { name: 'Photo' }));
 
     await waitFor(() => expect(service.getPhoto).toHaveBeenCalledWith('obs-1'));
+  });
+
+  test('retaking a saved photo runs the downscale pipeline, the service write, and a refresh', async () => {
+    // Design pass 4 §7e: the capture page passes onSetPhoto/onDeletePhoto —
+    // history does not — and the raw camera file goes through the same
+    // 1600px downscale as a compose-time photo.
+    const observation = {
+      id: 'obs-1',
+      sessionId: 'sess-1',
+      lat: 51.5,
+      lon: -0.14,
+      gpsAccuracyM: 8,
+      note: 'gate post',
+      photoId: 'obs-1',
+    };
+    const service = createFakeService({ openSession: OPEN_SESSION, observations: [observation] });
+    service.getPhoto = vi
+      .fn()
+      .mockResolvedValue({ id: 'obs-1', contentType: 'image/jpeg', blob: new Blob(['x']) });
+    service.setPhoto = vi.fn().mockResolvedValue(undefined);
+    const encoded = { blob: new Blob(['downscaled'], { type: 'image/jpeg' }) };
+    const downscale = vi.fn().mockResolvedValue(encoded);
+    const { sensors } = createFakeSensors();
+    render(html`<${CapturePage} service=${service} sensors=${sensors} downscale=${downscale} />`);
+    await screen.findByText('gate post');
+
+    const [row] = screen.getAllByRole('listitem');
+    fireEvent.click(within(row).getByRole('button', { name: 'Photo' }));
+    fireEvent.click(await screen.findByRole('img', { name: /photo for this observation/i }));
+
+    const dialog = screen.getByRole('dialog', { name: /photo/i });
+    const file = new File(['raw'], 'photo.jpg', { type: 'image/jpeg' });
+    fireEvent.change(dialog.querySelector('input[capture="environment"]'), {
+      target: { files: [file] },
+    });
+
+    await waitFor(() => expect(downscale).toHaveBeenCalledWith(file));
+    await waitFor(() => expect(service.setPhoto).toHaveBeenCalledWith('obs-1', encoded));
+    // The refresh is what repoints the row at the new photoId.
+    await waitFor(() => expect(service.listObservations.mock.calls.length).toBeGreaterThan(1));
   });
 
   test('a bumped sessionEpoch re-reads the session and clears the Undo affordance', async () => {
@@ -724,9 +764,10 @@ describe('CapturePage — voice note', () => {
     const { service } = await renderWithRecorder();
 
     fireEvent.click(screen.getByRole('button', { name: 'Voice note' }));
-    await screen.findByText(/Recording ·/);
+    await screen.findByRole('timer');
     fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
-    await waitFor(() => expect(document.querySelector('audio.voice-note-player')).toBeTruthy());
+    // The recorded state is now the shared transport row, not <audio>.
+    await waitFor(() => expect(document.querySelector('.voice-transport')).toBeTruthy());
 
     fireEvent.click(screen.getByRole('button', { name: /save observation/i }));
 
@@ -737,7 +778,7 @@ describe('CapturePage — voice note', () => {
     );
     // Cleared with the note and photo: the recording belongs to the
     // observation just saved, not the next one.
-    await waitFor(() => expect(document.querySelector('audio.voice-note-player')).toBeNull());
+    await waitFor(() => expect(document.querySelector('.voice-transport')).toBeNull());
     expect(screen.getByRole('button', { name: 'Voice note' })).toBeInTheDocument();
   });
 
@@ -783,10 +824,10 @@ describe('CapturePage — map panel', () => {
 
     await waitFor(() => expect(adapter.setPosition).toHaveBeenCalledWith(POSITION));
     await waitFor(() =>
-      // Decorated on the way through: exported-or-not travels with each
-      // observation to the markers.
+      // Decorated on the way through: exported-or-not (and changed-since-
+      // export) travels with each observation to the markers.
       expect(adapter.setObservations).toHaveBeenCalledWith([
-        { id: 'obs-1', lat: 51.5, lon: -0.14, exported: false },
+        { id: 'obs-1', lat: 51.5, lon: -0.14, exported: false, changed: false },
       ]),
     );
   });

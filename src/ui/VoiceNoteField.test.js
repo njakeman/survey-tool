@@ -33,18 +33,34 @@ describe('VoiceNoteField', () => {
     const { onRecorded } = renderField({ recordAudio });
 
     fireEvent.click(screen.getByRole('button', { name: 'Voice note' }));
-    await screen.findByText(/Recording ·/);
+    await screen.findByRole('timer');
 
     fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
     await waitFor(() => expect(onRecorded).toHaveBeenCalledWith(NOTE));
   });
 
-  test('a recorded note shows a player and can be deleted', () => {
+  test('while recording, the row shows the activity bars and a timer', async () => {
+    // The bars are a repeating pattern, deliberately not live levels (design
+    // pass 4 decision) — motion that says "recording" without claiming to be
+    // a meter.
+    const handle = { stop: vi.fn().mockResolvedValue(NOTE), cancel: vi.fn() };
+    renderField({ recordAudio: vi.fn().mockResolvedValue(handle) });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Voice note' }));
+    await screen.findByRole('timer');
+
+    expect(document.querySelector('.voice-note-bars')).toBeTruthy();
+    expect(document.querySelectorAll('.voice-note-bars span')).toHaveLength(16);
+  });
+
+  test('a recorded note shows the transport row and can be deleted', () => {
     const { onRemove } = renderField({ audio: NOTE });
 
-    // The native player stays (design pass 3 §5c fallback); delete is an
-    // unlabelled ✕ that still names itself to a screen reader.
-    expect(document.querySelector('audio.voice-note-player')).toBeTruthy();
+    // The purpose-drawn transport replaces the native player (design pass 4,
+    // 5c in full); delete is an unlabelled ✕ that still names itself.
+    expect(document.querySelector('.voice-transport')).toBeTruthy();
+    expect(document.querySelector('audio')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Play voice note' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Delete voice note' }));
     expect(onRemove).toHaveBeenCalled();
   });
@@ -69,7 +85,7 @@ describe('VoiceNoteField', () => {
     const { onError, onRecorded } = renderField({ recordAudio: vi.fn().mockResolvedValue(handle) });
 
     fireEvent.click(screen.getByRole('button', { name: 'Voice note' }));
-    await screen.findByText(/Recording ·/);
+    await screen.findByRole('timer');
     fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
 
     await waitFor(() => expect(onError).toHaveBeenCalledWith('No audio was captured — try again'));
@@ -89,7 +105,7 @@ describe('VoiceNoteField', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Voice note' }));
-    await screen.findByText(/Recording ·/);
+    await screen.findByRole('timer');
     unmount();
 
     expect(handle.cancel).toHaveBeenCalled();

@@ -1,4 +1,5 @@
 import { html } from 'htm/preact';
+import { render } from 'preact';
 import {
   formatLatLon,
   formatAccuracy,
@@ -7,15 +8,49 @@ import {
   formatDistance,
   accuracyQuality,
 } from '../sensors/format.js';
+import { formatDuration } from './format.js';
 import { lineLengthM } from '../geo/lineMetrics.js';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { ExportBadge } from './ExportBadge.js';
 import { TraceGlyph } from './traceGlyphs.js';
+import { VoiceTransport } from './VoiceTransport.js';
+
+const cameraGlyph = html`<span class="glyph-camera" aria-hidden="true"></span>`;
+
+// A hand-rolled portal: renders its children into a container appended to
+// document.body, so a position:fixed overlay can never be captured by an
+// ancestor's filter/transform (design pass 4 §7c). Deliberately NOT
+// preact/compat's createPortal — importing compat patches Preact's global
+// options as a side effect (onChange re-aliasing among them), which broke
+// the file inputs' change handlers app-wide when tried.
+function BodyPortal({ children }) {
+  const containerRef = useRef(null);
+  if (!containerRef.current) {
+    containerRef.current = document.createElement('div');
+  }
+  useEffect(() => {
+    const el = containerRef.current;
+    document.body.appendChild(el);
+    return () => {
+      render(null, el);
+      el.remove();
+    };
+  }, []);
+  // No deps: the overlay's content closes over row state (busy, the delete
+  // confirm), so it must re-render with every parent render.
+  useEffect(() => {
+    render(children, containerRef.current);
+  });
+  return null;
+}
 
 // A saved voice note, loaded only when the surveyor asks to hear it — the
-// bytes stay in IndexedDB until the tap. Native <audio controls> once
-// loaded: play/pause/scrub for free, touch-sized on iOS.
-function SavedVoiceNote({ audioId, loadAudio }) {
+// bytes stay in IndexedDB until the tap. The chip states the duration when
+// the record carries one (audioDurationMs, stored at save time) — the one
+// fact that decides play-now-or-later — and once loaded it becomes the
+// shared VoiceTransport row. No delete here (design pass 4, 7b): removing a
+// voice note off a saved observation is not offered on a row being scanned.
+function SavedVoiceNote({ audioId, durationMs, loadAudio }) {
   const [url, setUrl] = useState(null);
   const [state, setState] = useState('idle'); // idle | loading | ready | error
 
@@ -46,32 +81,49 @@ function SavedVoiceNote({ audioId, loadAudio }) {
   }
 
   if (state === 'ready') {
-    return html`<audio controls src=${url} class="observations-audio-player"></audio>`;
+    return html`<${VoiceTransport} src=${url} durationMs=${durationMs ?? null} />`;
   }
   if (state === 'error') {
     return html`<p class="observations-audio">Voice note could not be loaded</p>`;
   }
+  // The loading chip keeps its content (and so its width) so the strip does
+  // not jump under the thumb; the dashed border is the pending treatment.
+  const label = durationMs != null ? formatDuration(durationMs) : 'Voice note';
   return html`
     <button
       type="button"
-      class="link observations-audio"
+      class="attachment-chip ${state === 'loading' ? 'attachment-chip-loading' : ''}"
       onClick=${open}
       disabled=${state === 'loading'}
+      aria-busy=${state === 'loading'}
+      aria-label=${durationMs != null ? `Voice note · ${label}` : 'Voice note'}
     >
-      ${state === 'loading' ? 'Loading voice note…' : '▶ Voice note'}
+      <svg viewBox="0 0 14 16" width="11" height="13" aria-hidden="true">
+        <polygon points="2,1 13,8 2,15" fill="currentColor" />
+      </svg>
+      ${label}
     </button>
   `;
 }
 
-// A saved photo, loaded only when the surveyor asks to see it — the bytes
-// stay in IndexedDB until the tap, the SavedVoiceNote rule: a session can
-// hold dozens of ~200 KB JPEGs and an installed iOS PWA has little memory
-// headroom for decoding rows nobody is looking at. The stored 1600px JPEG is
-// the only size that exists, so one fetch and one object URL serve both the
-// thumbnail and the full-screen view; the URL is revoked on unmount.
-function SavedPhoto({ photoId, loadPhoto }) {
+// A saved photo, loaded only when the surveyor asks to see it — a session
+// can hold dozens of ~200 KB JPEGs and an installed iOS PWA has little
+// memory headroom for decoding rows nobody is looking at. The stored 1600px
+// JPEG is the only size that exists, so one fetch and one object URL serve
+// both the 64px thumbnail and the full-screen view; the URL is revoked on
+// unmount, and re-fetched if a retake repoints photoId under us.
+//
+// The full-screen view portals to document.body (design pass 4 §7c): a
+// row-owned position:fixed overlay is one ancestor filter/transform away
+// from laying out inside its own <li>, and night mode adds filters to this
+// app for a living. State stays here — there is still no router, and the
+// overlay still dies with its row.
+function SavedPhoto({ observation, gridReference, loadPhoto, onSetPhoto, onDeletePhoto }) {
+  const photoId = observation.photoId;
   const [url, setUrl] = useState(null);
   const [state, setState] = useState('idle'); // idle | loading | thumb | full | error
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [busy, setBusy] = useState(false); // a retake's downscale in flight
 
   // Revoke via a ref-read at unmount rather than a [url]-dependent effect: a
   // deps-keyed effect registered after the async load may still be pending
@@ -80,27 +132,75 @@ function SavedPhoto({ photoId, loadPhoto }) {
   const urlRef = useRef(null);
   useEffect(() => () => urlRef.current && URL.revokeObjectURL(urlRef.current), []);
 
+  async function fetchPhoto() {
+    const record = await loadPhoto(photoId);
+    if (!record) {
+      setState('error');
+      return;
+    }
+    if (urlRef.current) URL.revokeObjectURL(urlRef.current);
+    const objectUrl = URL.createObjectURL(record.blob);
+    urlRef.current = objectUrl;
+    setUrl(objectUrl);
+  }
+
+  // A retake writes a new photo record and repoints photoId (fresh id by
+  // design — same id would serve the stale cached URL). If the image is on
+  // screen, swap it for the new bytes; the view stays open so the second
+  // attempt can be judged against the first.
+  const shownIdRef = useRef(null);
+  useEffect(() => {
+    if (state !== 'thumb' && state !== 'full') return;
+    if (shownIdRef.current === photoId) return;
+    shownIdRef.current = photoId;
+    fetchPhoto().catch(() => setState('error'));
+    // Refetch is keyed on the repointed id alone; state joins the deps only
+    // to catch a load that finished between renders. fetchPhoto is a fresh
+    // closure each render over the stable loadPhoto — deliberately not a dep.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [photoId, state]);
+
   if (!loadPhoto) {
-    return html`<p class="observations-photo">
-      <span class="glyph-camera" aria-hidden="true"></span>Photo
-    </p>`;
+    return html`<p class="observations-photo">${cameraGlyph}Photo</p>`;
   }
 
   async function open() {
     setState('loading');
     try {
-      const record = await loadPhoto(photoId);
-      if (!record) {
-        setState('error');
-        return;
-      }
-      const objectUrl = URL.createObjectURL(record.blob);
-      urlRef.current = objectUrl;
-      setUrl(objectUrl);
+      await fetchPhoto();
+      shownIdRef.current = photoId;
       setState('thumb');
     } catch {
       setState('error');
     }
+  }
+
+  function close() {
+    setConfirmingDelete(false);
+    setState('thumb');
+  }
+
+  async function handleRetake(event) {
+    const file = event.target.files?.[0];
+    if (!file || !onSetPhoto) return;
+    setBusy(true);
+    try {
+      await onSetPhoto(observation.id, file);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDelete() {
+    await onDeletePhoto(observation.id);
+    // Nothing left to look at: the view closes and the row (parent-refreshed
+    // to photoId: null) returns to offering Add photo.
+    if (urlRef.current) {
+      URL.revokeObjectURL(urlRef.current);
+      urlRef.current = null;
+    }
+    setConfirmingDelete(false);
+    setState('idle');
   }
 
   if (state === 'error') {
@@ -108,6 +208,7 @@ function SavedPhoto({ photoId, loadPhoto }) {
   }
 
   if (state === 'thumb' || state === 'full') {
+    const caption = [formatTime(observation.fixAt), gridReference].filter(Boolean).join(' · ');
     return html`
       <img
         class="observations-photo-thumb"
@@ -116,28 +217,79 @@ function SavedPhoto({ photoId, loadPhoto }) {
         onClick=${() => setState('full')}
       />
       ${
-        // The full-screen view is plain row state, not a route — there is no
-        // router (see CLAUDE.md), and the overlay dies with its row. Backdrop
-        // taps close it; taps on the photo itself do not (target check), so a
-        // mis-hit while peering at the image can't dismiss it.
         state === 'full'
-          ? html`<div
-              class="photo-lightbox"
-              role="dialog"
-              aria-label="Photo"
-              onClick=${(event) => {
-                if (event.target === event.currentTarget) setState('thumb');
-              }}
-            >
-              <img class="photo-lightbox-image" src=${url} alt="" />
-              <button
-                type="button"
-                class="button-inverse photo-lightbox-close"
-                onClick=${() => setState('thumb')}
+          ? html`<${BodyPortal}>
+              <div
+                class="photo-lightbox"
+                role="dialog"
+                aria-label="Photo"
+                onClick=${(event) => {
+                  // Backdrop taps close; taps on the photo itself do not, so
+                  // a mis-hit while peering at the image can't dismiss it.
+                  if (event.target === event.currentTarget) close();
+                }}
               >
-                Close
-              </button>
-            </div>`
+                <button
+                  type="button"
+                  class="photo-lightbox-close"
+                  aria-label="Close"
+                  onClick=${close}
+                >
+                  <svg viewBox="0 0 14 14" width="14" height="14" aria-hidden="true">
+                    <g stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                      <line x1="2" y1="2" x2="12" y2="12" />
+                      <line x1="12" y1="2" x2="2" y2="12" />
+                    </g>
+                  </svg>
+                </button>
+                <img class="photo-lightbox-image" src=${url} alt="" />
+                <p class="photo-lightbox-caption">${caption}</p>
+                ${
+                  // Retake and Delete ride only where the parent passes the
+                  // callbacks (the capture page's open session) — history
+                  // passes neither, exactly as it declines onEditNote.
+                  onSetPhoto && onDeletePhoto
+                    ? confirmingDelete
+                      ? html`<div class="photo-lightbox-actions">
+                          <button
+                            type="button"
+                            class="photo-lightbox-delete-commit"
+                            onClick=${handleDelete}
+                          >
+                            Delete photo
+                          </button>
+                          <button
+                            type="button"
+                            class="photo-lightbox-link"
+                            onClick=${() => setConfirmingDelete(false)}
+                          >
+                            Keep it
+                          </button>
+                        </div>`
+                      : html`<div class="photo-lightbox-actions">
+                          <label class="photo-lightbox-retake">
+                            <span class="glyph-camera" aria-hidden="true"></span>
+                            ${busy ? 'Retaking…' : 'Retake'}
+                            <input
+                              type="file"
+                              accept="image/*"
+                              capture="environment"
+                              disabled=${busy}
+                              onChange=${handleRetake}
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            class="photo-lightbox-link"
+                            onClick=${() => setConfirmingDelete(true)}
+                          >
+                            Delete
+                          </button>
+                        </div>`
+                    : null
+                }
+              </div>
+            <//>`
           : null
       }
     `;
@@ -146,52 +298,29 @@ function SavedPhoto({ photoId, loadPhoto }) {
   return html`
     <button
       type="button"
-      class="link observations-photo"
+      class="attachment-chip ${state === 'loading' ? 'attachment-chip-loading' : ''}"
       onClick=${open}
       disabled=${state === 'loading'}
+      aria-busy=${state === 'loading'}
     >
-      <span class="glyph-camera" aria-hidden="true"></span>
-      ${state === 'loading' ? 'Loading photo…' : 'Show photo'}
+      ${cameraGlyph} Photo
     </button>
   `;
 }
 
-// The note on a saved row, editable in place when the parent offers
-// onEditNote (the capture page, for the open session — history never passes
-// it, which is what keeps that view read-only). Row-local state like
-// SavedVoiceNote: the editor's draft belongs to this row alone, and a
-// failed save stays open with its error so the surveyor can retry.
-function EditableNote({ observation, onEditNote }) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState('');
+// The editor a note opens into (the trigger lives in the attachment strip).
+// A failed save stays open with its error so the surveyor can retry.
+function NoteEditor({ observation, onEditNote, onClose }) {
+  const [draft, setDraft] = useState(observation.note ?? '');
   const [state, setState] = useState('idle'); // idle | saving | error
   const [error, setError] = useState('');
-
-  if (!editing) {
-    return html`
-      ${observation.note ? html`<p class="observations-note">${observation.note}</p>` : null}
-      <button
-        type="button"
-        class="link observations-note-edit"
-        onClick=${() => {
-          setDraft(observation.note ?? '');
-          setState('idle');
-          setError('');
-          setEditing(true);
-        }}
-      >
-        ${observation.note ? 'Edit note' : 'Add note'}
-      </button>
-    `;
-  }
 
   async function save() {
     setState('saving');
     setError('');
     try {
       await onEditNote(observation.id, draft);
-      setEditing(false);
-      setState('idle');
+      onClose();
     } catch (err) {
       setState('error');
       setError(err.message || 'Could not save the note');
@@ -208,117 +337,193 @@ function EditableNote({ observation, onEditNote }) {
         <button type="button" class="button-outline" disabled=${state === 'saving'} onClick=${save}>
           ${state === 'saving' ? 'Saving…' : 'Save note'}
         </button>
-        <button type="button" class="link" onClick=${() => setEditing(false)}>Cancel</button>
+        <button type="button" class="link" onClick=${onClose}>Cancel</button>
       </div>
       ${state === 'error' ? html`<p class="panel-danger" role="alert">${error}</p>` : null}
     </div>
   `;
 }
 
-// Live-updating record of what's been saved this session — a visual
-// indicator of accumulated observations, not a review screen (that's Phase
-// 6); the in-place edits are the note and the photo view, above, and only
-// when the parent offers the loader — storage access stays injected, never
-// imported into a presentational component.
-//
-// A card list rather than the six-column table this replaced. Six columns
-// cannot be read one-handed, and the two values a surveyor checks straight
-// after a save — the time and the accuracy — were the two the table pushed
-// furthest apart. The card also has room for the whole note, which retires
-// the clip-to-40-characters-and-hope-for-a-tooltip workaround: touch has no
-// hover, so that text was effectively unreachable.
-export function ObservationsList({ observations, gridRef, loadAudio, loadPhoto, onEditNote }) {
+// One row: the record's data first, then a single attachment strip (design
+// pass 4 §7a) — the photo chip or thumbnail, the voice chip, and Edit note
+// pushed right, on one line whose height no longer varies with how many
+// attachments the row happens to carry. Editing state is row-local.
+function ObservationRow({
+  obs,
+  gridRef,
+  loadAudio,
+  loadPhoto,
+  onEditNote,
+  onSetPhoto,
+  onDeletePhoto,
+}) {
+  const [editingNote, setEditingNote] = useState(false);
+
+  const poor = accuracyQuality(obs.gpsAccuracyM) === 'poor';
+  // One string rather than three interpolations: htm drops the whitespace
+  // around a line break between expressions, so a wrapped template loses the
+  // spaces around the separators.
+  const meta = [
+    formatLatLon(obs.lat, obs.lon),
+    formatAccuracy(obs.gpsAccuracyM),
+    obs.headingDeg == null ? '—' : formatHeading(obs.headingDeg),
+  ].join(' · ');
+  // Its own line rather than a fourth item on the metadata run: the grid
+  // reference is the part a surveyor reads out or copies into a report.
+  const gridReference = gridRef?.(obs.lat, obs.lon) ?? null;
+  // One string for the same htm-whitespace reason as `meta`.
+  const traced =
+    obs.positionSource === 'trace' && obs.geometry
+      ? `Traced ${obs.geometry.type === 'Polygon' ? 'boundary' : 'path'} · ${formatDistance(
+          lineLengthM(
+            obs.geometry.type === 'Polygon'
+              ? obs.geometry.coordinates[0]
+              : obs.geometry.coordinates,
+          ),
+        )}`
+      : null;
+
+  // 7e: Add photo is a link, not a chip — the chips mean "there is something
+  // here to open", and an empty slot is not that. Offered only where the
+  // parent passes onSetPhoto (the open session); a voice note is
+  // deliberately not addable here — recording one somewhere else, minutes
+  // later, describes the wrong place.
+  const hasStrip = Boolean(
+    obs.photoId || obs.audioId || onEditNote || (onSetPhoto && !obs.photoId),
+  );
+
+  return html`
+    <li class="observations-row">
+      <p class="observations-row-head">
+        <span class="observations-time">${formatTime(obs.fixAt)}</span>
+        <${ExportBadge} exported=${obs.exported} changed=${obs.changed} />
+      </p>
+      ${
+        // Directly under the head, glyph-led: this line is the row's
+        // identity — it says what the record IS.
+        traced
+          ? html`<p class="observations-traced">
+              <${TraceGlyph}
+                mode=${obs.geometry.type === 'Polygon' ? 'boundary' : 'path'}
+                width="20"
+                height="15"
+              />
+              ${traced}
+            </p>`
+          : null
+      }
+      ${gridReference ? html`<p class="observations-gridref">${gridReference}</p>` : null}
+      <p class="observations-meta">${meta}</p>
+      ${!editingNote && obs.note ? html`<p class="observations-note">${obs.note}</p>` : null}
+      ${
+        editingNote
+          ? html`<${NoteEditor}
+              observation=${obs}
+              onEditNote=${onEditNote}
+              onClose=${() => setEditingNote(false)}
+            />`
+          : null
+      }
+      ${
+        hasStrip && !editingNote
+          ? html`<div class="attachment-strip">
+              ${
+                obs.photoId
+                  ? html`<${SavedPhoto}
+                      observation=${obs}
+                      gridReference=${gridReference}
+                      loadPhoto=${loadPhoto}
+                      onSetPhoto=${onSetPhoto}
+                      onDeletePhoto=${onDeletePhoto}
+                    />`
+                  : onSetPhoto
+                    ? html`<label class="attachment-add-photo link">
+                        ${cameraGlyph} Add photo
+                        <input
+                          type="file"
+                          accept="image/*"
+                          capture="environment"
+                          onChange=${(event) => {
+                            const file = event.target.files?.[0];
+                            if (file) onSetPhoto(obs.id, file);
+                          }}
+                        />
+                      </label>`
+                    : null
+              }
+              ${
+                obs.audioId
+                  ? html`<${SavedVoiceNote}
+                      audioId=${obs.audioId}
+                      durationMs=${obs.audioDurationMs ?? null}
+                      loadAudio=${loadAudio}
+                    />`
+                  : null
+              }
+              ${
+                onEditNote
+                  ? html`<button
+                      type="button"
+                      class="link observations-note-edit"
+                      onClick=${() => setEditingNote(true)}
+                    >
+                      ${obs.note ? 'Edit note' : 'Add note'}
+                    </button>`
+                  : null
+              }
+            </div>`
+          : null
+      }
+      ${
+        // Worth surfacing per row, not just live: a fix this loose is the
+        // one thing worth walking back and re-taking.
+        poor ? html`<p class="observations-poor warns">Accuracy poor</p>` : null
+      }
+      ${
+        // The accuracy shown above is a map precision for these, not a
+        // satellite fix — the same number meaning two very different things.
+        obs.positionSource === 'map'
+          ? html`<p class="observations-picked">Marked on the map, not measured</p>`
+          : null
+      }
+    </li>
+  `;
+}
+
+// Live-updating record of what's been saved this session. The in-place
+// edits — the note, and the photo's retake/delete/add (design pass 4) —
+// exist only when the parent passes the callbacks; storage access stays
+// injected, never imported into a presentational component. History passes
+// the loaders but no mutators, which is the whole read-only rule.
+export function ObservationsList({
+  observations,
+  gridRef,
+  loadAudio,
+  loadPhoto,
+  onEditNote,
+  onSetPhoto,
+  onDeletePhoto,
+}) {
   if (observations.length === 0) {
     return html`<p class="observations-empty">No observations saved yet</p>`;
   }
 
   return html`
     <ul class="observations-list">
-      ${observations.map((obs) => {
-        const poor = accuracyQuality(obs.gpsAccuracyM) === 'poor';
-        // One string rather than three interpolations: htm drops the
-        // whitespace around a line break between expressions, so a wrapped
-        // template loses the spaces around the separators.
-        const meta = [
-          formatLatLon(obs.lat, obs.lon),
-          formatAccuracy(obs.gpsAccuracyM),
-          obs.headingDeg == null ? '—' : formatHeading(obs.headingDeg),
-        ].join(' · ');
-        // Its own line rather than a fourth item on the metadata run: the
-        // grid reference is the part a surveyor reads out or copies into a
-        // report, and it should not need picking out of a list.
-        const gridReference = gridRef?.(obs.lat, obs.lon) ?? null;
-        // One string for the same htm-whitespace reason as `meta`. The
-        // lat/lon above is a representative point; the record is the walked
-        // line — say so, with how much of it there is.
-        const traced =
-          obs.positionSource === 'trace' && obs.geometry
-            ? `Traced ${obs.geometry.type === 'Polygon' ? 'boundary' : 'path'} · ${formatDistance(
-                lineLengthM(
-                  obs.geometry.type === 'Polygon'
-                    ? obs.geometry.coordinates[0]
-                    : obs.geometry.coordinates,
-                ),
-              )}`
-            : null;
-        return html`
-          <li key=${obs.id} class="observations-row">
-            <p class="observations-row-head">
-              <span class="observations-time">${formatTime(obs.fixAt)}</span>
-              <${ExportBadge} exported=${obs.exported} />
-            </p>
-            ${
-              // Directly under the head, glyph-led: this line is the row's
-              // identity — it says what the record IS, and everything below
-              // it describes that thing. The caveat and warning lines keep
-              // their place at the bottom.
-              traced
-                ? html`<p class="observations-traced">
-                    <${TraceGlyph}
-                      mode=${obs.geometry.type === 'Polygon' ? 'boundary' : 'path'}
-                      width="20"
-                      height="15"
-                    />
-                    ${traced}
-                  </p>`
-                : null
-            }
-            ${gridReference ? html`<p class="observations-gridref">${gridReference}</p>` : null}
-            <p class="observations-meta">${meta}</p>
-            ${
-              onEditNote
-                ? html`<${EditableNote} observation=${obs} onEditNote=${onEditNote} />`
-                : obs.note
-                  ? html`<p class="observations-note">${obs.note}</p>`
-                  : null
-            }
-            ${
-              obs.photoId
-                ? html`<${SavedPhoto} photoId=${obs.photoId} loadPhoto=${loadPhoto} />`
-                : null
-            }
-            ${
-              obs.audioId
-                ? html`<${SavedVoiceNote} audioId=${obs.audioId} loadAudio=${loadAudio} />`
-                : null
-            }
-            ${
-              // Worth surfacing per row, not just live: a fix this loose is
-              // the one thing worth walking back and re-taking.
-              poor ? html`<p class="observations-poor warns">Accuracy poor</p>` : null
-            }
-            ${
-              // The accuracy shown above is a map precision for these, not a
-              // satellite fix. Saying so on the card is the difference
-              // between "±12 m, measured" and "±12 m, eyeballed from 300 m
-              // away" — the same number meaning two very different things.
-              obs.positionSource === 'map'
-                ? html`<p class="observations-picked">Marked on the map, not measured</p>`
-                : null
-            }
-          </li>
-        `;
-      })}
+      ${observations.map(
+        (obs) => html`
+          <${ObservationRow}
+            key=${obs.id}
+            obs=${obs}
+            gridRef=${gridRef}
+            loadAudio=${loadAudio}
+            loadPhoto=${loadPhoto}
+            onEditNote=${onEditNote}
+            onSetPhoto=${onSetPhoto}
+            onDeletePhoto=${onDeletePhoto}
+          />
+        `,
+      )}
     </ul>
   `;
 }

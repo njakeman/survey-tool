@@ -10,7 +10,15 @@ import { html } from 'htm/preact';
 // favour of export + import: the state a surveyor actually needs before
 // walking away is whether the data has left the phone, and an export is now
 // the only way it does.
-export function ExportBadge({ exported }) {
+// `changed` (design pass 4): the record was edited after the export that
+// carried it — the copy that left the device is stale. It outranks
+// `exported`, because "exported" would be a lie about the bytes on someone's
+// laptop; the dashed (pending) shape says work remains, and the word says
+// which kind.
+export function ExportBadge({ exported, changed = false }) {
+  if (changed) {
+    return html`<span class="chip badge-not-exported">Changed since export</span>`;
+  }
   if (exported) {
     return html`<span class="chip badge-exported"
       ><span aria-hidden="true">✓</span> Exported</span

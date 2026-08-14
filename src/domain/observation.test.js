@@ -34,9 +34,33 @@ describe('createObservation', () => {
       featureLabel: null,
       positionSource: 'gps',
       geometry: null,
+      audioDurationMs: null,
+      changedAt: null,
       synced: false,
       syncedAt: null,
     });
+  });
+
+  test('carries a voice note duration so a list row can say 0:12 without loading the blob', () => {
+    const obs = createObservation({ ...baseFields, audioId: 'obs-1', audioDurationMs: 12_400 });
+
+    expect(obs.audioDurationMs).toBe(12_400);
+  });
+
+  test('rejects a duration that is not a non-negative number', () => {
+    // NaN would render as "NaN:NaN" on the chip; a negative one is garbage in.
+    expect(() => createObservation({ ...baseFields, audioDurationMs: -1 })).toThrow(
+      /audioDurationMs/,
+    );
+    expect(() => createObservation({ ...baseFields, audioDurationMs: Number.NaN })).toThrow(
+      /audioDurationMs/,
+    );
+  });
+
+  test('carries the changed-since-save stamp for records edited after the fact', () => {
+    const obs = createObservation({ ...baseFields, changedAt: '2026-08-14T10:00:00.000Z' });
+
+    expect(obs.changedAt).toBe('2026-08-14T10:00:00.000Z');
   });
 
   test('records that a position was picked off the map rather than measured', () => {
