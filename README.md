@@ -11,8 +11,9 @@ See [`CLAUDE.md`](./CLAUDE.md) for the constraints that bind the implementation 
 
 ## Status
 
-Field-usable offline. Capture (GPS/compass/photo/save, with in-place note editing on the open
-session), session history, zip export **and
+Field-usable offline. Capture (GPS/compass/photo/save, with in-place note editing and photo
+retake/delete/add on the open session's own rows — the history view stays read-only), a newest
+↔ oldest order toggle for the live session's list, session history, zip export **and
 import** (plus [Load session](#import-a-session), which reopens a past or imported session to
 add to it, and [session deletion](#import-a-session) — single, or a purge of the fully exported),
 the offline basemap (with four [online basemaps](#offline-basemap) beside it — Esri aerial
@@ -22,7 +23,8 @@ selection highlight, and "Record here" — which for a polygon records the polyg
 where you are standing), [OS grid references](#grid-references) and
 [marking points you cannot reach](#marking-a-point-you-cannot-reach) are built. The map takes
 standard gestures — one finger pans, pinch zooms — and the interface itself can never be
-pinch-zoomed.
+pinch-zoomed. `navigator.storage.persist()` is requested at startup, so the browser is asked not
+to evict IndexedDB under storage pressure — the probe page reports whether it stuck.
 
 **Voice notes** ride on observations: record on the capture page (webm/opus at ~0.4 MB/min —
 about half a photo per minute, measured on the device), hear it back before saving, play it from
@@ -35,7 +37,10 @@ access token, the passphrase prompt and the Git Data API commit flow) was planne
 deliberately dropped (2026-08-11): export to the device covers the need, with none of the token
 handling. Data leaves the phone through the share sheet and comes back through
 [Import](#import-a-session); the Exported badge on every observation says whether it has left
-yet.
+yet, and a **Changed since export** badge takes over if a retake, delete, add or note edit
+touches an observation after its session was exported — the map marker, the history summary and
+the capture page's own Export hint all pick the same state up, so an amended survey never reads
+as safely off the device until it is exported again.
 
 To see a map you must first produce basemap archives for your survey areas — see
 [Offline basemap](#offline-basemap) below. Without any, the app works exactly as before and the
@@ -380,8 +385,10 @@ view (an imported copy included), it reopens that session in the capture interfa
 observations land in it. It is refused while another session is open — end the live session
 first; nothing is ever closed for you. What was already exported keeps its Exported badge;
 anything captured after loading honestly reads Not exported. While a session is open, each saved
-observation's note can also be edited in place from the list (the one post-save amendment; the
-history view stays read-only).
+observation's note can be edited in place from the list, and its photo retaken, deleted or added
+(the history view stays read-only throughout). Editing an observation that was already part of an
+export doesn't clear its Exported badge — it switches to **Changed since export**, so the
+surveyor knows to send it again rather than assuming the earlier export still matches.
 
 Sessions can also be **deleted** — permanently and locally, observations, photos and voice notes
 together, behind a two-step confirm that states how many observations have never been exported
