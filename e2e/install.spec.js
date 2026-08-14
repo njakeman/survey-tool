@@ -3,7 +3,9 @@ import { test, expect } from '@playwright/test';
 test('registers a service worker and renders the capture page by default', async ({ page }) => {
   await page.goto('/');
 
-  await expect(page.getByRole('button', { name: 'Save observation' })).toBeVisible();
+  // A fresh install has no session, so the first-launch state is the start
+  // form — Save appears only once a session opens (design pass 3 §5a).
+  await expect(page.getByRole('button', { name: 'Start session' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Device probe' })).toBeVisible();
 
   await page.waitForFunction(() => navigator.serviceWorker.controller !== null, null, {
@@ -51,7 +53,7 @@ test('a muted cross-origin error paints no fatal banner; a real error still does
   // error. (:0:0)" over a working app. A genuine error keeps the banner —
   // it is the only diagnostics channel on an installed PWA.
   await page.goto('/');
-  await expect(page.getByRole('button', { name: 'Save observation' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Start session' })).toBeVisible();
 
   await page.evaluate(() => {
     window.dispatchEvent(new ErrorEvent('error', { message: 'Script error.' }));

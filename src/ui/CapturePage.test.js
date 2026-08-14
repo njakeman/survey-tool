@@ -136,7 +136,10 @@ describe('CapturePage — save gating', () => {
     );
   });
 
-  test('save is disabled with a fix but no open session', async () => {
+  test('with a fix but no open session, Save is absent, not disabled', async () => {
+    // Everything that writes into a session is absent without one — there
+    // is nothing to explain, so a dashed ghost would be noise (design
+    // pass 3 §5a).
     const service = createFakeService({ openSession: null });
     const { sensors, pushPosition } = createFakeSensors();
     render(html`<${CapturePage} service=${service} sensors=${sensors} downscale=${vi.fn()} />`);
@@ -144,10 +147,114 @@ describe('CapturePage — save gating', () => {
 
     pushPosition(POSITION);
 
-    // The full phrase, not /start a session/: the first-launch headline
-    // ("Start a session to begin capturing") matches the loose pattern too.
-    await waitFor(() => expect(screen.getByText(/start a session first/i)).toBeInTheDocument());
-    expect(screen.getByRole('button', { name: /save observation/i })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: /save observation/i })).toBeNull();
+  });
+});
+
+describe('CapturePage — session gating (design pass 3 §5a/5b)', () => {
+  test('without a session the capture block is absent and one line explains why', async () => {
+    const service = createFakeService({ openSession: null });
+    const { sensors, pushPosition } = createFakeSensors();
+    render(
+      html`<${CapturePage}
+        service=${service}
+        sensors=${sensors}
+        downscale=${vi.fn()}
+        recordAudio=${vi.fn()}
+      />`,
+    );
+    await screen.findByLabelText(/session name/i);
+    pushPosition(POSITION);
+
+    expect(screen.queryByLabelText(/^note$/i)).toBeNull();
+    expect(document.querySelector('input[capture="environment"]')).toBeNull();
+    expect(screen.queryByRole('button', { name: /voice note/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Path/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /save observation/i })).toBeNull();
+
+    // The readings panel and the map stay — GPS works without a session and
+    // watching the fix settle is the reason to stand still.
+    expect(
+      screen.getByText(
+        'The position above is live. Start a session to save readings, notes, photos, voice notes and traces into it.',
+      ),
+    ).toBeInTheDocument();
+  });
+
+  test('starting a session brings the capture block in whole', async () => {
+    const service = createFakeService({ openSession: OPEN_SESSION });
+    const { sensors, pushPosition } = createFakeSensors();
+    render(
+      html`<${CapturePage}
+        service=${service}
+        sensors=${sensors}
+        downscale=${vi.fn()}
+        recordAudio=${vi.fn()}
+      />`,
+    );
+    await screen.findByText('Ashton Keynes');
+    pushPosition(POSITION);
+
+    expect(screen.getByLabelText(/^note$/i)).toBeInTheDocument();
+    expect(document.querySelector('input[capture="environment"]')).not.toBeNull();
+    expect(screen.getByRole('button', { name: /^Path/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /save observation/i })).toBeInTheDocument();
+    expect(screen.queryByText(/the position above is live/i)).toBeNull();
+  });
+
+  test('without a session, Session history is a full button carrying the unsent count', async () => {
+    // The count of unsent work is visible before leaving the field, not
+    // after (design pass 3 §5e). The badge takes the pending badges'
+    // dashed treatment.
+    const service = createFakeService({ openSession: null });
+    service.listSessions = vi.fn().mockResolvedValue([
+      { id: 's1', status: 'closed', lastExportedAt: null },
+      {
+        id: 's2',
+        status: 'closed',
+        lastExportedAt: '2026-08-10T00:00:00.000Z',
+        lastExportCount: 2,
+      },
+    ]);
+    service.countObservations = vi.fn().mockImplementation(async (id) => (id === 's1' ? 3 : 2));
+    const { sensors } = createFakeSensors();
+    renderPage({ service, sensors });
+
+    const button = await screen.findByRole('button', { name: /session history/i });
+    await waitFor(() => expect(button).toHaveTextContent('2 sessions'));
+    expect(button).toHaveTextContent(/3 unsent/i);
+  });
+
+  test('with everything exported the badge is absent and the count spells its unit', async () => {
+    const service = createFakeService({ openSession: null });
+    service.listSessions = vi.fn().mockResolvedValue([
+      {
+        id: 's1',
+        status: 'closed',
+        lastExportedAt: '2026-08-10T00:00:00.000Z',
+        lastExportCount: 2,
+      },
+    ]);
+    service.countObservations = vi.fn().mockResolvedValue(2);
+    const { sensors } = createFakeSensors();
+    renderPage({ service, sensors });
+
+    const button = await screen.findByRole('button', { name: /session history/i });
+    await waitFor(() => expect(button).toHaveTextContent('1 session'));
+    expect(button).not.toHaveTextContent(/unsent/i);
+  });
+
+  test('Session history is offered without a session and stands down during one', async () => {
+    // With a session running, history is a detour (design pass 3 §5b) — it
+    // comes back the moment the session ends.
+    const service = createFakeService({ openSession: OPEN_SESSION });
+    const { sensors } = createFakeSensors();
+    renderPage({ service, sensors });
+    await screen.findByText('Ashton Keynes');
+
+    expect(screen.queryByRole('button', { name: /session history/i })).toBeNull();
+    // The diagnostic keeps its footer link in both states.
+    expect(screen.getByRole('button', { name: /device probe/i })).toBeInTheDocument();
   });
 });
 
@@ -306,6 +413,12 @@ describe('CapturePage — saving an observation', () => {
 describe('CapturePage — undo lifecycle', () => {
   async function renderReadyWithSave() {
     const service = createFakeService({ openSession: OPEN_SESSION });
+    // Mount lists an honest empty session; every read after the save below
+    // sees the saved row — which keeps the End confirm on its close wording
+    // (a session with a record is closed, not discarded).
+    service.listObservations
+      .mockResolvedValueOnce([])
+      .mockResolvedValue([{ id: 'obs-1', sessionId: 'sess-1', lat: 51.5, lon: -0.14 }]);
     const { sensors, pushPosition } = createFakeSensors();
     render(html`<${CapturePage} service=${service} sensors=${sensors} downscale=${vi.fn()} />`);
     await screen.findByText('Ashton Keynes');
@@ -514,7 +627,11 @@ describe('CapturePage — session history link and export', () => {
   });
 
   test('tapping Export on the open session calls exportSession with its id and shows a success message', async () => {
-    const service = createFakeService({ openSession: OPEN_SESSION });
+    // Export needs something to export — at zero it is disabled with a hint.
+    const service = createFakeService({
+      openSession: OPEN_SESSION,
+      observations: [{ id: 'obs-1', sessionId: 'sess-1', lat: 51.5, lon: -0.14 }],
+    });
     const { sensors } = createFakeSensors();
     const exportSession = vi.fn().mockResolvedValue({ method: 'share' });
     renderPage({ service, sensors, exportSession });
@@ -527,7 +644,10 @@ describe('CapturePage — session history link and export', () => {
   });
 
   test('a failed export shows an error rather than crashing the page', async () => {
-    const service = createFakeService({ openSession: OPEN_SESSION });
+    const service = createFakeService({
+      openSession: OPEN_SESSION,
+      observations: [{ id: 'obs-1', sessionId: 'sess-1', lat: 51.5, lon: -0.14 }],
+    });
     const { sensors } = createFakeSensors();
     const exportSession = vi.fn().mockRejectedValue(new Error('zip failed'));
     renderPage({ service, sensors, exportSession });
@@ -536,6 +656,31 @@ describe('CapturePage — session history link and export', () => {
     fireEvent.click(screen.getByRole('button', { name: /^export$/i }));
 
     await screen.findByText(/zip failed/);
+  });
+
+  test('Export is disabled with a hint while the session has nothing to export', async () => {
+    const service = createFakeService({ openSession: OPEN_SESSION });
+    const { sensors } = createFakeSensors();
+    render(html`<${CapturePage} service=${service} sensors=${sensors} downscale=${vi.fn()} />`);
+    await screen.findByText('Ashton Keynes');
+
+    expect(screen.getByRole('button', { name: /^export$/i })).toBeDisabled();
+    expect(screen.getByText(/nothing to export yet/i)).toBeInTheDocument();
+  });
+
+  test('Export enables once an observation is saved, and the hint goes', async () => {
+    const observation = { id: 'obs-1', sessionId: 'sess-1', lat: 51.5, lon: -0.14 };
+    const service = createFakeService({
+      openSession: OPEN_SESSION,
+      observations: [observation],
+    });
+    const { sensors } = createFakeSensors();
+    render(html`<${CapturePage} service=${service} sensors=${sensors} downscale=${vi.fn()} />`);
+    await screen.findByText('Ashton Keynes');
+    await screen.findByText(/1 saved/);
+
+    expect(screen.getByRole('button', { name: /^export$/i })).not.toBeDisabled();
+    expect(screen.queryByText(/nothing to export yet/i)).toBeNull();
   });
 
   test('Export is a session-level control at the page foot, not a capture action', async () => {
@@ -578,7 +723,7 @@ describe('CapturePage — voice note', () => {
   test('a recorded note rides in the save and is cleared by it', async () => {
     const { service } = await renderWithRecorder();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Record voice note' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Voice note' }));
     await screen.findByText(/Recording ·/);
     fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
     await waitFor(() => expect(document.querySelector('audio.voice-note-player')).toBeTruthy());
@@ -593,7 +738,7 @@ describe('CapturePage — voice note', () => {
     // Cleared with the note and photo: the recording belongs to the
     // observation just saved, not the next one.
     await waitFor(() => expect(document.querySelector('audio.voice-note-player')).toBeNull());
-    expect(screen.getByRole('button', { name: 'Record voice note' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Voice note' })).toBeInTheDocument();
   });
 
   test('without an injected recorder the field simply is not offered', async () => {
@@ -602,7 +747,7 @@ describe('CapturePage — voice note', () => {
     render(html`<${CapturePage} service=${service} sensors=${sensors} downscale=${vi.fn()} />`);
     await screen.findByText('Ashton Keynes');
 
-    expect(screen.queryByRole('button', { name: 'Record voice note' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Voice note' })).toBeNull();
   });
 });
 
@@ -1083,29 +1228,70 @@ describe('CapturePage — saving against a point marked on the map', () => {
 });
 
 describe('CapturePage — display mode', () => {
-  test('the footer offers Auto and Night, and Night is a deliberate tap', async () => {
+  test('the footer offers four exclusive positions and each is a deliberate tap', async () => {
     const service = createFakeService({ openSession: null });
     const { sensors } = createFakeSensors();
     const onSetDisplayMode = vi.fn();
     renderPage({ service, sensors, onSetDisplayMode });
     await screen.findByLabelText(/session name/i);
 
-    const night = screen.getByRole('button', { name: 'Night' });
-    expect(night.getAttribute('aria-pressed')).toBe('false');
-    expect(screen.getByRole('button', { name: 'Auto' }).getAttribute('aria-pressed')).toBe('true');
+    const group = screen.getByRole('radiogroup', { name: /display/i });
+    const options = within(group).getAllByRole('radio');
+    expect(options.map((option) => option.textContent.trim())).toEqual([
+      'Auto',
+      'Light',
+      'Dark',
+      'Night',
+    ]);
+    expect(within(group).getByRole('radio', { name: 'Auto' }).getAttribute('aria-checked')).toBe(
+      'true',
+    );
+    expect(within(group).getByRole('radio', { name: 'Night' }).getAttribute('aria-checked')).toBe(
+      'false',
+    );
 
-    fireEvent.click(night);
-    expect(onSetDisplayMode).toHaveBeenCalledWith('night');
+    fireEvent.click(within(group).getByRole('radio', { name: 'Light' }));
+    fireEvent.click(within(group).getByRole('radio', { name: 'Dark' }));
+    fireEvent.click(within(group).getByRole('radio', { name: 'Night' }));
+    expect(onSetDisplayMode.mock.calls.map(([mode]) => mode)).toEqual(['light', 'dark', 'night']);
   });
 
-  test('night shows as the pressed state', async () => {
+  test('a forced position shows as the checked state', async () => {
     const service = createFakeService({ openSession: null });
     const { sensors } = createFakeSensors();
-    renderPage({ service, sensors, displayMode: 'night' });
+    renderPage({ service, sensors, displayMode: 'dark' });
     await screen.findByLabelText(/session name/i);
 
-    expect(screen.getByRole('button', { name: 'Night' }).getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByRole('button', { name: 'Auto' }).getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByRole('radio', { name: 'Dark' }).getAttribute('aria-checked')).toBe('true');
+    expect(screen.getByRole('radio', { name: 'Auto' }).getAttribute('aria-checked')).toBe('false');
+  });
+
+  test("Auto captions itself with the system's resolved scheme; forced positions do not", async () => {
+    const service = createFakeService({ openSession: null });
+    const { sensors } = createFakeSensors();
+    const { rerender } = render(
+      html`<${CapturePage}
+        service=${service}
+        sensors=${sensors}
+        downscale=${vi.fn()}
+        displayMode=${'auto'}
+        systemScheme=${'dark'}
+      />`,
+    );
+    await screen.findByLabelText(/session name/i);
+
+    expect(screen.getByText('Following the system — dark')).toBeInTheDocument();
+
+    rerender(
+      html`<${CapturePage}
+        service=${service}
+        sensors=${sensors}
+        downscale=${vi.fn()}
+        displayMode=${'night'}
+        systemScheme=${'dark'}
+      />`,
+    );
+    expect(screen.queryByText(/following the system/i)).toBeNull();
   });
 });
 
@@ -1120,12 +1306,11 @@ describe('CapturePage - trace modes', () => {
     await screen.findByText('Ashton Keynes');
     pushPosition(POSITION);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Trace' }));
-    fireEvent.click(screen.getByRole('button', { name: /Trace a path/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Path/ }));
     await screen.findByText(/Tracing path/);
   }
 
-  test('the Trace button opens a chooser and starting a path begins recording', async () => {
+  test('tapping Path begins recording, one tap deep', async () => {
     const service = createFakeService({ openSession: OPEN_SESSION });
     const fakes = createFakeSensors();
     await startPathTrace({ service, ...fakes });
@@ -1135,7 +1320,7 @@ describe('CapturePage - trace modes', () => {
     await waitFor(() => expect(service.appendTraceVertex).toHaveBeenCalled());
   });
 
-  test('the chooser explains both walks and can be cancelled', async () => {
+  test('the pair stands ready with captions, and there is no chooser', async () => {
     const service = createFakeService({ openSession: OPEN_SESSION });
     const fakes = createFakeSensors();
     render(
@@ -1144,19 +1329,39 @@ describe('CapturePage - trace modes', () => {
     await screen.findByText('Ashton Keynes');
     fakes.pushPosition(POSITION);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Trace' }));
-
-    // The one moment of modal choice in the flow: a first-time user won't
-    // know a boundary auto-closes, so each option says what it records.
-    expect(screen.getByText('What are you walking?')).toBeInTheDocument();
-    expect(screen.getByText(/Records the line you walk, start to finish/)).toBeInTheDocument();
-    expect(
-      screen.getByText(/Closes the loop back to your start point when you finish/),
-    ).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-    expect(screen.queryByRole('button', { name: /Trace a path/ })).toBeNull();
+    // The captions carry what the chooser existed to explain — a first-time
+    // user won't know a boundary auto-closes — which is why the chooser
+    // could go (design pass 3 §5d).
+    expect(screen.getByRole('button', { name: /^Path/ })).toHaveTextContent('Open line, A to B');
+    expect(screen.getByRole('button', { name: /^Boundary/ })).toHaveTextContent(
+      'Closes back to the start',
+    );
+    expect(screen.getByText('Trace a line along the ground')).toBeInTheDocument();
+    expect(screen.queryByText('What are you walking?')).toBeNull();
     expect(service.startTraceDraft).not.toHaveBeenCalled();
+  });
+
+  test('the pair waits for a fix before either walk can start', async () => {
+    const service = createFakeService({ openSession: OPEN_SESSION });
+    const fakes = createFakeSensors();
+    render(
+      html`<${CapturePage} service=${service} sensors=${fakes.sensors} downscale=${vi.fn()} />`,
+    );
+    await screen.findByText('Ashton Keynes');
+
+    expect(screen.getByRole('button', { name: /^Path/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /^Boundary/ })).toBeDisabled();
+  });
+
+  test('while a path records, Boundary stands down rather than disappearing', async () => {
+    const service = createFakeService({ openSession: OPEN_SESSION });
+    const fakes = createFakeSensors();
+    await startPathTrace({ service, ...fakes });
+
+    // The live walk's strip holds the pair's slot; the other mode stays
+    // visible but disabled, so the pair never reflows under a thumb.
+    expect(screen.queryByRole('button', { name: /^Path/ })).toBeNull();
+    expect(screen.getByRole('button', { name: /^Boundary/ })).toBeDisabled();
   });
 
   test('walking appends vertices to the draft as they are accepted', async () => {
@@ -1201,8 +1406,7 @@ describe('CapturePage - trace modes', () => {
     await screen.findByText('Ashton Keynes');
     fakes.pushPosition(POSITION);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Trace' }));
-    fireEvent.click(screen.getByRole('button', { name: /Trace a boundary/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Boundary/ }));
     await screen.findByText(/Tracing boundary/);
 
     fireEvent.click(screen.getByRole('button', { name: 'Finish' }));
@@ -1243,7 +1447,9 @@ describe('CapturePage - trace modes', () => {
     await startPathTrace({ service, ...fakes });
 
     fireEvent.click(screen.getByRole('button', { name: 'End session' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm end session' }));
+    // Nothing saved yet, so the confirm wears the discard wording — but the
+    // trace guard fires first and nothing is discarded.
+    fireEvent.click(screen.getByRole('button', { name: /discard session/i }));
 
     await screen.findByText(/finish or discard the trace first/i);
     expect(service.endSession).not.toHaveBeenCalled();

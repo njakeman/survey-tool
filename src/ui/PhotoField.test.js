@@ -4,11 +4,11 @@ import { html } from 'htm/preact';
 import { PhotoField } from './PhotoField.js';
 
 describe('PhotoField', () => {
-  test('shows a clear "Take Photo" label, not the browser\'s raw "Choose File" input', () => {
+  test('shows a clear "Photo" label, not the browser\'s raw "Choose File" input', () => {
     render(html`<${PhotoField} />`);
-    expect(screen.getByText('Take Photo')).toBeInTheDocument();
+    expect(screen.getByText('Photo')).toBeInTheDocument();
     // still reachable via its accessible label, for a11y and for the tests below
-    expect(screen.getByLabelText('Take Photo')).toHaveAttribute('type', 'file');
+    expect(screen.getByLabelText('Photo')).toHaveAttribute('type', 'file');
   });
 
   test('the file input accepts images and requests the rear camera directly', () => {

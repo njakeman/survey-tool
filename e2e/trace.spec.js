@@ -19,11 +19,12 @@ test.describe('trace flow', () => {
     await page.getByLabel(/session name/i).fill('E2E Trace Session');
     await page.getByRole('button', { name: 'Start session' }).click();
 
-    await expect(page.getByRole('button', { name: 'Trace', exact: true })).toBeEnabled({
+    // Path stands as its own control now — no chooser, one tap deep
+    // (design pass 3 §5d). Its accessible name includes the caption.
+    await expect(page.getByRole('button', { name: /^Path/ })).toBeEnabled({
       timeout: 15_000,
     });
-    await page.getByRole('button', { name: 'Trace', exact: true }).click();
-    await page.getByRole('button', { name: 'Trace a path' }).click();
+    await page.getByRole('button', { name: /^Path/ }).click();
 
     // The first fix is accepted as vertex zero as soon as recording starts.
     await expect(page.getByText(/Tracing path/)).toBeVisible();

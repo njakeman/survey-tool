@@ -114,8 +114,15 @@
   --locator-casing: #1e2433;
 }
 
+/* The dark tokens appear twice — once for auto (OS scheme, unless Light is
+   forced) and once for forced Dark (design pass 3 §6: forcing either scheme
+   is a field requirement, not a preference). CSS has no way to write the
+   block once, so THE TWO COPIES MUST STAY IN LOCKSTEP — edit both or
+   neither. The :not() guard is what makes forced Light real on an OS-dark
+   phone; night's own block below outranks both by order and never conflicts
+   (data-mode holds one value). */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-mode='light']) {
     --paper: #16171c;
     --surface: #1e2027;
     /* Warm-tinted rather than neutral, so it does not read blue at dusk. */
@@ -144,6 +151,29 @@
      match. */
 }
 
+/* Forced Dark — the same tokens as the media block above, verbatim. */
+:root[data-mode='dark'] {
+  --paper: #16171c;
+  --surface: #1e2027;
+  --ink: #ece7dd;
+
+  --accent: #e07b33;
+  --accent-ink: #e07b33;
+  --accent-deep: #f2a05a;
+  --on-accent: #16171c;
+
+  --map-backdrop: #23252b;
+
+  --rule: rgba(236, 231, 221, 0.16);
+  --rule-faint: rgba(236, 231, 221, 0.1);
+  --control-rule: rgba(236, 231, 221, 0.3);
+  --text-secondary: rgba(236, 231, 221, 0.62);
+  --text-muted: rgba(236, 231, 221, 0.55);
+
+  --locator-stroke: #ece7dd;
+  --locator-casing: #16171c;
+}
+
 /* Night mode: a third mode, not a darker dark (design pass 3). Dark mode is
    for a dim room; night mode keeps dark adaptation intact — 20–30 minutes
    to rebuild, destroyed by seconds of short-wavelength light. One hue at
@@ -152,9 +182,9 @@
    is white. Survivable only because every state already carries a word and
    a shape — night mode is the case those rules were written for.
 
-   Set via <html data-mode="night"> (src/app/displayMode.js). The attribute
-   selector on :root outweighs the media-block :root above, so night wins
-   whichever way the OS scheme points. */
+   Set via <html data-mode="night"> (src/app/displayMode.js). This block sits
+   after both dark-token copies above and data-mode holds one value at a
+   time, so night wins whichever way the OS scheme points. */
 :root[data-mode='night'] {
   --paper: #0b0604;
   --surface: #170c07;
@@ -188,19 +218,13 @@
 }
 
 [data-mode='night'] .capture-map-suggestion,
-[data-mode='night'] .trace-chooser,
 [data-mode='night'] .trace-recovery {
   background: var(--surface);
   color: var(--ink);
 }
 
-[data-mode='night'] .trace-chooser .link,
 [data-mode='night'] .trace-recovery .link {
   color: var(--accent);
-}
-
-[data-mode='night'] .trace-chooser-desc {
-  color: var(--text-secondary);
 }
 
 [data-mode='night'] .trace-recovery .button-surface {
@@ -1419,76 +1443,59 @@ button {
   border-color: rgba(30, 36, 51, 0.3);
 }
 
-/* The trace chooser: a panel, not two loose buttons. It takes the region
-   suggestion's ground because, like the suggestion, it is the app asking an
-   unprompted question — and like that banner it keeps a light ground in
-   both schemes, so its ink is the light scheme's literals rather than
-   tokens, which invert. */
-.trace-chooser {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  margin: 0;
-  padding: 10px;
-  border-radius: var(--radius);
-  background: var(--suggestion-bg);
-  border: 1px solid var(--accent);
-  color: #1e2433;
-  animation: banner-in 120ms ease-out;
-}
-
-.trace-chooser-head {
+/* Path and Boundary, standing controls under their own label — the chooser
+   they replace is retired (design pass 3 §5d). Each is a 56px --surface
+   row, stacked (they have to hold at 320px), glyph then two lines: the
+   name, and the caption that carries what the chooser existed to explain. */
+.trace-pair-option {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-}
-
-.trace-chooser-title {
-  margin: 0;
-  font-size: var(--type-body);
-  font-weight: 700;
-}
-
-/* Accent-as-text on the cream ground needs the light pair in both schemes. */
-.trace-chooser .link {
-  color: #a8511a;
-}
-
-/* Each option is one 48px-min row, the whole row tappable. */
-.trace-chooser-option {
-  display: flex;
-  align-items: flex-start;
   gap: 10px;
-  min-height: 3rem;
-  padding: 10px 12px;
+  min-height: 3.5rem;
+  padding: 8px 12px;
   text-align: left;
-  background: none;
-  border: none;
-  border-top: 1px solid var(--rule-faint);
-  color: inherit;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--control-rule);
+  border-radius: var(--radius);
 }
 
-.trace-chooser-option .trace-glyph {
+.trace-pair-option .trace-glyph {
   flex: none;
-  margin-top: 4px;
 }
 
-.trace-chooser-body {
+.trace-pair-body {
   display: flex;
   flex-direction: column;
   gap: 2px;
   min-width: 0;
 }
 
-.trace-chooser-name {
+.trace-pair-name {
   font-size: 16px;
   font-weight: 700;
 }
 
-.trace-chooser-desc {
-  font-size: var(--type-meta);
-  color: rgba(30, 36, 51, 0.62);
+.trace-pair-caption {
+  font-size: var(--type-fine);
+  color: var(--text-secondary);
+}
+
+/* While the other mode records, this one stands down in place — dashed at
+   42% ink and disabled rather than disappearing, so the pair never reflows
+   under a thumb. */
+.trace-pair-standing-down {
+  border: 1px dashed color-mix(in srgb, var(--ink) 42%, transparent);
+  background: transparent;
+  color: color-mix(in srgb, var(--ink) 42%, transparent);
+}
+
+.trace-pair-standing-down .trace-pair-caption {
+  color: inherit;
+}
+
+.trace-field {
+  gap: var(--space-2);
 }
 
 /* Session history: a read-only list of past sessions, each opening its own
@@ -1599,7 +1606,9 @@ button {
   margin-top: var(--space-3);
 }
 
-.session-history-load-hint {
+.session-history-load-hint,
+.session-history-export-hint,
+.capture-page-export-hint {
   margin: var(--space-2) 0 0;
   font-size: var(--type-small);
   color: var(--text-secondary);
@@ -1651,16 +1660,99 @@ button {
 .voice-note-field {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: stretch;
   gap: var(--space-2);
+}
+
+/* Idle: a --surface control like its Photo neighbour, led by the mic glyph
+   (design pass 3 §5c). */
+.voice-note-idle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 3rem;
+  font-size: var(--type-body);
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--control-rule);
+  border-radius: var(--radius);
+}
+
+.glyph-mic {
+  flex: none;
+}
+
+/* Recording: a purpose-drawn transport row — the accent edge says the
+   microphone is live before any word does. */
+.voice-note-recording {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: 3.5rem;
+  padding: 8px 10px;
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius);
 }
 
 .voice-note-elapsed {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-  font-size: var(--type-small);
+  font-family: var(--font-label);
+  font-size: 16px;
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
+}
+
+/* Stop holds the accent only while recording, then hands it back to Save —
+   the one-accent rule. */
+.voice-note-stop {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  min-height: var(--touch-target);
+  padding: 0 14px;
+  font-size: var(--type-small);
+  font-weight: 700;
+  background: var(--accent);
+  color: var(--on-accent);
+  border: 1px solid var(--accent-ink);
+  border-radius: var(--radius);
+}
+
+.glyph-stop {
+  width: 12px;
+  height: 12px;
+  background: currentColor;
+  border-radius: 1px;
+}
+
+.voice-note-recorded {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+}
+
+.voice-note-recorded .voice-note-player {
+  flex: 1;
+  min-width: 0;
+}
+
+.voice-note-delete {
+  flex: none;
+  min-width: var(--touch-target);
+  min-height: var(--touch-target);
+  font-size: 18px;
+  background: transparent;
+  color: var(--danger-strong);
+  border: none;
 }
 
 .voice-note-dot {
@@ -1738,31 +1830,104 @@ button {
   font-weight: 700;
 }
 
-/* Auto | Night, in the footer with the other twice-a-day controls. Two
-   controls, not three: Auto follows the OS between light and dark, which is
-   what prefers-color-scheme is for; Night can never be inferred — a dark
-   room at midday is not a dark field at midnight, and being dropped into
-   red because the OS switched itself would be alarming. */
+/* Auto | Light | Dark | Night (design pass 3 §6), in the footer with the
+   other twice-a-day controls, under a DISPLAY label. One exclusive row of
+   four — forcing a scheme is a field requirement, not a preference; Night
+   is still never inferred, a fourth position rather than a modifier. A
+   segmented row, so the cells share one border and divide by rules. */
 .mode-switch {
   display: flex;
-  gap: var(--space-2);
-  align-items: center;
+  align-items: stretch;
+  width: 100%;
+  border: 1px solid var(--control-rule);
+  border-radius: var(--radius);
 }
 
 .mode-switch-option {
+  flex: 1;
+  min-height: var(--touch-target);
   background: transparent;
   color: inherit;
-  border: 1px solid var(--control-rule);
-  border-radius: var(--radius);
+  border: none;
+  border-radius: 0;
   font-size: var(--type-small);
-  padding: 0 14px;
+  padding: 0 8px;
 }
 
-/* The in-use treatment: a fill and the pressed state, not colour alone. */
-.mode-switch-option[aria-pressed='true'] {
+.mode-switch-option + .mode-switch-option {
+  border-left: 1px solid var(--control-rule);
+}
+
+.mode-switch-option:first-child {
+  border-radius: calc(var(--radius) - 1px) 0 0 calc(var(--radius) - 1px);
+}
+
+.mode-switch-option:last-child {
+  border-radius: 0 calc(var(--radius) - 1px) calc(var(--radius) - 1px) 0;
+}
+
+/* The in-use treatment: ink ground plus weight, never colour alone. In
+   night, where there is only one hue, the brightest step in the ramp is
+   what --ink resolves to, so the same rule holds. */
+.mode-switch-option[aria-checked='true'] {
   background: var(--ink);
   color: var(--paper);
-  border-color: var(--ink);
+  font-weight: 700;
+}
+
+/* A segmented row has no gap to spend; an outward ring would be clipped by
+   the neighbouring cell. */
+.mode-switch-option:focus-visible {
+  outline-offset: -4px;
+}
+
+/* Auto's one caption — the other three positions get none ("Light — light"
+   is noise). */
+.mode-switch-caption {
+  margin: var(--space-1) 0 0;
+  font-size: var(--type-meta);
+  color: var(--text-secondary);
+}
+
+/* Session history as a standing control (design pass 3 §5e): the route to
+   every reading ever taken, with the unsent count visible before leaving
+   the field. The chevron says it navigates; nothing else on the capture
+   screen has one. */
+.session-history-button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 3rem;
+  padding: 0 12px;
+  text-align: left;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--control-rule);
+  border-radius: var(--radius);
+}
+
+.session-history-button .glyph-list {
+  flex: none;
+}
+
+.session-history-button-label {
+  /* Pushes count, badge and chevron right even when the count has not
+     resolved yet. */
+  margin-right: auto;
+  font-size: 15.5px;
+  font-weight: 700;
+}
+
+.session-history-button-count {
+  font-size: var(--type-small);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.session-history-button-chevron {
+  font-size: 20px;
+  color: color-mix(in srgb, var(--ink) 35%, transparent);
 }
 
 /* Footer navigation. Visually a link, but still a real button with a real
@@ -1839,21 +2004,34 @@ button {
   font-variant-numeric: tabular-nums;
 }
 
-/* Take Photo and Export, side by side. Preview and errors stack under the
-   photo control rather than pushing Export around. */
+/* The one line the no-session state needs — everything that writes into a
+   session is absent rather than disabled, so this sentence explains the
+   lot (design pass 3 §5a). */
+.capture-no-session-note {
+  margin: 0;
+  font-size: var(--type-small);
+  color: var(--text-secondary);
+}
+
+/* Photo and Voice note, two-up (design pass 3 §5b). Preview and errors
+   stack under the photo control; the voice field wraps to a full-width row
+   of its own while recording or holding a recording. */
 .capture-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   gap: 10px;
 }
 
-.capture-actions .photo-field {
+.capture-actions .photo-field,
+.capture-actions .voice-note-field {
   flex: 1;
+  min-width: 8rem;
 }
 
-.capture-actions .button-outline {
-  flex: none;
-  min-height: 3rem;
+.capture-actions .voice-note-field:has(.voice-note-recording),
+.capture-actions .voice-note-field:has(.voice-note-player) {
+  flex-basis: 100%;
 }
 
 .reading-stale,
@@ -1875,11 +2053,15 @@ button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: fit-content;
+  width: 100%;
   font-size: var(--type-body);
   padding: 0.6rem var(--space-4);
   min-height: 3rem;
   min-width: var(--touch-target);
+  /* --surface, not transparent: every control in the compose group reads as
+     a control (design pass 3 §5b). */
+  background: var(--surface);
+  color: var(--ink);
   border: 1px solid var(--control-rule);
   border-radius: var(--radius);
   cursor: pointer;

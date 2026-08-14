@@ -63,4 +63,38 @@ describe('applyDisplayMode', () => {
 
     expect(doc.documentElement.getAttribute('data-mode')).toBeNull();
   });
+
+  test('forced light pins the attribute and both metas to the light pair', () => {
+    // The browser picks between the metas by OS scheme, so a forced position
+    // must write the same colour to both — otherwise forced Light on an
+    // OS-dark phone gets a dark status bar over a paper screen.
+    const doc = fakeDoc();
+
+    applyDisplayMode('light', doc);
+
+    expect(doc.documentElement.getAttribute('data-mode')).toBe('light');
+    expect(doc.metas[0].getAttribute('content')).toBe('#c2611f');
+    expect(doc.metas[1].getAttribute('content')).toBe('#c2611f');
+  });
+
+  test('forced dark pins the attribute and both metas to dark paper', () => {
+    const doc = fakeDoc();
+
+    applyDisplayMode('dark', doc);
+
+    expect(doc.documentElement.getAttribute('data-mode')).toBe('dark');
+    expect(doc.metas[0].getAttribute('content')).toBe('#16171c');
+    expect(doc.metas[1].getAttribute('content')).toBe('#16171c');
+  });
+
+  test('auto clears a forced scheme, not just night', () => {
+    const doc = fakeDoc();
+    applyDisplayMode('dark', doc);
+
+    applyDisplayMode('auto', doc);
+
+    expect(doc.documentElement.getAttribute('data-mode')).toBeNull();
+    expect(doc.metas[0].getAttribute('content')).toBe('#c2611f');
+    expect(doc.metas[1].getAttribute('content')).toBe('#16171c');
+  });
 });

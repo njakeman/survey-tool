@@ -40,6 +40,7 @@ export function App({
   gridRef,
   displayMode,
   onSetDisplayMode,
+  systemScheme,
 }) {
   const [view, setView] = useState('capture');
   // Bumped when history loads a past session back into use. CapturePage
@@ -133,6 +134,7 @@ export function App({
           onOpenHistory=${() => setView('history')}
           displayMode=${displayMode}
           onSetDisplayMode=${onSetDisplayMode}
+          systemScheme=${systemScheme}
           sessionEpoch=${sessionEpoch}
         />
       </div>

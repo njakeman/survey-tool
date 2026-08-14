@@ -533,3 +533,45 @@ read-only map above the list, on whichever basemap is currently active.
       rather than showing a grey void
 - [ ] With no basemap configured at all, the detail shows no map panel and no placeholder — the
       observations list is unchanged
+
+## Region switch keeps the view + empty sessions (2026-08-14)
+
+- [ ] Pan somewhere specific (follow off), switch to Esri Aerial: the imagery appears under the
+      same view — no jump to the North Pennines; zoom unchanged
+- [ ] Switch between two online basemaps and back: view held each time
+- [ ] With follow ON, switch region: at most a short settle onto the fix — no cross-country
+      flight from the region centre
+- [ ] Switch to an offline region that does NOT cover the current view: the map clamps to the
+      archive's edge (its bounds still bind)
+- [ ] Start a session, record nothing, tap End session: the confirm reads "Nothing recorded —
+      discard session"; after confirming, Session history shows no trace of it
+- [ ] Start a session, save one observation, End: confirm reads "Confirm end session" as before
+- [ ] With a fresh session (0 saved), the footer Export is disabled with "Nothing to export
+      yet — save an observation first"; after one save it enables and the hint goes
+- [ ] A pre-fix empty session in history (if one exists): detail Export disabled with "Nothing
+      recorded in this session"; Delete session still works on it
+
+## Design pass 3: gating, the recorder, Path/Boundary, the display row (2026-08-14)
+
+- [ ] Fresh launch, no session: only the start form, readings, map and the "position above is
+      live" line — no note field, Photo, Voice note, Path/Boundary or Save anywhere
+- [ ] Start a session: the whole capture block appears (note, Photo · Voice note two-up,
+      TRACE A LINE ALONG THE GROUND with Path and Boundary, Save)
+- [ ] With a session running there is no Session history control; ending the session brings the
+      history button back with its session count
+- [ ] With an unexported session on the device, the history button shows the dashed "N unsent"
+      badge; after exporting everything the badge is gone and the count reads "N sessions"
+- [ ] Voice note: idle button shows the mic glyph; recording shows the accent-edged transport
+      row with the elapsed timer and an accent Stop; a recording plays back in the native
+      player; the ✕ deletes it
+- [ ] Path starts a path walk in one tap; while it records, Boundary stands down dashed and the
+      strip sits in the trace group's slot; gloves still land all of Finish/Pause/Discard
+- [ ] Display row: Auto · Light · Dark · Night, all four tappable with gloves; the checked cell
+      is inked and bold
+- [ ] Forced Light on an OS-dark phone: launches straight into the paper palette with **no dark
+      flash**, and the status bar area matches (no dark strip above a paper page)
+- [ ] Forced Dark on an OS-light phone: same in reverse
+- [ ] Auto's caption reads "Following the system — light/dark" and flips when the OS scheme
+      changes while the app is open
+- [ ] Night still enters and leaves only by its own tap; leaving Night lands on whatever the
+      row says, never on a surprise scheme

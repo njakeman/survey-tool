@@ -333,3 +333,72 @@ binding on later changes.
   region is active and the session has observations — no placeholder, because history offers no
   route to getting a basemap. Night mode's grayscale+red-multiply covers both map canvases via
   shared selectors; no accent is added to the detail surface (Export keeps it).
+
+## Additions with the region-switch and empty-session fixes (2026-08-14)
+
+- **A region switch keeps the view.** CaptureMap stashes the outgoing map's centre/zoom in the
+  build effect's cleanup and the replacement opens there (`view` option through `createMap`;
+  the adapter applies it at construction, `fit` outranks it). Offline archives still clamp an
+  out-of-coverage view to their edge via the existing `minZoom`/`maxBounds`. Before this, every
+  switch relocated the map to the incoming region's default — all four online regions share the
+  GB centroid, which put the surveyor in the North Pennines.
+- **Ending an empty session discards it** (user decision): the confirm tap re-labels to
+  "Nothing recorded — discard session" — same outline button, same two-tap shape, the one-accent
+  rule untouched. The wording is the warning; nothing else changes visually.
+- **Export disabled at zero, with the reason beside it**: `button.capture-page-export` and the
+  history detail's Export disable when the session has no observations, each with a muted
+  centred hint (`.capture-page-export-hint`, `.session-history-export-hint` — one grouped rule
+  with `.session-history-load-hint`, whose pattern this is). A mute disabled control is a
+  question; the hint is the answer.
+
+## The third design pass (2026-08-14): gating, the recorder, Path/Boundary, the display row
+
+Design handoff pass 3, implemented with three decisions taken at the time: all five sections;
+the voice recorder's **fallback** flavour (native player kept); Photo and Voice note stay
+**live** while a trace records.
+
+- **The capture block gates on the session** (§5a/5b). Without one, everything that writes into
+  a session is _absent, not disabled_ — note field, Photo/Voice pair, trace pair, Save, the
+  observations list, and their strips. One `--text-secondary` line under the map
+  (`.capture-no-session-note`) explains the lot; the readings and map stay, because GPS works
+  without a session and watching the fix settle is the reason to stand still. The shipped
+  first-launch session bar (name input + Start) stays at the page top — pass 3's
+  "controls under the map" sketch was not adopted over it.
+- **The compose row is two-up** (`.capture-actions`): Photo (`Take Photo` → **Photo**) and
+  Voice note side by side, both on `--surface` (`.photo-field-button` gained the surface
+  ground); the voice field wraps to a full-width row of its own while recording or holding a
+  recording (`:has()` on `.voice-note-recording`/`.voice-note-player`).
+- **The voice note is a recorder, fallback flavour** (§5c): idle is a `--surface` control with
+  a 14×19 inline-SVG mic glyph and the label **Voice note**; recording is a purpose-drawn 56px
+  transport row (`.voice-note-recording` — 1px `--accent` border, 3px accent left edge, the
+  existing pulsing dot, elapsed at 16px/700 `--font-label` tabular, **Stop** accent-filled with
+  a filled-square glyph). Stop holds the accent only while recording — the one-accent rule.
+  Playback keeps the native `<audio controls>`; delete is a 44px ✕ in `--danger-strong` with
+  `aria-label="Delete voice note"`. The full custom transport (level bars, owned play/pause)
+  was deliberately not built.
+- **Path and Boundary replace Trace + chooser** (§5d): two stacked 56px `--surface` rows under
+  a `TRACE A LINE ALONG THE GROUND` field label (`.trace-pair-option`), each the TraceGlyph +
+  name 16px/700 + caption (`Open line, A to B` / `Closes back to the start`) at `--type-fine`
+  — the handoff's 11.5px would break its own 12.5px floor, so the token won. While one
+  records, the strip renders **in its slot** and the other stands down
+  (`.trace-pair-standing-down`, 1px dashed at 42% ink, disabled) rather than disappearing —
+  the pair never reflows under a thumb. `.trace-chooser*` and its night overrides are gone,
+  and with them the sheet's hard-coded light literals.
+- **Session history is a standing button** (§5e, no-session state only — with a session
+  running it is a detour and is absent, per the handoff; the footer slot is the documented
+  fallback if the field complains). `.session-history-button`: list glyph, 15.5px/700 label,
+  right-aligned session count (`N sessions`, tabular), an unsent badge reusing
+  `chip badge-not-exported` (dashed — the pending treatment) with the aggregate
+  `countUnexported` across sessions, and the capture screen's only chevron. `Device probe`
+  keeps its footer link.
+- **The display switch is one exclusive row of four** (§6): `Auto · Light · Dark · Night`,
+  `role="radiogroup"`/`aria-checked` under a `DISPLAY` field label. Selection is ink ground
+  plus 700 weight, never colour alone; the focus ring goes inset (`outline-offset: -4px`) —
+  a segmented row has no gap to spend. Auto alone captions itself with the resolved scheme
+  ("Following the system — dark"; the handoff's "since 05:41" was dropped — the OS switch
+  time is unknowable before launch). `data-mode` now takes `light`/`dark`/`night`;
+  **the dark token block exists twice** — the `prefers-color-scheme` copy guarded with
+  `:root:not([data-mode='light'])` and a verbatim `:root[data-mode='dark']` copy — and the
+  two must stay in lockstep (commented at the block). Forced positions pin both `theme-color`
+  metas to one colour (the night precedent); Auto restores the per-scheme pair. The map's
+  night boolean stays derived (`displayMode === 'night'`).

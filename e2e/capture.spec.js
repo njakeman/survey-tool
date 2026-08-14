@@ -41,6 +41,29 @@ test.describe('capture flow', () => {
     await expect(page.getByText('1 saved')).toBeVisible();
   });
 
+  test('ending an empty session discards it — nothing lands in history', async ({
+    page,
+    context,
+  }) => {
+    await context.grantPermissions(['geolocation']);
+    await context.setGeolocation({ latitude: 51.5, longitude: -0.14, accuracy: 10 });
+
+    await page.goto('/');
+    await page.getByLabel(/session name/i).fill('Mistaken Start');
+    await page.getByRole('button', { name: 'Start session' }).click();
+    await expect(page.getByText('0 saved')).toBeVisible();
+
+    // Export has nothing to act on yet.
+    await expect(page.getByRole('button', { name: /^export$/i })).toBeDisabled();
+    await expect(page.getByText(/nothing to export yet/i)).toBeVisible();
+
+    await page.getByRole('button', { name: 'End session' }).click();
+    await page.getByRole('button', { name: 'Nothing recorded — discard session' }).click();
+
+    await page.getByRole('button', { name: 'Session history' }).click();
+    await expect(page.getByText('No past sessions yet')).toBeVisible();
+  });
+
   test('a saved photo can be viewed again — thumbnail and full-screen, in session and history', async ({
     page,
     context,
@@ -74,7 +97,9 @@ test.describe('capture flow', () => {
 
     await thumb.click();
     await expect(page.getByRole('dialog', { name: /photo/i })).toBeVisible();
-    await page.getByRole('button', { name: 'Close' }).click();
+    // exact: the Boundary trace button's caption ("Closes back to the
+    // start") substring-matches 'Close'.
+    await page.getByRole('button', { name: 'Close', exact: true }).click();
     await expect(page.getByRole('dialog')).toHaveCount(0);
 
     // History detail offers the same read — photos are not capture-only.

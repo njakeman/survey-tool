@@ -143,9 +143,10 @@ async function main() {
   // device that has never downloaded one never pays for ~800 KB of MapLibre
   // at startup. The split chunk is still precached, so the import resolves
   // offline (same rule as photo/encode.js: browser-only, main.js only).
-  // `fit` (history map): open fitted to a session's data instead of the
-  // region's own centre; the adapter applies it at construction.
-  async function createMap({ container: mapContainer, onUserPan, onFeatureTap, fit }) {
+  // `fit` (history map): open fitted to a session's data. `view` (region
+  // switch): open at the outgoing map's centre/zoom. Both applied by the
+  // adapter at construction; fit outranks view.
+  async function createMap({ container: mapContainer, onUserPan, onFeatureTap, fit, view }) {
     // An online region has no archive: hand the adapter the region and let
     // failed fetches surface as warnings (the adapter handles the two online
     // kinds — tile template vs remote style — itself). Everything about the
@@ -158,6 +159,7 @@ async function main() {
         online: onlineRegion,
         glyphsUrl: glyphsUrl(import.meta.env.BASE_URL),
         fit,
+        view,
         onUserPan,
         onFeatureTap,
         onError: (error) => console.warn('map error', error),
@@ -176,6 +178,7 @@ async function main() {
       tileType: region?.tileType ?? 'vector',
       tileSize: region?.tileSize,
       fit,
+      view,
       onUserPan,
       onFeatureTap,
       // Map errors are diagnostics, not app failures: a missing tile must
@@ -286,10 +289,11 @@ async function main() {
     applySelection();
   }
 
-  // Night mode is a persisted, deliberate choice — never inferred from the
-  // OS (that's what auto's prefers-color-scheme handling is for). Applied to
-  // <html data-mode> before first render so a night launch never flashes the
-  // daylight palette at a dark-adapted eye.
+  // The display mode is a persisted, deliberate choice — never inferred from
+  // the OS (that's what Auto's prefers-color-scheme handling is for; Light
+  // and Dark force a scheme, Night keeps dark adaptation). Applied to
+  // <html data-mode> before first render so a night — or forced-dark —
+  // launch never flashes the daylight palette at a dark-adapted eye.
   const storedDisplayMode = (await getSetting(db, 'displayMode')) ?? 'auto';
   applyDisplayMode(storedDisplayMode, document);
 
@@ -299,6 +303,15 @@ async function main() {
     renderApp();
     await putSetting(db, 'displayMode', mode);
   }
+
+  // What the OS scheme currently resolves to, for Auto's footer caption
+  // ("Following the system — dark"). Owned here and passed down as a prop,
+  // the sensor-adapter rule: components never read matchMedia themselves.
+  const darkSchemeQuery = window.matchMedia?.('(prefers-color-scheme: dark)');
+  darkSchemeQuery?.addEventListener?.('change', (event) => {
+    state.systemScheme = event.matches ? 'dark' : 'light';
+    renderApp();
+  });
 
   const container = document.getElementById('app');
 
@@ -341,6 +354,7 @@ async function main() {
     featureLayersAvailable: false,
     featureLayers: [],
     displayMode: storedDisplayMode,
+    systemScheme: darkSchemeQuery?.matches ? 'dark' : 'light',
   };
 
   function renderApp() {
@@ -375,6 +389,7 @@ async function main() {
         gridRef=${gridRef}
         displayMode=${state.displayMode}
         onSetDisplayMode=${setDisplayMode}
+        systemScheme=${state.systemScheme}
       />`,
       container,
     );

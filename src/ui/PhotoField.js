@@ -31,7 +31,7 @@ export function PhotoField({ photo, busy = false, error, onSelect, onClear }) {
           // precached, and this one need not exist as a file at all.
           html`<span class="glyph-camera" aria-hidden="true"></span>`
         }
-        Take Photo
+        Photo
         <input
           type="file"
           accept="image/*"

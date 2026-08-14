@@ -30,7 +30,9 @@ test.describe('offline reload', () => {
 
     expect(response).not.toBeNull();
     expect(response.fromServiceWorker()).toBe(true);
-    await expect(page.getByRole('button', { name: 'Save observation' })).toBeVisible();
+    // No session on a fresh profile — the start form is the offline-served
+    // capture page (design pass 3 §5a).
+    await expect(page.getByRole('button', { name: 'Start session' })).toBeVisible();
 
     // Pins the happy path, not just the failure path: a real production
     // build must never show the "no offline cache" warning that exists

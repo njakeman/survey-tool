@@ -75,25 +75,76 @@ export function VoiceNoteField({ audio, error, onRecorded, onRemove, onError, re
   const audioUrl = useMemo(() => (audio ? URL.createObjectURL(audio.blob) : null), [audio]);
   useEffect(() => () => audioUrl && URL.revokeObjectURL(audioUrl), [audioUrl]);
 
+  // Design pass 3 §5c, the fallback flavour: the idle and recording states
+  // are purpose-drawn, the playback stays the native player — most of the
+  // gain, none of the lifecycle risk of owning play/pause/scrub.
   return html`
     <div class="voice-note-field">
       ${
         recording
           ? html`
-              <span class="voice-note-elapsed" role="status">
-                <span class="voice-note-dot" aria-hidden="true"></span>
-                Recording · ${formatElapsed(elapsedMs)}
+              <span class="voice-note-recording">
+                <span class="voice-note-elapsed" role="status">
+                  <span class="voice-note-dot" aria-hidden="true"></span>
+                  Recording · ${formatElapsed(elapsedMs)}
+                </span>
+                <button type="button" class="voice-note-stop" onClick=${stopRecording}>
+                  <span class="glyph-stop" aria-hidden="true"></span>
+                  Stop
+                </button>
               </span>
-              <button type="button" class="button-outline" onClick=${stopRecording}>Stop</button>
             `
           : audio
             ? html`
-                <audio controls src=${audioUrl} class="voice-note-player"></audio>
-                <button type="button" class="link" onClick=${onRemove}>Remove voice note</button>
+                <span class="voice-note-recorded">
+                  <audio controls src=${audioUrl} class="voice-note-player"></audio>
+                  <button
+                    type="button"
+                    class="voice-note-delete"
+                    onClick=${onRemove}
+                    aria-label="Delete voice note"
+                  >
+                    ✕
+                  </button>
+                </span>
               `
             : html`
-                <button type="button" class="button-outline" onClick=${startRecording}>
-                  Record voice note
+                <button type="button" class="voice-note-idle" onClick=${startRecording}>
+                  <svg
+                    class="glyph-mic"
+                    viewBox="0 0 14 19"
+                    width="14"
+                    height="19"
+                    aria-hidden="true"
+                  >
+                    <rect
+                      x="4.5"
+                      y="1"
+                      width="5"
+                      height="9"
+                      rx="2.5"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    />
+                    <path
+                      d="M2 8.5a5 5 0 0 0 10 0"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                    />
+                    <line
+                      x1="7"
+                      y1="13.5"
+                      x2="7"
+                      y2="17"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                    />
+                  </svg>
+                  Voice note
                 </button>
               `
       }

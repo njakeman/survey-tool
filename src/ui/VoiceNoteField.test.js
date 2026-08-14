@@ -32,18 +32,20 @@ describe('VoiceNoteField', () => {
     const recordAudio = vi.fn().mockResolvedValue(handle);
     const { onRecorded } = renderField({ recordAudio });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Record voice note' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Voice note' }));
     await screen.findByText(/Recording ·/);
 
     fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
     await waitFor(() => expect(onRecorded).toHaveBeenCalledWith(NOTE));
   });
 
-  test('a recorded note shows a player and can be removed', () => {
+  test('a recorded note shows a player and can be deleted', () => {
     const { onRemove } = renderField({ audio: NOTE });
 
+    // The native player stays (design pass 3 §5c fallback); delete is an
+    // unlabelled ✕ that still names itself to a screen reader.
     expect(document.querySelector('audio.voice-note-player')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Remove voice note' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete voice note' }));
     expect(onRemove).toHaveBeenCalled();
   });
 
@@ -55,7 +57,7 @@ describe('VoiceNoteField', () => {
       );
     const { onError, onRecorded } = renderField({ recordAudio });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Record voice note' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Voice note' }));
 
     await waitFor(() => expect(onError).toHaveBeenCalledWith('Permission denied'));
     expect(onRecorded).not.toHaveBeenCalled();
@@ -66,7 +68,7 @@ describe('VoiceNoteField', () => {
     const handle = { stop: vi.fn().mockResolvedValue(empty), cancel: vi.fn() };
     const { onError, onRecorded } = renderField({ recordAudio: vi.fn().mockResolvedValue(handle) });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Record voice note' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Voice note' }));
     await screen.findByText(/Recording ·/);
     fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
 
@@ -86,7 +88,7 @@ describe('VoiceNoteField', () => {
       />`,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Record voice note' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Voice note' }));
     await screen.findByText(/Recording ·/);
     unmount();
 

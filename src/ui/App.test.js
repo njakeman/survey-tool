@@ -53,29 +53,29 @@ function renderApp(overrides = {}) {
 describe('App', () => {
   test('defaults to the capture view', async () => {
     renderApp();
-    expect(await screen.findByRole('button', { name: /save observation/i })).toBeInTheDocument();
+    expect(await screen.findByLabelText(/session name/i)).toBeInTheDocument();
   });
 
   test('the device probe link switches to the probe view, and Back returns to capture', async () => {
     renderApp();
-    await screen.findByRole('button', { name: /save observation/i });
+    await screen.findByLabelText(/session name/i);
 
     fireEvent.click(screen.getByRole('button', { name: /device probe/i }));
     expect(await screen.findByText('Device capability probe')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /back to capture/i }));
-    expect(await screen.findByRole('button', { name: /save observation/i })).toBeInTheDocument();
+    expect(await screen.findByLabelText(/session name/i)).toBeInTheDocument();
   });
 
   test('the session history link switches to the history view, and Back returns to capture', async () => {
     renderApp();
-    await screen.findByRole('button', { name: /save observation/i });
+    await screen.findByLabelText(/session name/i);
 
     fireEvent.click(screen.getByRole('button', { name: /session history/i }));
     expect(await screen.findByText('Past sessions')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /back to capture/i }));
-    expect(await screen.findByRole('button', { name: /save observation/i })).toBeInTheDocument();
+    expect(await screen.findByLabelText(/session name/i)).toBeInTheDocument();
   });
 
   test('history detail receives the map wiring, so a past session renders on the active basemap', async () => {
@@ -103,7 +103,7 @@ describe('App', () => {
       },
     ]);
     renderApp({ service, createMap, activeRegionId: 'south' });
-    await screen.findByRole('button', { name: /save observation/i });
+    await screen.findByLabelText(/session name/i);
 
     fireEvent.click(screen.getByRole('button', { name: /session history/i }));
     fireEvent.click(await screen.findByRole('button', { name: /Site A/ }));
@@ -123,7 +123,7 @@ describe('App', () => {
 
   test('shows no update banner by default', async () => {
     renderApp();
-    await screen.findByRole('button', { name: /save observation/i });
+    await screen.findByLabelText(/session name/i);
 
     expect(screen.queryByText(/new version/i)).not.toBeInTheDocument();
   });
@@ -131,7 +131,7 @@ describe('App', () => {
   test('shows an update banner and reloads on tap when an update is waiting', async () => {
     const onReload = vi.fn();
     renderApp({ updateAvailable: true, onReload });
-    await screen.findByRole('button', { name: /save observation/i });
+    await screen.findByLabelText(/session name/i);
 
     fireEvent.click(await screen.findByRole('button', { name: /reload/i }));
     expect(onReload).toHaveBeenCalledTimes(1);
@@ -139,7 +139,7 @@ describe('App', () => {
 
   test('the update banner is visible from every view, not just capture', async () => {
     renderApp({ updateAvailable: true, onReload: vi.fn() });
-    await screen.findByRole('button', { name: /save observation/i });
+    await screen.findByLabelText(/session name/i);
 
     fireEvent.click(screen.getByRole('button', { name: /device probe/i }));
     await screen.findByText('Device capability probe');
@@ -158,13 +158,13 @@ describe('App', () => {
       activeRegionId: null,
       regions: [{ id: 'south', name: 'South Wiltshire', sizeBytes: 1, downloaded: true }],
     });
-    await screen.findByRole('button', { name: /save observation/i });
+    await screen.findByLabelText(/session name/i);
 
     fireEvent.click(screen.getByRole('button', { name: /choose a region/i }));
     expect(await screen.findByText('Offline maps')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /back to capture/i }));
-    expect(await screen.findByRole('button', { name: /save observation/i })).toBeInTheDocument();
+    expect(await screen.findByLabelText(/session name/i)).toBeInTheDocument();
   });
 
   test('tells the map when the capture view is hidden, so it can remeasure on return', async () => {
@@ -179,7 +179,7 @@ describe('App', () => {
     };
     const createMap = vi.fn().mockResolvedValue(adapter);
     renderApp({ activeRegionId: 'south', createMap, online: true });
-    await screen.findByRole('button', { name: /save observation/i });
+    await screen.findByLabelText(/session name/i);
     await waitFor(() => expect(createMap).toHaveBeenCalled());
 
     fireEvent.click(screen.getByRole('button', { name: /session history/i }));
@@ -190,16 +190,26 @@ describe('App', () => {
     await waitFor(() => expect(adapter.resize).toHaveBeenCalled());
   });
 
-  test('switching to history and back preserves an in-progress note', async () => {
+  test('switching views and back preserves an in-progress note', async () => {
     // The in-progress observation (note/photo) lives only in CapturePage
     // state until Save — a view switch must never wipe it (CLAUDE.md's
     // no-surprise-data-loss rule; unmounting the page is exactly that).
-    renderApp();
+    // The note needs an open session (design pass 3 §5a gates the capture
+    // block), and with one running the reachable views are the probe and
+    // the region picker — history stands down (§5b).
+    const service = createFakeService();
+    service.getOpenSession.mockResolvedValue({
+      id: 'sess-1',
+      name: 'Site A',
+      status: 'open',
+      startedAt: '2026-08-06T09:00:00.000Z',
+    });
+    renderApp({ service });
     await screen.findByRole('button', { name: /save observation/i });
 
     fireEvent.input(screen.getByLabelText(/note/i), { target: { value: 'half-typed note' } });
-    fireEvent.click(screen.getByRole('button', { name: /session history/i }));
-    await screen.findByText('Past sessions');
+    fireEvent.click(screen.getByRole('button', { name: /device probe/i }));
+    await screen.findByText('Device capability probe');
     fireEvent.click(screen.getByRole('button', { name: /back to capture/i }));
 
     await screen.findByRole('button', { name: /save observation/i });
@@ -216,7 +226,7 @@ describe('App', () => {
         requestHeadingPermission: vi.fn().mockResolvedValue('granted'),
       },
     });
-    await screen.findByRole('button', { name: /save observation/i });
+    await screen.findByLabelText(/session name/i);
     expect(watchPosition).toHaveBeenCalledTimes(1);
 
     fireEvent.click(screen.getByRole('button', { name: /session history/i }));
@@ -224,7 +234,7 @@ describe('App', () => {
     expect(positionStop).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole('button', { name: /back to capture/i }));
-    await screen.findByRole('button', { name: /save observation/i });
+    await screen.findByLabelText(/session name/i);
     expect(watchPosition).toHaveBeenCalledTimes(1); // no cold re-acquire
   });
 
@@ -247,14 +257,15 @@ describe('App', () => {
       return Promise.resolve(open);
     });
     renderApp({ service });
-    await screen.findByRole('button', { name: /save observation/i });
+    await screen.findByLabelText(/session name/i);
 
     fireEvent.click(screen.getByRole('button', { name: /session history/i }));
     await screen.findByText('Site A');
     fireEvent.click(screen.getByRole('button', { name: /Site A/ }));
     fireEvent.click(await screen.findByRole('button', { name: /load session/i }));
 
-    // Straight back to capture, with the loaded session live in the bar.
+    // Straight back to capture, with the loaded session live in the bar —
+    // the session is open now, so the capture block (Save) is what appears.
     await screen.findByRole('button', { name: /save observation/i });
     expect(await screen.findByText('Site A')).toBeInTheDocument();
     expect(screen.queryByText('Past sessions')).not.toBeInTheDocument();
@@ -263,14 +274,14 @@ describe('App', () => {
   test('never touches window.location.hash — no client-side router', async () => {
     const initialHash = window.location.hash;
     renderApp();
-    await screen.findByRole('button', { name: /save observation/i });
+    await screen.findByLabelText(/session name/i);
 
     fireEvent.click(screen.getByRole('button', { name: /device probe/i }));
     await screen.findByText('Device capability probe');
     expect(window.location.hash).toBe(initialHash);
 
     fireEvent.click(screen.getByRole('button', { name: /back to capture/i }));
-    await screen.findByRole('button', { name: /save observation/i });
+    await screen.findByLabelText(/session name/i);
     expect(window.location.hash).toBe(initialHash);
   });
 });

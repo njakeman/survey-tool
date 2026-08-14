@@ -14,7 +14,7 @@ import { TraceStrip } from './TraceStrip.js';
 import { TraceGlyph } from './traceGlyphs.js';
 import { formatLatLon } from '../sensors/format.js';
 import { chooseActive } from '../map/basemapSelection.js';
-import { isExported } from '../domain/session.js';
+import { countUnexported, isExported } from '../domain/session.js';
 import { polygonCentroid, polygonExtentM } from '../geo/centroid.js';
 import {
   acceptFix,
@@ -54,11 +54,15 @@ export function CapturePage({
   visible,
   displayMode,
   onSetDisplayMode,
+  systemScheme,
   sessionEpoch,
 }) {
   const [session, setSession] = useState(null);
   const [observations, setObservations] = useState([]);
   const [sessionBusy, setSessionBusy] = useState(false);
+  // What the Session history button says while no session is open: how many
+  // sessions there are, and how much work has never left the device.
+  const [historySummary, setHistorySummary] = useState(null);
 
   const [exportState, setExportState] = useState('idle'); // idle | exporting | done | error
   const [exportMessage, setExportMessage] = useState('');
@@ -98,7 +102,6 @@ export function CapturePage({
   // save needs to clear the draft. Save composes it with the note, photo,
   // voice note and feature link exactly like any other observation.
   const [pendingTrace, setPendingTrace] = useState(null);
-  const [traceChooserOpen, setTraceChooserOpen] = useState(false);
   // An unfinished draft found in IndexedDB on mount — a force-quit mid-walk.
   // Offered, never auto-resumed: recording again is a decision.
   const [recoveredDraft, setRecoveredDraft] = useState(null);
@@ -120,6 +123,24 @@ export function CapturePage({
     const open = await service.getOpenSession();
     setSession(open);
     setObservations(open ? await service.listObservations(open.id) : []);
+    // The history button's count and unsent badge, only where the button
+    // shows (§5e). countUnexported answers from the session record alone,
+    // so this is one count query per session, no observation loads.
+    if (!open && service.listSessions) {
+      const sessions = await service.listSessions();
+      const counts = await Promise.all(
+        sessions.map((stored) => service.countObservations(stored.id)),
+      );
+      setHistorySummary({
+        sessions: sessions.length,
+        unexported: sessions.reduce(
+          (total, stored, index) => total + countUnexported(stored, counts[index]),
+          0,
+        ),
+      });
+    } else {
+      setHistorySummary(null);
+    }
   }
 
   useEffect(() => {
@@ -144,6 +165,16 @@ export function CapturePage({
     refreshSession();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionEpoch]);
+
+  // Returning from an overlay re-reads: history can delete or import
+  // sessions under this page, and the history button's summary must not
+  // report a session the surveyor just watched themselves delete. The
+  // service is stateless, so a re-read never disturbs the note and photo
+  // being composed.
+  useEffect(() => {
+    if (visible) refreshSession();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]);
 
   // The appender: every fix from the shared watch goes through the pure
   // recorder; only an accepted vertex is persisted — which is what keeps the
@@ -198,7 +229,6 @@ export function CapturePage({
   }
 
   async function handleStartTrace(mode) {
-    setTraceChooserOpen(false);
     try {
       const draft = await service.startTraceDraft({ mode });
       setTraceSession({ draft, state: createTraceState({ mode }), error: null });
@@ -497,11 +527,9 @@ export function CapturePage({
     return null;
   }, [pendingTrace, traceSession]);
 
-  const disabledReason = !session
-    ? 'start a session first'
-    : !position && !pendingTrace
-      ? 'waiting for GPS fix'
-      : '';
+  // Save renders only with an open session (§5a below), so the only reason
+  // left to explain is the missing fix.
+  const disabledReason = !position && !pendingTrace ? 'waiting for GPS fix' : '';
   // A pending trace can save without a live fix — after a relaunch recovery
   // the walk itself is the provenance (captureService nulls the rest).
   const canSave = Boolean(session) && (Boolean(position) || Boolean(pendingTrace));
@@ -571,11 +599,25 @@ export function CapturePage({
         }
       />
       ${
+        // Everything that writes into a session is absent without one —
+        // there is nothing to explain control by control, so one sentence
+        // explains the lot (design pass 3 §5a). The readings and the map
+        // stay: GPS works without a session, and watching the fix settle is
+        // the reason to stand still.
+        !session
+          ? html`<p class="capture-no-session-note">
+              The position above is live. Start a session to save readings, notes, photos, voice
+              notes and traces into it.
+            </p>`
+          : null
+      }
+      ${
         // Not a readout of something happening now — the app asking an
         // unprompted question after a crash — so it takes the suggestion
-        // ground like the chooser, not the strip's accent edge, and nothing
-        // pulses because nothing is recording. A sentence, not a status
-        // line: the surveyor arrives at this cold, possibly days later.
+        // ground like the recovery panel, not the strip's accent edge, and
+        // nothing pulses because nothing is recording. A sentence, not a
+        // status line: the surveyor arrives at this cold, possibly days
+        // later.
         recoveredDraft
           ? html`<div class="trace-recovery" role="status">
               <p class="trace-recovery-title">Unfinished trace found</p>
@@ -621,17 +663,6 @@ export function CapturePage({
             </div>`
           : null
       }
-      ${
-        stripTrace
-          ? html`<${TraceStrip}
-              trace=${stripTrace}
-              onPause=${handlePauseTrace}
-              onResume=${handleResumeTrace}
-              onFinish=${handleFinishTrace}
-              onDiscard=${handleDiscardTrace}
-            />`
-          : null
-      }
       <${FeatureSheet}
         feature=${tappedFeature}
         ${
@@ -642,89 +673,75 @@ export function CapturePage({
         onRecord=${handleRecordHere}
         onDismiss=${() => setTappedFeature(null)}
       />
-      <label class="field">
-        <span class="field-label">Note</span>
-        <textarea value=${note} onInput=${(event) => setNote(event.target.value)} />
-      </label>
-      <div class="capture-actions">
-        <${PhotoField}
-          photo=${photo}
-          busy=${photoBusy}
-          error=${photoError}
-          onSelect=${handlePhotoSelect}
-          onClear=${handlePhotoClear}
-        />
-        ${
-          // Starting a walk is a kind of capture, so it lives with the
-          // capture actions — the map controls row is already full. Hidden
-          // once a trace exists in any state: one walk at a time.
-          session && !traceSession && !pendingTrace && !recoveredDraft
-            ? html`<button
-                type="button"
-                class="button-outline"
-                disabled=${!position}
-                onClick=${() => setTraceChooserOpen((open) => !open)}
-              >
-                Trace
-              </button>`
-            : null
-        }
-      </div>
       ${
-        // The one moment of modal choice in the flow, so it takes the
-        // region-suggestion ground: like the suggestion, it is the app
-        // asking an unprompted question. Options are stacked (it has to
-        // hold at 320px) and each says what it records — a first-time user
-        // won't know a boundary auto-closes.
-        traceChooserOpen
-          ? html`<div class="trace-chooser">
-              <div class="trace-chooser-head">
-                <p class="trace-chooser-title">What are you walking?</p>
-                <button type="button" class="link" onClick=${() => setTraceChooserOpen(false)}>
-                  Cancel
-                </button>
-              </div>
-              <button
-                type="button"
-                class="trace-chooser-option"
-                onClick=${() => handleStartTrace('path')}
-              >
-                <${TraceGlyph} mode="path" />
-                <span class="trace-chooser-body">
-                  <span class="trace-chooser-name">Trace a path</span>
-                  <span class="trace-chooser-desc"
-                    >Records the line you walk, start to finish.</span
-                  >
-                </span>
-              </button>
-              <button
-                type="button"
-                class="trace-chooser-option"
-                onClick=${() => handleStartTrace('boundary')}
-              >
-                <${TraceGlyph} mode="boundary" />
-                <span class="trace-chooser-body">
-                  <span class="trace-chooser-name">Trace a boundary</span>
-                  <span class="trace-chooser-desc">
-                    Closes the loop back to your start point when you finish.
-                  </span>
-                </span>
-              </button>
-            </div>`
+        // The observation being composed, as one group: note, then the
+        // two-up Photo / Voice note row. Gated whole on the session (§5a) —
+        // these all write into it.
+        session
+          ? html`<label class="field">
+                <span class="field-label">Note</span>
+                <textarea value=${note} onInput=${(event) => setNote(event.target.value)} />
+              </label>
+              <div class="capture-actions">
+                <${PhotoField}
+                  photo=${photo}
+                  busy=${photoBusy}
+                  error=${photoError}
+                  onSelect=${handlePhotoSelect}
+                  onClear=${handlePhotoClear}
+                />
+                ${
+                  recordAudio
+                    ? html`<${VoiceNoteField}
+                        audio=${audio}
+                        error=${audioError}
+                        onRecorded=${setAudio}
+                        onRemove=${() => setAudio(null)}
+                        onError=${setAudioError}
+                        recordAudio=${recordAudio}
+                      />`
+                    : null
+                }
+              </div>`
           : null
       }
       ${
-        // Below the photo row: recording is rarer than photographing, and a
-        // recorded note shows an inline player where the button was.
-        recordAudio
-          ? html`<${VoiceNoteField}
-              audio=${audio}
-              error=${audioError}
-              onRecorded=${setAudio}
-              onRemove=${() => setAudio(null)}
-              onError=${setAudioError}
-              recordAudio=${recordAudio}
-            />`
+        // Path and Boundary stand ready as controls in their own right —
+        // the thing on offer is not hidden a tap deep behind a chooser, and
+        // the captions carry what the chooser existed to explain (a
+        // boundary closes itself). While one records, its slot holds the
+        // strip and the other stands down disabled rather than
+        // disappearing, so the pair never reflows under a thumb
+        // (design pass 3 §5d).
+        session
+          ? html`<div class="field trace-field">
+              <span class="field-label">Trace a line along the ground</span>
+              ${['path', 'boundary'].map((mode) => {
+                if (stripTrace?.mode === mode)
+                  return html`<${TraceStrip}
+                    trace=${stripTrace}
+                    onPause=${handlePauseTrace}
+                    onResume=${handleResumeTrace}
+                    onFinish=${handleFinishTrace}
+                    onDiscard=${handleDiscardTrace}
+                  />`;
+                const standingDown = Boolean(stripTrace || recoveredDraft);
+                return html`<button
+                  type="button"
+                  class=${`trace-pair-option${standingDown ? ' trace-pair-standing-down' : ''}`}
+                  disabled=${standingDown || !position}
+                  onClick=${() => handleStartTrace(mode)}
+                >
+                  <${TraceGlyph} mode=${mode} />
+                  <span class="trace-pair-body">
+                    <span class="trace-pair-name">${mode === 'path' ? 'Path' : 'Boundary'}</span>
+                    <span class="trace-pair-caption">
+                      ${mode === 'path' ? 'Open line, A to B' : 'Closes back to the start'}
+                    </span>
+                  </span>
+                </button>`;
+              })}
+            </div>`
           : null
       }
       ${
@@ -762,15 +779,20 @@ export function CapturePage({
             </p>`
           : null
       }
-      <${SaveButton}
-        disabled=${!canSave}
-        disabledReason=${disabledReason}
-        saving=${saveState === 'saving'}
-        onClick=${handleSave}
-      />
+      ${
+        session
+          ? html`<${SaveButton}
+              disabled=${!canSave}
+              disabledReason=${disabledReason}
+              saving=${saveState === 'saving'}
+              onClick=${handleSave}
+            />`
+          : null
+      }
       ${
         // role="alert" rather than a plain paragraph: a save that failed is
-        // the one thing the surveyor must not walk away from unaware.
+        // the one thing the surveyor must not walk away from unaware. Not
+        // gated on the session — discarding a recovered trace can fail too.
         saveError ? html`<p class="save-error panel-danger" role="alert">✕ ${saveError}</p>` : null
       }
       ${
@@ -787,7 +809,7 @@ export function CapturePage({
             </div>`
           : null
       }
-      ${observationsList}
+      ${session ? observationsList : null}
       ${
         // At the page foot with the other session-level controls, not in the
         // capture-actions row: photo, voice and trace all attach to the
@@ -798,11 +820,22 @@ export function CapturePage({
           ? html`<button
               type="button"
               class="button-outline capture-page-export"
-              disabled=${exportState === 'exporting'}
+              disabled=${exportState === 'exporting' || observations.length === 0}
               onClick=${handleExport}
             >
               ${exportState === 'exporting' ? 'Exporting…' : 'Export'}
             </button>`
+          : null
+      }
+      ${
+        // A mute disabled control is a question; the hint is the answer
+        // (the Load-session precedent). buildSessionExport refuses zero
+        // observations too — this is the reason shown before the refusal
+        // could ever be hit.
+        session && observations.length === 0
+          ? html`<p class="capture-page-export-hint">
+              Nothing to export yet — save an observation first
+            </p>`
           : null
       }
       ${
@@ -819,25 +852,77 @@ export function CapturePage({
             </p>`
           : null
       }
-      <button type="button" class="link" onClick=${onOpenHistory}>Session history</button>
+      ${
+        // With a session running, history is a detour (design pass 3 §5b) —
+        // the route to every past reading is offered where there is nothing
+        // else to do, and comes back the moment the session ends. A real
+        // button, not a footer link: it is the route to every reading ever
+        // taken, and the unsent badge makes unexported work visible before
+        // leaving the field rather than after (§5e).
+        session
+          ? null
+          : html`<button type="button" class="session-history-button" onClick=${onOpenHistory}>
+              <svg class="glyph-list" viewBox="0 0 14 12" width="14" height="12" aria-hidden="true">
+                ${[2, 6, 10].map(
+                  (y) =>
+                    html`<line
+                      x1="1"
+                      y1=${y}
+                      x2="13"
+                      y2=${y}
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                    />`,
+                )}
+              </svg>
+              <span class="session-history-button-label">Session history</span>
+              ${
+                historySummary
+                  ? html`<span class="session-history-button-count">
+                      ${
+                        historySummary.sessions === 1
+                          ? '1 session'
+                          : `${historySummary.sessions} sessions`
+                      }
+                    </span>`
+                  : null
+              }
+              ${
+                historySummary && historySummary.unexported > 0
+                  ? html`<span class="chip badge-not-exported"
+                      >${historySummary.unexported} unsent</span
+                    >`
+                  : null
+              }
+              <span class="session-history-button-chevron" aria-hidden="true">›</span>
+            </button>`
+      }
       <button type="button" class="link" onClick=${onOpenProbe}>Device probe</button>
-      <div class="mode-switch" role="group" aria-label="Display mode">
-        <button
-          type="button"
-          class="mode-switch-option"
-          aria-pressed=${displayMode !== 'night'}
-          onClick=${() => onSetDisplayMode?.('auto')}
-        >
-          Auto
-        </button>
-        <button
-          type="button"
-          class="mode-switch-option"
-          aria-pressed=${displayMode === 'night'}
-          onClick=${() => onSetDisplayMode?.('night')}
-        >
-          Night
-        </button>
+      <div class="field">
+        <span class="field-label" id="display-mode-label">Display</span>
+        <div class="mode-switch" role="radiogroup" aria-labelledby="display-mode-label">
+          ${['auto', 'light', 'dark', 'night'].map(
+            (mode) =>
+              html`<button
+                type="button"
+                class="mode-switch-option"
+                role="radio"
+                aria-checked=${displayMode === mode}
+                onClick=${() => onSetDisplayMode?.(mode)}
+              >
+                ${mode[0].toUpperCase() + mode.slice(1)}
+              </button>`,
+          )}
+        </div>
+        ${
+          // Only Auto earns a caption — "Light — light" is noise. The
+          // resolved scheme comes in as a prop (main.js owns the matchMedia
+          // listener), the sensor-adapter injection rule.
+          displayMode === 'auto' && systemScheme
+            ? html`<p class="mode-switch-caption">Following the system — ${systemScheme}</p>`
+            : null
+        }
       </div>
       ${
         // Grid references come from Ordnance Survey's OSTN15 transformation,
