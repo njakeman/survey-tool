@@ -305,3 +305,31 @@ binding on later changes.
   This is the red treatment's second (and only other) instance; see the second-pass notes.
   **Delete exported sessions** on the list is a full-width outline in the Import slot, shown
   only when eligible, two-step via a label swap that names the count.
+
+## Additions with photo viewing and the history map (2026-08-14)
+
+- **Viewing a saved photo** (`src/ui/ObservationsList.js` `SavedPhoto`): the row's photo line
+  becomes a quiet `.link`-styled "Show photo" trigger (`button.observations-photo`, the Edit-note
+  rule — a read never competes with Save for the surface's accent). The bytes stay in IndexedDB
+  until the tap (the SavedVoiceNote rule; memory, not politeness), then one fetch and one object
+  URL serve both the inline `.observations-photo-thumb` (≤180px tall) and the full-screen view.
+- **The photo lightbox** (`.photo-lightbox`): fixed near-black scrim in every mode, the photo
+  `object-fit: contain`, one full-width `.button-inverse` Close (≥44px) — no accent fill on the
+  overlay, and the existing night rule already turns `.button-inverse` into an accent hairline.
+  Backdrop taps close it; taps on the photo don't (a mis-hit while peering must not dismiss).
+  It is row state, not a route — there is no router, and it dies with its row.
+- **Photos at night are dimmed, not red-shifted** (`brightness(0.55)` on thumb and lightbox
+  image): the map's grayscale+red multiply would make a photograph useless, but full brightness
+  at 2am would reset the dark adaptation the mode exists to protect. Dim, don't recolour.
+- **Accepted limitation:** the viewport meta pins `maximum-scale=1`, so the lightbox photo
+  cannot be pinch-zoomed. The full-screen view is the zoom.
+- **The history map** (`src/ui/HistoryMap.js`, `.history-map`): a past session's observations on
+  a read-only map in the history detail, the capture panel's exact footprint (300px, full-bleed)
+  so the two maps read as the same instrument — but stripped: no controls, no follow, no locator
+  or accuracy ring, no feature layers (capture-time aids; here they would imply an interactivity
+  the page refuses). Opens fitted to the session's data (trace vertices included) at
+  construction, single-point sessions at survey zoom. Filled-vs-hollow markers and
+  solid-vs-dashed trace lines carry the exported distinction unchanged. Rendered only when a
+  region is active and the session has observations — no placeholder, because history offers no
+  route to getting a basemap. Night mode's grayscale+red-multiply covers both map canvases via
+  shared selectors; no accent is added to the detail surface (Export keeps it).

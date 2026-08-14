@@ -496,3 +496,40 @@ whole transport, so this round trip is what stands between a broken phone and lo
 - [ ] Import the same zip twice: two copies listed, nothing merged or overwritten
 - [ ] Import garbage (rename a photo .zip): a named failure on the Import tap, nothing listed
 - [ ] Works offline end to end — export to Files and import from Files, airplane mode on
+
+## Photo viewing (2026-08-14)
+
+A saved photo is now viewable in-app: Show photo on the row loads the thumbnail, tapping it
+opens the full-screen view. Same behaviour in the open session's list and in a history detail.
+
+- [ ] Show photo on a saved row loads the photo, the right way up — a portrait photo taken
+      on-device is the EXIF case that no desktop test exercises
+- [ ] Tapping the thumbnail opens the full-screen view; Close (and a tap beside the photo) is
+      hittable with gloves; a tap ON the photo does not dismiss it
+- [ ] Works in airplane mode — the bytes come from IndexedDB, not the network
+- [ ] A session with ~20 photos: open and close many thumbnails in a row without the PWA being
+      memory-killed (the load is per-tap, so scrolling the list alone loads nothing)
+- [ ] The same photo opens from Session history → detail, read-only view unchanged otherwise
+- [ ] Night mode: thumbnail and full-screen photo are dimmed, not red-shifted, and the Close
+      control follows the night button treatment
+
+## History map (2026-08-14)
+
+Session history → tap a session: the detail now opens with that session's observations on a
+read-only map above the list, on whichever basemap is currently active.
+
+- [ ] The map opens fitted to the session's observations — points and whole traced shapes in
+      frame, not the archive's own centre
+- [ ] Filled vs hollow markers and solid vs dashed trace lines match the export badges on the
+      rows below
+- [ ] A single-observation session opens at a readable zoom (survey zoom), not a world view
+- [ ] Pan and zoom work; nothing follows the live position; no controls, locator or feature
+      layers appear
+- [ ] Night mode dims and reddens the history map exactly like the capture map, and trace
+      casings flip dark
+- [ ] With an online basemap active and airplane mode on: the map frame still appears and the
+      markers/traces draw over the fallback ground (provider unreachable must not break the page)
+- [ ] An imported session from outside the active archive's coverage clamps to the archive edge
+      rather than showing a grey void
+- [ ] With no basemap configured at all, the detail shows no map panel and no placeholder — the
+      observations list is unchanged
