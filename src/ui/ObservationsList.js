@@ -8,7 +8,7 @@ import {
   accuracyQuality,
 } from '../sensors/format.js';
 import { lineLengthM } from '../geo/lineMetrics.js';
-import { useEffect, useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import { ExportBadge } from './ExportBadge.js';
 import { TraceGlyph } from './traceGlyphs.js';
 
@@ -19,7 +19,12 @@ function SavedVoiceNote({ audioId, loadAudio }) {
   const [url, setUrl] = useState(null);
   const [state, setState] = useState('idle'); // idle | loading | ready | error
 
-  useEffect(() => () => url && URL.revokeObjectURL(url), [url]);
+  // Revoke via a ref-read at unmount, not a [url]-dependent effect — the
+  // same pending-effect race SavedPhoto documents below: an effect
+  // registered after the async load may never run before unmount, and a
+  // pending effect's cleanup never fires, leaking the URL.
+  const urlRef = useRef(null);
+  useEffect(() => () => urlRef.current && URL.revokeObjectURL(urlRef.current), []);
 
   if (!loadAudio) return html`<p class="observations-audio">Voice note</p>`;
 
@@ -31,7 +36,9 @@ function SavedVoiceNote({ audioId, loadAudio }) {
         setState('error');
         return;
       }
-      setUrl(URL.createObjectURL(record.blob));
+      const objectUrl = URL.createObjectURL(record.blob);
+      urlRef.current = objectUrl;
+      setUrl(objectUrl);
       setState('ready');
     } catch {
       setState('error');
@@ -52,6 +59,99 @@ function SavedVoiceNote({ audioId, loadAudio }) {
       disabled=${state === 'loading'}
     >
       ${state === 'loading' ? 'Loading voice note…' : '▶ Voice note'}
+    </button>
+  `;
+}
+
+// A saved photo, loaded only when the surveyor asks to see it — the bytes
+// stay in IndexedDB until the tap, the SavedVoiceNote rule: a session can
+// hold dozens of ~200 KB JPEGs and an installed iOS PWA has little memory
+// headroom for decoding rows nobody is looking at. The stored 1600px JPEG is
+// the only size that exists, so one fetch and one object URL serve both the
+// thumbnail and the full-screen view; the URL is revoked on unmount.
+function SavedPhoto({ photoId, loadPhoto }) {
+  const [url, setUrl] = useState(null);
+  const [state, setState] = useState('idle'); // idle | loading | thumb | full | error
+
+  // Revoke via a ref-read at unmount rather than a [url]-dependent effect: a
+  // deps-keyed effect registered after the async load may still be pending
+  // when the row unmounts, and a pending effect's cleanup never runs — the
+  // URL would leak. The mount-time cleanup reads whatever the ref holds.
+  const urlRef = useRef(null);
+  useEffect(() => () => urlRef.current && URL.revokeObjectURL(urlRef.current), []);
+
+  if (!loadPhoto) {
+    return html`<p class="observations-photo">
+      <span class="glyph-camera" aria-hidden="true"></span>Photo
+    </p>`;
+  }
+
+  async function open() {
+    setState('loading');
+    try {
+      const record = await loadPhoto(photoId);
+      if (!record) {
+        setState('error');
+        return;
+      }
+      const objectUrl = URL.createObjectURL(record.blob);
+      urlRef.current = objectUrl;
+      setUrl(objectUrl);
+      setState('thumb');
+    } catch {
+      setState('error');
+    }
+  }
+
+  if (state === 'error') {
+    return html`<p class="observations-photo">Photo could not be loaded</p>`;
+  }
+
+  if (state === 'thumb' || state === 'full') {
+    return html`
+      <img
+        class="observations-photo-thumb"
+        src=${url}
+        alt="Photo for this observation"
+        onClick=${() => setState('full')}
+      />
+      ${
+        // The full-screen view is plain row state, not a route — there is no
+        // router (see CLAUDE.md), and the overlay dies with its row. Backdrop
+        // taps close it; taps on the photo itself do not (target check), so a
+        // mis-hit while peering at the image can't dismiss it.
+        state === 'full'
+          ? html`<div
+              class="photo-lightbox"
+              role="dialog"
+              aria-label="Photo"
+              onClick=${(event) => {
+                if (event.target === event.currentTarget) setState('thumb');
+              }}
+            >
+              <img class="photo-lightbox-image" src=${url} alt="" />
+              <button
+                type="button"
+                class="button-inverse photo-lightbox-close"
+                onClick=${() => setState('thumb')}
+              >
+                Close
+              </button>
+            </div>`
+          : null
+      }
+    `;
+  }
+
+  return html`
+    <button
+      type="button"
+      class="link observations-photo"
+      onClick=${open}
+      disabled=${state === 'loading'}
+    >
+      <span class="glyph-camera" aria-hidden="true"></span>
+      ${state === 'loading' ? 'Loading photo…' : 'Show photo'}
     </button>
   `;
 }
@@ -117,9 +217,9 @@ function EditableNote({ observation, onEditNote }) {
 
 // Live-updating record of what's been saved this session — a visual
 // indicator of accumulated observations, not a review screen (that's Phase
-// 6); the one in-place edit is the note, above, and only when the parent
-// offers it. No thumbnail fetch: a plain indicator avoids pulling storage
-// access into a presentational component.
+// 6); the in-place edits are the note and the photo view, above, and only
+// when the parent offers the loader — storage access stays injected, never
+// imported into a presentational component.
 //
 // A card list rather than the six-column table this replaced. Six columns
 // cannot be read one-handed, and the two values a surveyor checks straight
@@ -127,7 +227,7 @@ function EditableNote({ observation, onEditNote }) {
 // furthest apart. The card also has room for the whole note, which retires
 // the clip-to-40-characters-and-hope-for-a-tooltip workaround: touch has no
 // hover, so that text was effectively unreachable.
-export function ObservationsList({ observations, gridRef, loadAudio, onEditNote }) {
+export function ObservationsList({ observations, gridRef, loadAudio, loadPhoto, onEditNote }) {
   if (observations.length === 0) {
     return html`<p class="observations-empty">No observations saved yet</p>`;
   }
@@ -194,9 +294,7 @@ export function ObservationsList({ observations, gridRef, loadAudio, onEditNote 
             }
             ${
               obs.photoId
-                ? html`<p class="observations-photo">
-                    <span class="glyph-camera" aria-hidden="true"></span>Photo
-                  </p>`
+                ? html`<${SavedPhoto} photoId=${obs.photoId} loadPhoto=${loadPhoto} />`
                 : null
             }
             ${

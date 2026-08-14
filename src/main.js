@@ -143,7 +143,9 @@ async function main() {
   // device that has never downloaded one never pays for ~800 KB of MapLibre
   // at startup. The split chunk is still precached, so the import resolves
   // offline (same rule as photo/encode.js: browser-only, main.js only).
-  async function createMap({ container: mapContainer, onUserPan, onFeatureTap }) {
+  // `fit` (history map): open fitted to a session's data instead of the
+  // region's own centre; the adapter applies it at construction.
+  async function createMap({ container: mapContainer, onUserPan, onFeatureTap, fit }) {
     // An online region has no archive: hand the adapter the region and let
     // failed fetches surface as warnings (the adapter handles the two online
     // kinds — tile template vs remote style — itself). Everything about the
@@ -155,6 +157,7 @@ async function main() {
         container: mapContainer,
         online: onlineRegion,
         glyphsUrl: glyphsUrl(import.meta.env.BASE_URL),
+        fit,
         onUserPan,
         onFeatureTap,
         onError: (error) => console.warn('map error', error),
@@ -172,6 +175,7 @@ async function main() {
       // the region so it survives the manifest being unreachable.
       tileType: region?.tileType ?? 'vector',
       tileSize: region?.tileSize,
+      fit,
       onUserPan,
       onFeatureTap,
       // Map errors are diagnostics, not app failures: a missing tile must

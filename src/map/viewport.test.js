@@ -1,5 +1,11 @@
 import { describe, expect, test } from 'vitest';
-import { maxBoundsFromHeader, initialZoomFromHeader, minZoomFromHeader } from './viewport.js';
+import {
+  maxBoundsFromHeader,
+  initialZoomFromHeader,
+  minZoomFromHeader,
+  observationBounds,
+  fitViewport,
+} from './viewport.js';
 
 const londonHeader = {
   minLon: -1,
@@ -55,6 +61,101 @@ describe('minZoomFromHeader', () => {
 
   test('sets no floor for an archive that already starts at the world view', () => {
     expect(minZoomFromHeader({ ...londonHeader, minZoom: 0, maxZoom: 15 })).toBeNull();
+  });
+});
+
+describe('observationBounds', () => {
+  const point = (lat, lon) => ({ lat, lon });
+
+  test('is null with nothing to fit — no observations means no viewport claim', () => {
+    expect(observationBounds([])).toBeNull();
+    expect(observationBounds(undefined)).toBeNull();
+  });
+
+  test('wraps a set of points as [[west,south],[east,north]]', () => {
+    expect(observationBounds([point(51.5, -0.14), point(51.6, -0.2), point(51.4, -0.1)])).toEqual([
+      [-0.2, 51.4],
+      [-0.1, 51.6],
+    ]);
+  });
+
+  test('a traced observation widens the bounds to the whole walked geometry', () => {
+    // The representative point is the distance-midpoint — fitting to it alone
+    // would crop the ends of the walk.
+    const traced = {
+      lat: 51.5005,
+      lon: -0.14,
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [-0.14, 51.5],
+          [-0.15, 51.501],
+        ],
+      },
+    };
+    expect(observationBounds([traced])).toEqual([
+      [-0.15, 51.5],
+      [-0.14, 51.501],
+    ]);
+  });
+
+  test('a traced boundary widens the bounds to its ring', () => {
+    const ring = [
+      [-0.14, 51.5],
+      [-0.1386, 51.5],
+      [-0.1386, 51.501],
+      [-0.14, 51.501],
+      [-0.14, 51.5],
+    ];
+    const traced = {
+      lat: 51.5005,
+      lon: -0.1393,
+      geometry: { type: 'Polygon', coordinates: [ring] },
+    };
+    expect(observationBounds([traced])).toEqual([
+      [-0.14, 51.5],
+      [-0.1386, 51.501],
+    ]);
+  });
+
+  test('a single point yields degenerate equal-corner bounds — the fit decides what to do', () => {
+    expect(observationBounds([point(51.5, -0.14)])).toEqual([
+      [-0.14, 51.5],
+      [-0.14, 51.5],
+    ]);
+  });
+});
+
+describe('fitViewport', () => {
+  test('null bounds fit nothing', () => {
+    expect(fitViewport(null)).toBeNull();
+  });
+
+  test('degenerate bounds become a centre at max zoom — MapLibre must never see a zero-extent fit', () => {
+    expect(
+      fitViewport(
+        [
+          [-0.14, 51.5],
+          [-0.14, 51.5],
+        ],
+        { maxZoom: 16 },
+      ),
+    ).toEqual({ center: [-0.14, 51.5], zoom: 16 });
+  });
+
+  test('real bounds pass through with padding and a zoom ceiling', () => {
+    expect(
+      fitViewport([
+        [-0.2, 51.4],
+        [-0.1, 51.6],
+      ]),
+    ).toEqual({
+      bounds: [
+        [-0.2, 51.4],
+        [-0.1, 51.6],
+      ],
+      fitBoundsOptions: { padding: 40, maxZoom: 16 },
+    });
   });
 });
 

@@ -4,6 +4,7 @@ import { formatDate } from '../sensors/format.js';
 import { isExported, countUnexported } from '../domain/session.js';
 import { ObservationsList } from './ObservationsList.js';
 import { ExportBadge } from './ExportBadge.js';
+import { HistoryMap } from './HistoryMap.js';
 
 // Read-only view of past (non-open) sessions, so ended-but-unexported
 // sessions stay visible and inspectable instead of vanishing once you tap
@@ -20,6 +21,13 @@ export function SessionHistoryPage({
   gridRef,
   onBack,
   onSessionLoaded,
+  // The detail map's wiring: the same createMap closure the capture page
+  // uses (main.js, active region and all), plus what HistoryMap needs to
+  // know whether and how to show it.
+  createMap,
+  activeRegionId,
+  statusKnown,
+  displayMode,
 }) {
   const [sessions, setSessions] = useState(null); // null = still loading
   const [openSessionId, setOpenSessionId] = useState(null);
@@ -219,11 +227,19 @@ export function SessionHistoryPage({
             }
           />
         </p>
+        <${HistoryMap}
+          activeRegionId=${activeRegionId}
+          statusKnown=${statusKnown}
+          createMap=${createMap}
+          observations=${selected.observations}
+          night=${displayMode === 'night'}
+        />
         <p class="field-label">Observations</p>
         <${ObservationsList}
           observations=${selected.observations}
           gridRef=${gridRef}
           loadAudio=${(id) => service.getAudio(id)}
+          loadPhoto=${(id) => service.getPhoto(id)}
         />
         <button
           type="button"

@@ -78,6 +78,43 @@ describe('App', () => {
     expect(await screen.findByRole('button', { name: /save observation/i })).toBeInTheDocument();
   });
 
+  test('history detail receives the map wiring, so a past session renders on the active basemap', async () => {
+    const adapter = {
+      ready: Promise.resolve(),
+      setObservations: vi.fn(),
+      setNightMode: vi.fn(),
+      destroy: vi.fn(),
+    };
+    const createMap = vi.fn().mockResolvedValue(adapter);
+    const service = createFakeService();
+    service.listSessions.mockResolvedValue([
+      { id: 'sess-a', name: 'Site A', status: 'closed', startedAt: '2026-08-05T09:00:00.000Z' },
+    ]);
+    service.listObservations.mockResolvedValue([
+      {
+        id: 'obs-1',
+        sessionId: 'sess-a',
+        fixAt: '2026-08-05T10:00:00.000Z',
+        lat: 51.5,
+        lon: -0.14,
+        gpsAccuracyM: 8,
+        note: '',
+        photoId: null,
+      },
+    ]);
+    renderApp({ service, createMap, activeRegionId: 'south' });
+    await screen.findByRole('button', { name: /save observation/i });
+
+    fireEvent.click(screen.getByRole('button', { name: /session history/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Site A/ }));
+
+    // The capture map also builds from the same factory; the history call is
+    // the one carrying a fit.
+    await waitFor(() =>
+      expect(createMap.mock.calls.some(([options]) => options.fit != null)).toBe(true),
+    );
+  });
+
   test('passes offlineStatus through to the capture view, surfacing the no-precache warning', async () => {
     renderApp({ offlineStatus: { precachedCount: 0, offlineReady: false } });
 

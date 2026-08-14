@@ -67,6 +67,10 @@ export function App({
         exportSession=${exportSession}
         importSession=${importSession}
         gridRef=${gridRef}
+        createMap=${createMap}
+        activeRegionId=${activeRegionId}
+        statusKnown=${statusKnown}
+        displayMode=${displayMode}
         onBack=${() => setView('capture')}
         onSessionLoaded=${() => {
           setSessionEpoch((epoch) => epoch + 1);

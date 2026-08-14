@@ -787,3 +787,51 @@ describe('trace layers against real MapLibre', () => {
     expect(await adapter.getSourceFeatureCount('active-trace')).toBe(0);
   });
 });
+
+describe('opening viewport fitted to session data (the history map)', () => {
+  // The fixture archive covers lon -1..0.5, lat 51..52 — every fit below is
+  // well inside it, so maxBounds clamping never participates.
+
+  test('a fit inside the archive opens centred within those bounds, no deeper than survey zoom', async () => {
+    const adapter = await createAdapter({
+      fit: [
+        [-0.5, 51.3],
+        [-0.3, 51.5],
+      ],
+    });
+    await adapter.ready;
+
+    const { lat, lon } = adapter.getCenter();
+    expect(lon).toBeGreaterThan(-0.5);
+    expect(lon).toBeLessThan(-0.3);
+    expect(lat).toBeGreaterThan(51.3);
+    expect(lat).toBeLessThan(51.5);
+    expect(adapter.getZoom()).toBeLessThanOrEqual(16);
+  });
+
+  test('a degenerate single-point fit opens dead on the point at survey zoom', async () => {
+    const adapter = await createAdapter({
+      fit: [
+        [-0.4, 51.4],
+        [-0.4, 51.4],
+      ],
+    });
+    await adapter.ready;
+
+    const { lat, lon } = adapter.getCenter();
+    expect(lon).toBeCloseTo(-0.4, 4);
+    expect(lat).toBeCloseTo(51.4, 4);
+    expect(adapter.getZoom()).toBe(16);
+  });
+
+  test('no fit keeps the header-centred opening view unchanged', async () => {
+    const adapter = await createAdapter();
+    await adapter.ready;
+
+    const { lat, lon } = adapter.getCenter();
+    expect(lon).toBeGreaterThanOrEqual(-1);
+    expect(lon).toBeLessThanOrEqual(0.5);
+    expect(lat).toBeGreaterThanOrEqual(51);
+    expect(lat).toBeLessThanOrEqual(52);
+  });
+});

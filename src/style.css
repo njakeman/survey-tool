@@ -243,10 +243,12 @@
    every z-indexed control. Canvas-drawn overlays (trace lines, markers)
    are dimmed with the tiles — the casings' night colour is what keeps the
    lines legible (map/overlays.js traceCasingColor). */
-[data-mode='night'] .capture-map-canvas {
+[data-mode='night'] .capture-map-canvas,
+[data-mode='night'] .history-map-canvas {
   filter: grayscale(1) contrast(0.85) brightness(0.42);
 }
 
+[data-mode='night'] .history-map::after,
 [data-mode='night'] .capture-map::after {
   content: '';
   position: absolute;
@@ -644,6 +646,28 @@ button {
 .capture-map-canvas {
   width: 100%;
   height: 100%;
+}
+
+/* The history detail's read-only map: the capture panel's footprint (same
+   full-bleed and height, so the two maps read as the same instrument), none
+   of its controls. Position:relative for the night-mode red multiply. */
+.history-map {
+  position: relative;
+  height: 300px;
+  margin-inline: calc(var(--space-4) * -1);
+  margin-bottom: var(--space-3);
+  overflow: hidden;
+  background: var(--map-backdrop);
+}
+
+.history-map-canvas {
+  width: 100%;
+  height: 100%;
+}
+
+.history-map-error {
+  color: var(--danger-strong);
+  margin: var(--space-2) var(--space-4) 0;
 }
 
 /* No archive on the device. Hatched rather than blank, so it reads as
@@ -2073,6 +2097,59 @@ button {
   margin: 7px 0 0;
   font-size: var(--type-meta);
   color: var(--text-secondary);
+}
+
+/* The photo trigger is a quiet link like Edit note — the row's photo is a
+   read, not a step toward saving, so it never competes with Save for the
+   surface's one accent fill. */
+button.observations-photo {
+  color: var(--accent-ink);
+  text-decoration: underline;
+}
+
+.observations-photo-thumb {
+  display: block;
+  margin: 7px 0 0;
+  max-width: 100%;
+  max-height: 180px;
+  border-radius: var(--radius);
+}
+
+/* Full-screen view: a scrim, the photo, one Close. Fixed and row-owned —
+   there is no router to give it a route, and it dies with its row. The
+   scrim is near-black in both modes; Close is .button-inverse, which the
+   night rules already turn into an accent hairline. No accent fill here. */
+.photo-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  background: rgba(0, 0, 0, 0.9);
+}
+
+.photo-lightbox-image {
+  max-width: 100%;
+  max-height: calc(100% - var(--touch-target) - var(--space-3) * 2);
+  object-fit: contain;
+}
+
+.photo-lightbox-close {
+  min-height: var(--touch-target);
+  width: 100%;
+  max-width: 24rem;
+}
+
+/* A photograph is the one thing night mode must not red-shift into
+   uselessness — but full brightness at 2am would reset the dark adaptation
+   the rest of the mode protects. Dim, don't recolour. */
+[data-mode='night'] .observations-photo-thumb,
+[data-mode='night'] .photo-lightbox-image {
+  filter: brightness(0.55);
 }
 
 .observations-poor {

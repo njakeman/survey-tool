@@ -18,6 +18,7 @@ import {
 } from '../storage/observationStore.js';
 import { saveObservationWithPhoto } from '../storage/captureWrite.js';
 import { getAudio as getAudioFromStore } from '../storage/audioStore.js';
+import { getPhoto as getPhotoFromStore } from '../storage/photoStore.js';
 import { deleteObservationWithPhoto } from '../storage/captureDelete.js';
 import { deleteSessionWithData } from '../storage/sessionDelete.js';
 import {
@@ -238,6 +239,13 @@ export function createCaptureService({ db, newId, nowIso }) {
     return getAudioFromStore(db, id);
   }
 
+  // A saved photo, as { blob, contentType } — undefined when absent. Same
+  // read-on-demand rule as getAudio: the list's thumbnail asks for one photo
+  // on a tap, never for every photo in a session.
+  function getPhoto(id) {
+    return getPhotoFromStore(db, id);
+  }
+
   return {
     getOpenSession,
     listSessions,
@@ -256,5 +264,6 @@ export function createCaptureService({ db, newId, nowIso }) {
     deleteSession,
     deleteExportedSessions,
     getAudio,
+    getPhoto,
   };
 }

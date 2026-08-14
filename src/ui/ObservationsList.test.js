@@ -1,5 +1,5 @@
-import { describe, expect, test, vi } from 'vitest';
-import { render, screen, within, fireEvent, waitFor } from '@testing-library/preact';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import { render, screen, within, fireEvent, waitFor, act } from '@testing-library/preact';
 import { html } from 'htm/preact';
 import { ObservationsList } from './ObservationsList.js';
 
@@ -236,6 +236,166 @@ describe('ObservationsList - traced observations', () => {
     render(html`<${ObservationsList} observations=${[OBS_NO_PHOTO]} />`);
 
     expect(screen.queryByText(/Traced/)).toBeNull();
+  });
+});
+
+describe('ObservationsList — viewing a photo', () => {
+  const savedUrls = [];
+  beforeEach(() => {
+    savedUrls.length = 0;
+    // happy-dom's object-URL support is inert; the component's contract with
+    // the browser is create-once, revoke-on-unmount, which is what we assert.
+    URL.createObjectURL = vi.fn(() => {
+      const url = `blob:fake-${savedUrls.length}`;
+      savedUrls.push(url);
+      return url;
+    });
+    URL.revokeObjectURL = vi.fn();
+  });
+  afterEach(() => {
+    delete URL.createObjectURL;
+    delete URL.revokeObjectURL;
+  });
+
+  const photoRecord = { id: 'obs-2', contentType: 'image/jpeg', blob: new Blob(['x']) };
+
+  test('without loadPhoto the row keeps the plain indicator and offers no button', () => {
+    render(html`<${ObservationsList} observations=${[OBS_WITH_PHOTO]} />`);
+
+    expect(screen.getByText(/photo/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /show photo/i })).toBeNull();
+  });
+
+  test('Show photo fetches the photo once and renders it as a thumbnail', async () => {
+    const loadPhoto = vi.fn().mockResolvedValue(photoRecord);
+    render(html`<${ObservationsList} observations=${[OBS_WITH_PHOTO]} loadPhoto=${loadPhoto} />`);
+
+    fireEvent.click(screen.getByRole('button', { name: /show photo/i }));
+
+    const img = await screen.findByRole('img', { name: /photo for this observation/i });
+    expect(loadPhoto).toHaveBeenCalledWith('obs-2');
+    expect(img).toHaveClass('observations-photo-thumb');
+    expect(img).toHaveAttribute('src', savedUrls[0]);
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
+  });
+
+  test('a photo that cannot be found reads as an inline failure, not a broken image', async () => {
+    const loadPhoto = vi.fn().mockResolvedValue(undefined);
+    render(html`<${ObservationsList} observations=${[OBS_WITH_PHOTO]} loadPhoto=${loadPhoto} />`);
+
+    fireEvent.click(screen.getByRole('button', { name: /show photo/i }));
+
+    await waitFor(() => expect(screen.getByText(/photo could not be loaded/i)).toBeInTheDocument());
+  });
+
+  test('a read that rejects lands on the same inline failure', async () => {
+    const loadPhoto = vi.fn().mockRejectedValue(new Error('gone'));
+    render(html`<${ObservationsList} observations=${[OBS_WITH_PHOTO]} loadPhoto=${loadPhoto} />`);
+
+    fireEvent.click(screen.getByRole('button', { name: /show photo/i }));
+
+    await waitFor(() => expect(screen.getByText(/photo could not be loaded/i)).toBeInTheDocument());
+  });
+
+  test('tapping the thumbnail opens a full-screen view of the same object URL', async () => {
+    const loadPhoto = vi.fn().mockResolvedValue(photoRecord);
+    render(html`<${ObservationsList} observations=${[OBS_WITH_PHOTO]} loadPhoto=${loadPhoto} />`);
+
+    fireEvent.click(screen.getByRole('button', { name: /show photo/i }));
+    fireEvent.click(await screen.findByRole('img', { name: /photo for this observation/i }));
+
+    const dialog = screen.getByRole('dialog', { name: /photo/i });
+    const full = dialog.querySelector('.photo-lightbox-image');
+    expect(full).toHaveAttribute('src', savedUrls[0]);
+    // One fetch, one URL — the lightbox reuses the thumbnail's decode.
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
+  });
+
+  test('Close shuts the full-screen view; the thumbnail stays', async () => {
+    const loadPhoto = vi.fn().mockResolvedValue(photoRecord);
+    render(html`<${ObservationsList} observations=${[OBS_WITH_PHOTO]} loadPhoto=${loadPhoto} />`);
+
+    fireEvent.click(screen.getByRole('button', { name: /show photo/i }));
+    fireEvent.click(await screen.findByRole('img', { name: /photo for this observation/i }));
+    fireEvent.click(screen.getByRole('button', { name: /close/i }));
+
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.getByRole('img', { name: /photo for this observation/i })).toBeInTheDocument();
+  });
+
+  test('tapping the backdrop also closes the full-screen view', async () => {
+    const loadPhoto = vi.fn().mockResolvedValue(photoRecord);
+    render(html`<${ObservationsList} observations=${[OBS_WITH_PHOTO]} loadPhoto=${loadPhoto} />`);
+
+    fireEvent.click(screen.getByRole('button', { name: /show photo/i }));
+    fireEvent.click(await screen.findByRole('img', { name: /photo for this observation/i }));
+    fireEvent.click(screen.getByRole('dialog', { name: /photo/i }));
+
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  test('unmounting after a load revokes the object URL', async () => {
+    const loadPhoto = vi.fn().mockResolvedValue(photoRecord);
+    const { unmount } = render(
+      html`<${ObservationsList} observations=${[OBS_WITH_PHOTO]} loadPhoto=${loadPhoto} />`,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /show photo/i }));
+    await screen.findByRole('img', { name: /photo for this observation/i });
+    // Flush the url effect so its cleanup is registered before unmount —
+    // Preact schedules effects asynchronously.
+    await act(() => {});
+    unmount();
+
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith(savedUrls[0]);
+  });
+});
+
+describe('ObservationsList — voice-note lifecycle', () => {
+  const savedUrls = [];
+  beforeEach(() => {
+    savedUrls.length = 0;
+    URL.createObjectURL = vi.fn(() => {
+      const url = `blob:audio-${savedUrls.length}`;
+      savedUrls.push(url);
+      return url;
+    });
+    URL.revokeObjectURL = vi.fn();
+  });
+  afterEach(() => {
+    delete URL.createObjectURL;
+    delete URL.revokeObjectURL;
+  });
+
+  const OBS_WITH_AUDIO = {
+    id: 'obs-3',
+    fixAt: '2026-08-06T10:00:00.000Z',
+    lat: 51.5,
+    lon: -0.14,
+    gpsAccuracyM: 8,
+    headingDeg: null,
+    note: '',
+    photoId: null,
+    audioId: 'obs-3',
+  };
+
+  test('unmounting after a voice note is loaded revokes its object URL', async () => {
+    // The same pending-effect race SavedPhoto's test exposed: a [url]-keyed
+    // revoke effect registered after the async load may never have run by
+    // unmount, and a pending effect's cleanup never fires.
+    const loadAudio = vi
+      .fn()
+      .mockResolvedValue({ id: 'obs-3', contentType: 'audio/mp4', blob: new Blob(['x']) });
+    const { unmount, container } = render(
+      html`<${ObservationsList} observations=${[OBS_WITH_AUDIO]} loadAudio=${loadAudio} />`,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /voice note/i }));
+    await waitFor(() => expect(container.querySelector('audio')).not.toBeNull());
+    await act(() => {});
+    unmount();
+
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith(savedUrls[0]);
   });
 });
 

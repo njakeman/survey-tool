@@ -30,7 +30,12 @@ import {
 } from './featureLayerStyle.js';
 import { describeTappedFeature } from './featureQuery.js';
 import { LOCATOR_SVG, beamPath, locatorView } from './locator.js';
-import { initialZoomFromHeader, maxBoundsFromHeader, minZoomFromHeader } from './viewport.js';
+import {
+  fitViewport,
+  initialZoomFromHeader,
+  maxBoundsFromHeader,
+  minZoomFromHeader,
+} from './viewport.js';
 
 // The one module that touches MapLibre. Everything above it (style, overlays,
 // follow mode) is pure and node-tested; everything below it (CaptureMap) sees
@@ -98,6 +103,7 @@ export async function createMapAdapter({
   tileType = 'vector',
   tileSize,
   attribution,
+  fit = null,
   onUserPan,
   onFeatureTap,
   onError,
@@ -155,16 +161,26 @@ export async function createMapAdapter({
   // undefined falls back to the vendored stack inside featureLayerLayers.
   const labelFontStack = remoteStyleLoaded ? online.featureFontStack : undefined;
 
+  // A caller-supplied fit (the history map, fitting a past session's
+  // observations) replaces the opening centre/zoom pair in either branch —
+  // applied at construction, not as a post-load fitBounds(), so the map
+  // never visibly jumps from the archive centre. fitViewport has already
+  // decided the degenerate single-point case in pure code; MapLibre only
+  // ever sees bounds with real extent. A fit outside the archive's
+  // maxBounds clamps to the nearest edge — honest, and on the checklist.
+  const fitted = fitViewport(fit, { maxZoom: SURVEY_ZOOM });
   const viewport = online
     ? // No bounds and no zoom floor: the imagery covers the world, and a
       // whole-world maxBounds is exactly what MapLibre cannot accept
       // (viewport.js). Opens at survey zoom over the provider's fixed centre
       // — the same open-at-a-centre-then-follow behaviour an archive has —
       // and the first fix centres it on the surveyor.
-      { center: [online.centre.lon, online.centre.lat], zoom: SURVEY_ZOOM }
+      (fitted ?? { center: [online.centre.lon, online.centre.lat], zoom: SURVEY_ZOOM })
     : {
-        center: [header.centerLon, header.centerLat],
-        zoom: initialZoomFromHeader(header, SURVEY_ZOOM),
+        ...(fitted ?? {
+          center: [header.centerLon, header.centerLat],
+          zoom: initialZoomFromHeader(header, SURVEY_ZOOM),
+        }),
         // A floor only where the archive has one: below its lowest tile zoom
         // there is nothing to draw. maxZoom stays unset so overzoom past the
         // deepest tile still works — blurry beats blank; clamping the map to
@@ -570,6 +586,11 @@ export async function createMapAdapter({
     return map.getZoom();
   }
 
+  function getCenter() {
+    const { lat, lng } = map.getCenter();
+    return { lat, lon: lng };
+  }
+
   // Movement, for as long as the caller wants it; returns an unsubscribe.
   // Subscribed only while the picking crosshair is open, deliberately: the
   // readout has to be live under a moving thumb, but a standing subscription
@@ -654,6 +675,7 @@ export async function createMapAdapter({
     hasLocator: () => Boolean(locatorMarker),
     getPointAtFraction,
     getZoom,
+    getCenter,
     onMove,
     queryFeatureAt,
     centreOn,

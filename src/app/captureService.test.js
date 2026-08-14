@@ -318,6 +318,30 @@ describe('updateNote', () => {
   });
 });
 
+describe('getPhoto', () => {
+  test('returns the saved photo as { id, contentType, blob } for an observation id', async () => {
+    const service = await makeService('capture-service-get-photo');
+    await service.startSession('Ashton Keynes');
+    const blob = new Blob(['fake jpeg bytes'], { type: 'image/jpeg' });
+    const obs = await service.saveObservation({
+      reading: READING,
+      heading: null,
+      note: '',
+      photo: { blob },
+    });
+
+    const record = await service.getPhoto(obs.id);
+    expect(record.id).toBe(obs.id);
+    expect(record.contentType).toBe('image/jpeg');
+    expect(await record.blob.text()).toBe('fake jpeg bytes');
+  });
+
+  test('resolves undefined for an id with no photo', async () => {
+    const service = await makeService('capture-service-get-photo-missing');
+    expect(await service.getPhoto('nope')).toBeUndefined();
+  });
+});
+
 describe('saveObservation', () => {
   test('throws when no session is open, and writes nothing', async () => {
     const db = await openDatabase('capture-service-save-no-session');

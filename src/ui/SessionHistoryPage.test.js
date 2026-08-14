@@ -132,6 +132,73 @@ describe('SessionHistoryPage — list', () => {
   });
 });
 
+describe('SessionHistoryPage — the detail map', () => {
+  function fakeAdapter() {
+    return {
+      ready: Promise.resolve(),
+      setObservations: vi.fn(),
+      setNightMode: vi.fn(),
+      destroy: vi.fn(),
+    };
+  }
+
+  function renderWithMap({ createMap, activeRegionId = 'south', displayMode = 'auto' }) {
+    const service = createFakeService({
+      sessions: [CLOSED_A],
+      observationsBySession: { 'sess-a': [OBS] },
+    });
+    return render(
+      html`<${SessionHistoryPage}
+        service=${service}
+        exportSession=${vi.fn()}
+        onBack=${vi.fn()}
+        createMap=${createMap}
+        activeRegionId=${activeRegionId}
+        statusKnown=${true}
+        displayMode=${displayMode}
+      />`,
+    );
+  }
+
+  test("the detail shows the session on a read-only map fitted to its observations; the list doesn't", async () => {
+    const createMap = vi.fn().mockResolvedValue(fakeAdapter());
+    const { container } = renderWithMap({ createMap });
+    await screen.findByText('Site A');
+    expect(container.querySelector('.history-map')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /Site A/ }));
+
+    await waitFor(() => expect(container.querySelector('.history-map')).not.toBeNull());
+    await waitFor(() => expect(createMap).toHaveBeenCalledTimes(1));
+    expect(createMap.mock.calls[0][0].fit).toEqual([
+      [-0.14, 51.5],
+      [-0.14, 51.5],
+    ]);
+  });
+
+  test('night mode reaches the detail map', async () => {
+    const adapter = fakeAdapter();
+    renderWithMap({ createMap: vi.fn().mockResolvedValue(adapter), displayMode: 'night' });
+    await screen.findByText('Site A');
+
+    fireEvent.click(screen.getByRole('button', { name: /Site A/ }));
+
+    await waitFor(() => expect(adapter.setNightMode).toHaveBeenCalledWith(true));
+  });
+
+  test('no active region → no map panel and no placeholder in the detail', async () => {
+    const createMap = vi.fn();
+    const { container } = renderWithMap({ createMap, activeRegionId: null });
+    await screen.findByText('Site A');
+
+    fireEvent.click(screen.getByRole('button', { name: /Site A/ }));
+
+    await screen.findByText(/51\.500000, -0\.140000/);
+    expect(container.querySelector('.history-map')).toBeNull();
+    expect(createMap).not.toHaveBeenCalled();
+  });
+});
+
 describe('SessionHistoryPage — detail', () => {
   test('tapping a session shows its observations and an Export button', async () => {
     const service = createFakeService({
@@ -147,6 +214,25 @@ describe('SessionHistoryPage — detail', () => {
 
     expect(await screen.findByText(/51\.500000, -0\.140000/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^export$/i })).toBeInTheDocument();
+  });
+
+  test('a saved photo can be viewed from the read-only detail — photos are reads', async () => {
+    const service = createFakeService({
+      sessions: [CLOSED_A],
+      observationsBySession: { 'sess-a': [{ ...OBS, photoId: 'obs-1' }] },
+    });
+    service.getPhoto = vi
+      .fn()
+      .mockResolvedValue({ id: 'obs-1', contentType: 'image/jpeg', blob: new Blob(['x']) });
+    render(
+      html`<${SessionHistoryPage} service=${service} exportSession=${vi.fn()} onBack=${vi.fn()} />`,
+    );
+    await screen.findByText('Site A');
+    fireEvent.click(screen.getByRole('button', { name: /Site A/ }));
+
+    fireEvent.click(await screen.findByRole('button', { name: /show photo/i }));
+
+    await waitFor(() => expect(service.getPhoto).toHaveBeenCalledWith('obs-1'));
   });
 
   test('a "back to list" control in the detail view returns to the session list, not the top-level view', async () => {

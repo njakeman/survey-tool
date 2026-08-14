@@ -440,6 +440,7 @@ export function CapturePage({
   // system while the radio is busy. The rows only change on save, so hold the
   // vnode still between saves and Preact skips the subtree entirely.
   const loadAudio = (id) => service.getAudio(id);
+  const loadPhoto = (id) => service.getPhoto(id);
   // The refresh is what closes the row's editor visibly: the list re-reads,
   // the memo below invalidates on the new observations array, and the row
   // re-renders showing the amended note.
@@ -453,10 +454,11 @@ export function CapturePage({
         observations=${decoratedObservations}
         gridRef=${gridRef}
         loadAudio=${loadAudio}
+        loadPhoto=${loadPhoto}
         onEditNote=${editNote}
       />`,
-    // loadAudio and editNote are fresh closures every render but only wrap
-    // the stable service — deliberately not dependencies.
+    // loadAudio, loadPhoto and editNote are fresh closures every render but
+    // only wrap the stable service — deliberately not dependencies.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [decoratedObservations, gridRef],
   );

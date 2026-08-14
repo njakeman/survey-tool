@@ -387,6 +387,30 @@ describe('CapturePage — undo lifecycle', () => {
     await waitFor(() => expect(service.listObservations.mock.calls.length).toBeGreaterThan(1));
   });
 
+  test('viewing a saved photo goes through the service — the open session offers photos too', async () => {
+    const observation = {
+      id: 'obs-1',
+      sessionId: 'sess-1',
+      lat: 51.5,
+      lon: -0.14,
+      gpsAccuracyM: 8,
+      note: 'gate post',
+      photoId: 'obs-1',
+    };
+    const service = createFakeService({ openSession: OPEN_SESSION, observations: [observation] });
+    service.getPhoto = vi
+      .fn()
+      .mockResolvedValue({ id: 'obs-1', contentType: 'image/jpeg', blob: new Blob(['x']) });
+    const { sensors } = createFakeSensors();
+    render(html`<${CapturePage} service=${service} sensors=${sensors} downscale=${vi.fn()} />`);
+    await screen.findByText('gate post');
+
+    const [row] = screen.getAllByRole('listitem');
+    fireEvent.click(within(row).getByRole('button', { name: /show photo/i }));
+
+    await waitFor(() => expect(service.getPhoto).toHaveBeenCalledWith('obs-1'));
+  });
+
   test('a bumped sessionEpoch re-reads the session and clears the Undo affordance', async () => {
     // Load session (history) makes a past session the open one while this
     // page stays mounted-but-hidden — the epoch bump is its explicit signal
