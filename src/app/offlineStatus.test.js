@@ -100,6 +100,33 @@ describe('readOfflineStatus', () => {
     expect(status.precachedCount).toBe(0);
     expect(status.offlineReady).toBe(false);
   });
+
+  test('resolves standalone from the display-mode media query when navigator.standalone is absent (installed Android PWA)', async () => {
+    const status = await readOfflineStatus({
+      serviceWorker: { controller: {}, getRegistration: async () => ({}) },
+      cacheStorage: fakeCacheStorage({}),
+      isSecureContext: true,
+      standalone: undefined,
+      matchMedia: (query) => ({ matches: query === '(display-mode: standalone)' }),
+    });
+
+    expect(status.standalone).toBe(true);
+  });
+
+  // The iOS fence: navigator.standalone alone, with no matchMedia passed at
+  // all, must still report standalone — the exact shape main.js has always
+  // used. Written so a future change can't make Android's fix an iOS
+  // regression.
+  test('navigator.standalone true still reports standalone with no matchMedia at all (installed iOS PWA)', async () => {
+    const status = await readOfflineStatus({
+      serviceWorker: { controller: {}, getRegistration: async () => ({}) },
+      cacheStorage: fakeCacheStorage({}),
+      isSecureContext: true,
+      standalone: true,
+    });
+
+    expect(status.standalone).toBe(true);
+  });
 });
 
 describe('subscribeOfflineStatus', () => {
@@ -282,6 +309,62 @@ describe('subscribeOfflineStatus', () => {
     // triggers on precachedCount === 0, and a privacy-mode read failure on
     // a healthy install would otherwise show a permanent false warning.
     expect(status.precachedCount).toBeNull();
+  });
+
+  test('threads matchMedia through to the standalone reading (installed Android PWA)', async () => {
+    const serviceWorker = fakeServiceWorker({ ready: Promise.resolve() });
+    const timers = fakeTimers();
+    const onChange = vi.fn();
+
+    subscribeOfflineStatus(
+      {
+        serviceWorker,
+        cacheStorage: fakeCacheStorage({}),
+        isSecureContext: true,
+        standalone: undefined,
+        matchMedia: (query) => ({ matches: query === '(display-mode: standalone)' }),
+        setTimeoutFn: timers.setTimeoutFn,
+        clearTimeoutFn: timers.clearTimeoutFn,
+      },
+      onChange,
+    );
+
+    await flush();
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange.mock.calls[0][0].standalone).toBe(true);
+  });
+
+  // The error-path fallback computes `standalone` independently of the
+  // success path (readOfflineStatus is never reached when cacheStorage
+  // rejects) — it must resolve matchMedia too, or the probe page would
+  // report a different answer on Android depending on whether the read
+  // happened to fail, which is exactly the moment a diagnostic must not lie.
+  test('the error-path fallback also resolves standalone via matchMedia (Android)', async () => {
+    const serviceWorker = fakeServiceWorker({ ready: Promise.resolve() });
+    const cacheStorage = {
+      keys: () => Promise.reject(new Error('SecurityError: cache access denied')),
+    };
+    const timers = fakeTimers();
+    const onChange = vi.fn();
+
+    subscribeOfflineStatus(
+      {
+        serviceWorker,
+        cacheStorage,
+        isSecureContext: true,
+        standalone: undefined,
+        matchMedia: (query) => ({ matches: query === '(display-mode: standalone)' }),
+        setTimeoutFn: timers.setTimeoutFn,
+        clearTimeoutFn: timers.clearTimeoutFn,
+      },
+      onChange,
+    );
+
+    await flush();
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange.mock.calls[0][0].standalone).toBe(true);
   });
 
   test('an older in-flight emit resolving after a newer one is discarded, not delivered last', async () => {

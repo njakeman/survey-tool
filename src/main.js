@@ -430,6 +430,7 @@ async function main() {
       cacheStorage: window.caches,
       isSecureContext: window.isSecureContext,
       standalone: navigator.standalone,
+      matchMedia: window.matchMedia,
     },
     (offlineStatus) => {
       state.offlineStatus = offlineStatus;

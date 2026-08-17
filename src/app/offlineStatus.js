@@ -5,9 +5,11 @@
 // UI itself rather than inferred from a passing test on a laptop.
 //
 // Every browser dependency is a parameter, never read from module scope —
-// same pattern as `probe/capabilities.js` and `sensors/position.js` — so
-// this stays node-testable with fakes; `.browser.test.js` covers it against
-// the real Cache Storage API separately.
+// same pattern as `app/standalone.js` and `sensors/position.js` — so this
+// stays node-testable with fakes; `.browser.test.js` covers it against the
+// real Cache Storage API separately.
+
+import { isStandalone } from './standalone.js';
 
 // Workbox's precache cache name is `${prefix}-${precache}-${suffix}`, with
 // `precache` fixed at `precache-v2` (see workbox-core's `cacheNames`). We
@@ -32,6 +34,7 @@ export async function readOfflineStatus({
   cacheStorage,
   isSecureContext,
   standalone,
+  matchMedia,
 } = {}) {
   const registration =
     typeof serviceWorker?.getRegistration === 'function'
@@ -43,7 +46,7 @@ export async function readOfflineStatus({
 
   return {
     secureContext: Boolean(isSecureContext),
-    standalone: Boolean(standalone),
+    standalone: isStandalone({ standalone, matchMedia }),
     registered,
     controlled,
     precachedCount,
@@ -71,6 +74,7 @@ export function subscribeOfflineStatus(
     cacheStorage,
     isSecureContext,
     standalone,
+    matchMedia,
     settleTimeoutMs = 5000,
     setTimeoutFn = globalThis.setTimeout,
     clearTimeoutFn = globalThis.clearTimeout,
@@ -87,7 +91,7 @@ export function subscribeOfflineStatus(
     // overwrite a newer status — with precachedCount, exactly the false
     // "No offline cache" banner this module exists to eliminate.
     const seq = ++latestSeq;
-    readOfflineStatus({ serviceWorker, cacheStorage, isSecureContext, standalone })
+    readOfflineStatus({ serviceWorker, cacheStorage, isSecureContext, standalone, matchMedia })
       .then((status) => {
         if (!stopped && seq === latestSeq) onChange(status);
       })
@@ -96,10 +100,14 @@ export function subscribeOfflineStatus(
         // cache access) must never escape: main.js maps unhandledrejection
         // onto the fatal-error banner. precachedCount is null, not 0 —
         // unknown must not trip CapturePage's `=== 0` warning banner.
+        // standalone is still resolved through isStandalone (not a bare
+        // Boolean(standalone)), or this fallback would report a different
+        // answer from the success path on Android — exactly the moment a
+        // diagnostic must not lie.
         if (!stopped && seq === latestSeq) {
           onChange({
             secureContext: Boolean(isSecureContext),
-            standalone: Boolean(standalone),
+            standalone: isStandalone({ standalone, matchMedia }),
             registered: false,
             controlled: false,
             precachedCount: null,

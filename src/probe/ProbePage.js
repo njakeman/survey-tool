@@ -1,7 +1,6 @@
 import { html } from 'htm/preact';
 import { useEffect, useState } from 'preact/hooks';
 import {
-  isStandalone,
   canRequestOrientationPermission,
   canShareFiles,
   supportedRecordingTypes,
@@ -10,6 +9,7 @@ import { formatBytes, formatDuration, describeRecording } from './format.js';
 import { appendLogEntry, readLog, clearLog } from './log.js';
 import { benchmarkPbkdf2 } from './pbkdf2-benchmark.js';
 import { readOfflineStatus } from '../app/offlineStatus.js';
+import { isStandalone } from '../app/standalone.js';
 import { RECORDING_MIME_CANDIDATES } from '../audio/recordingTypes.js';
 
 // The on-device diagnostic page, reachable from the capture footer. Built in
