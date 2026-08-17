@@ -302,6 +302,25 @@ html {
   touch-action: manipulation;
   /* iOS otherwise inflates text after orientation changes. */
   -webkit-text-size-adjust: 100%;
+  /* Android Chrome paints a highlight rectangle on tap by default, which
+     squares off every rounded control; the :active opacity below is the
+     app's whole press-feedback vocabulary. Removes iOS's faint grey flash
+     too, which makes iOS match the design record more closely, not less. */
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Android Chrome has pull-to-refresh on a downward drag at document scroll
+   top; iOS standalone does not. A stray drag on non-canvas chrome could
+   reload the app and lose an in-progress note/photo, which live in memory
+   until Save. Scoped to browser-tab mode only — pull-to-refresh doesn't
+   exist in the installed app on either platform, so this leaves the actual
+   target (both platforms, installed) untouched, rubber-band bounce
+   included. */
+@media (display-mode: browser) {
+  html,
+  body {
+    overscroll-behavior-y: contain;
+  }
 }
 
 body {
@@ -325,6 +344,17 @@ body {
    vocabulary, and 92% opacity is all of it. */
 :where(button, label.photo-field-button):active {
   opacity: 0.92;
+}
+
+/* Long-press on Android Chrome starts text selection / a context menu on
+   whatever it lands on; iOS suppresses most of this in standalone mode.
+   Scoped to buttons and the clickable label wrappers that act as buttons
+   (camera controls), never blanket — .readings-coords and
+   .readings-gridref deliberately keep default selection, since copying a
+   grid reference off the screen is plausibly useful in the field. */
+:where(button, label.photo-field-button, label.attachment-add-photo, label.photo-lightbox-retake) {
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 /* Nothing else in this sheet moves. If that changes, it belongs above this

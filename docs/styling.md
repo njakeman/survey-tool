@@ -508,3 +508,32 @@ Six reports against the deployed pass-4 build, three of them defects in it.
   displayMode chain); the flip is a plain reverse of the store's chronological order — never
   a recordedAt sort, whose same-second ties the monotonic ULID order already resolves.
   History detail deliberately keeps chronological order.
+
+## Touch hardening for Android (2026-08-17)
+
+Three constructs Android needs that iOS never surfaced the absence of. Each is a considered
+addition, not a drive-by — every one is iOS-visible to some degree.
+
+- **`overscroll-behavior-y: contain`** on `html, body`, scoped to `@media (display-mode:
+browser)`. Android Chrome has pull-to-refresh on a downward drag at document scroll top; iOS
+  standalone never has. A stray drag on non-canvas chrome could reload the app and lose an
+  in-progress note/photo, which live in memory until Save. Scoped to browser-tab mode only —
+  pull-to-refresh doesn't exist in the installed app on either platform, so both platforms'
+  installed apps, the actual target, keep their rubber-band bounce untouched.
+- **`-webkit-tap-highlight-color: transparent`** on `html`. Android paints a highlight rectangle
+  on tap that squares off every rounded control; press feedback is already the `:active { opacity:
+0.92 }` above. This removes iOS's faint grey tap flash too — it makes iOS match this record more
+  closely, not less.
+- **`user-select: none`** on `button`, `label.photo-field-button`, `label.attachment-add-photo`,
+  `label.photo-lightbox-retake`. Long-press on Android starts text selection on whatever it lands
+  on; iOS suppresses most of this already. Deliberately **not** applied to `.readings-coords` /
+  `.readings-gridref` — copying a grid reference off the screen is plausibly useful in the field,
+  and a blanket rule would remove it.
+
+Not fixed: `index.html`'s `maximum-scale=1, user-scalable=no` is ignored by Android Chrome, so the
+stray-second-finger pinch it was added for can return there. `touch-action: manipulation` above
+does the cross-browser work; blocking pinch outright would need `touch-action: pan-x pan-y` on
+`html`, which risks the map. Left as a device-checklist observation rather than coded around.
+
+No test covers CSS here — verification is the mobile-chrome e2e project and an eyes-on iOS pass
+(press feedback, scroll/bounce feel, readout selectability) before merge.
