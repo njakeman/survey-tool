@@ -30,6 +30,20 @@ describe('SessionBar — no open session', () => {
 
     expect(onStart).not.toHaveBeenCalled();
   });
+
+  test('shows the brand lockup — wordmark, decorative mark, and the SURVEY suffix', () => {
+    render(html`<${SessionBar} session=${null} defaultName="2026-08-06" />`);
+
+    expect(screen.getByText('field')).toBeInTheDocument();
+    expect(screen.getByText('Works')).toBeInTheDocument();
+    // Natural case in the DOM — CSS uppercases it (docs/styling.md: assert on
+    // DOM text, not rendered case).
+    expect(screen.getByText('Survey')).toBeInTheDocument();
+
+    const mark = document.querySelector('.brand-mark');
+    expect(mark).toBeInTheDocument();
+    expect(mark).toHaveAttribute('alt', '');
+  });
 });
 
 describe('SessionBar — open session', () => {
@@ -69,5 +83,11 @@ describe('SessionBar — open session', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /nothing recorded — discard session/i }));
     expect(onEnd).toHaveBeenCalledTimes(1);
+  });
+
+  test('does not show the brand lockup — it belongs to first launch only', () => {
+    render(html`<${SessionBar} session=${session} observationCount=${3} />`);
+
+    expect(document.querySelector('.brand-lockup')).not.toBeInTheDocument();
   });
 });

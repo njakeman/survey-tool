@@ -589,6 +589,54 @@ button {
   border-bottom: none;
 }
 
+/* The brand lockup — first launch only. Points at the same file as the PWA
+   icon (public/icons/icon.svg) rather than redrawing the mark in CSS, so the
+   home-screen tile and the in-app header can't drift apart; it is the one
+   deliberate <img> exception to "every icon is CSS" (docs/styling.md). */
+.brand-lockup {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 4px;
+}
+
+.brand-mark {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  /* A literal, not --radius: this is an app-tile corner, not a control
+     corner, and --radius is documented as the only radius in the design. */
+  border-radius: 5px;
+  display: block;
+}
+
+.brand-word {
+  font-size: var(--type-save);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.01em;
+}
+
+.brand-word-accent {
+  color: var(--accent);
+}
+
+.brand-suffix {
+  font-family: var(--font-label);
+  font-size: var(--type-label);
+  font-weight: 400;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-left: 4px;
+}
+
+/* The mark's ink/paper/accent are fixed colours, not tokens — under night
+   mode it would otherwise be the brightest thing above the fold. */
+[data-mode='night'] .brand-mark {
+  opacity: 0.72;
+}
+
 .session-start-headline {
   margin: 0;
   font-size: var(--type-heading-xl);

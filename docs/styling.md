@@ -165,7 +165,7 @@ rendered case.
 | Surface         | Root class                                                                                                                                                                                                                                                                               | Notes                                                                                                                                                                                                                                                                                         |
 | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Capture page    | `.capture-page`                                                                                                                                                                                                                                                                          | The main view. Stays mounted (hidden) when an overlay is open, so an in-progress observation survives navigation.                                                                                                                                                                             |
-| Session bar     | `.session-bar` + `-live-dot`; `.session-start` + `-headline`, `-note` for first launch                                                                                                                                                                                                   | Start form, or open-session name + count + two-tap End.                                                                                                                                                                                                                                       |
+| Session bar     | `.session-bar` + `-live-dot`; `.session-start` + `-headline`, `-note` for first launch; `.brand-lockup` + `-mark`, `-word`, `-word-accent`, `-suffix`                                                                                                                                    | Start form, or open-session name + count + two-tap End. The brand lockup heads the start form only — gone once a session opens.                                                                                                                                                              |
 | Readings        | `.readings-panel` + `-coords`, `-accuracy`, `-heading`, `-waiting`                                                                                                                                                                                                                       | Largest type in the app. The GOOD/FAIR/POOR chip comes from `accuracyQuality()` in `sensors/format.js`.                                                                                                                                                                                       |
 | Map panel       | `.capture-map` + `-canvas`, `-placeholder`, `-caption`, `-region`, `-recentre`, `-change`, `-suggestion`, `-error`                                                                                                                                                                       | Overlay controls are absolutely positioned within.                                                                                                                                                                                                                                            |
 | Photo           | `.photo-field` + `-button`, `-preview`, `-error`, `-busy`; row is `.capture-actions`                                                                                                                                                                                                     | The "button" is a `<label>` wrapping a visually-hidden file input. Do not flatten it.                                                                                                                                                                                                         |
@@ -212,7 +212,10 @@ turns out to matter at map scale over real imagery, that is the route.
 - Both are covered by the `woff2`/`pbf` entries in `vite.config.js`'s precache glob. **Check the
   precache count after adding any asset** — an unprecached font is invisible on a laptop and
   missing in a field.
-- No other assets. Every icon is CSS.
+- One exception: the landing header's brand lockup (below) points `<img>` at `public/icons/icon.svg`
+  — the app icon, not a redraw of it — rather than the CSS every other icon is. It's already covered
+  by the `svg` entry in `vite.config.js`'s precache glob (it ships for the manifest regardless), so
+  this adds no new precache weight.
 
 ## What this pass did not do
 
@@ -537,3 +540,24 @@ does the cross-browser work; blocking pinch outright would need `touch-action: p
 
 No test covers CSS here — verification is the mobile-chrome e2e project and an eyes-on iOS pass
 (press feedback, scroll/bounce feel, readout selectability) before merge.
+
+## The landing header's brand lockup (2026-08-17)
+
+From the Claude Design mock's first-launch screen (option `1k` of the _Field Survey — mobile
+design pass_ project): the plain `.eyebrow` reading "Field survey" on the no-session screen is
+replaced with a lockup — the app icon, the `fieldWorks` wordmark (accent on "Works"), and a
+tracked-out `SURVEY` suffix (`.brand-lockup` + `-mark`, `-word`, `-word-accent`, `-suffix` in
+`src/ui/SessionBar.js`'s no-session branch only; `.eyebrow` itself is untouched — `FeatureSheet.js`
+still uses it).
+
+Two numbers were changed from the mock rather than copied literally:
+
+- `SURVEY` renders at `--type-label` (10px), not the mock's 11px — 11px has no token anywhere
+  else in the app, and at `.16em` tracking in mono the difference isn't perceptible.
+- The mark's `5px` corner radius is a literal, not `--radius` (4px) — an app-tile corner rather
+  than a control corner, kept as a named exception rather than silently growing the radius table.
+
+The mark is an `<img>` pointing at `public/icons/icon.svg` (see Assets, above) rather than a CSS
+redraw — the one deliberate exception, so the header can't drift from the actual home-screen tile.
+Its fixed ink/paper/accent colours don't follow the palette tokens, so night mode dims it to 72%
+opacity rather than letting it become the brightest thing above the fold; dark mode needed nothing.

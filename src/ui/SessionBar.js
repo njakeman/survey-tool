@@ -5,9 +5,9 @@ import { useState } from 'preact/hooks';
 // one with a two-tap End (a mis-tapped End would silently stop capture).
 //
 // The no-session branch is also the app's first-launch screen — for a new
-// install it is the whole of what is on offer — so it carries the eyebrow,
-// the headline and the one thing a surveyor cannot discover by looking:
-// that tapping Start is what buys compass access on iOS.
+// install it is the whole of what is on offer — so it carries the brand
+// lockup, the headline and the one thing a surveyor cannot discover by
+// looking: that tapping Start is what buys compass access on iOS.
 export function SessionBar({
   session,
   defaultName = '',
@@ -28,7 +28,11 @@ export function SessionBar({
 
     return html`
       <div class="session-bar session-start">
-        <p class="eyebrow">Field survey</p>
+        <p class="brand-lockup">
+          <img class="brand-mark" src="/icons/icon.svg" alt="" width="28" height="28" />
+          <span class="brand-word">field<span class="brand-word-accent">Works</span></span>
+          <span class="brand-suffix">Survey</span>
+        </p>
         <h2 class="session-start-headline">Start a session to begin capturing</h2>
         <label class="field">
           <span class="field-label">Session name</span>
