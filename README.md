@@ -330,36 +330,59 @@ component's treatment, and the constraints any future change has to keep.
 ## Manual verification
 
 Playwright's WebKit is not Safari and not iOS. Before signing off any phase, run through
-[`docs/ios-manual-checklist.md`](./docs/ios-manual-checklist.md) on a real iPhone.
+[`docs/ios-manual-checklist.md`](./docs/ios-manual-checklist.md) on a real iPhone. Android has its
+own gate, [`docs/android-manual-checklist.md`](./docs/android-manual-checklist.md) — see the
+Android section below for status.
 
 ## Android
 
-iOS Safari is the target, but the app is deliberately web-standard and the automated browser
-tests already run Chromium — the engine Android Chrome ships — so almost everything works there
-today. The audit found the manifest (standalone display, portrait, a maskable icon), storage
+iOS Safari remains the design target and the sign-off gate, but Android is now a genuinely
+supported platform, not merely un-blocked. The app is deliberately web-standard and the automated
+browser tests already run Chromium — the engine Android Chrome ships — so almost everything worked
+there without changes: the manifest (standalone display, portrait, a maskable icon), storage
 (IndexedDB as ArrayBuffers, `persist()`), photo capture, voice notes (webm/opus is Chrome's
-native recording format), Web Share with a download fallback, and the whole map stack need no
-changes at all. What remains before Android could be called supported:
+native recording format), Web Share with a download fallback, and the whole map stack.
 
-- [ ] **Compass.** `src/sensors/heading.js` listens only to `deviceorientation`; Android Chrome
-      delivers absolute headings on the separate `deviceorientationabsolute` event (its plain
-      event is relative), so the compass currently times out into "Position only — no compass".
-      Fix: feature-detect `'ondeviceorientationabsolute' in window` and subscribe to that event —
-      `toHeadingReading`'s existing `absolute` + `alpha` branch already converts the reading.
-      Node tests via the file's existing fake-target pattern.
-- [ ] **Standalone detection.** `src/main.js` passes bare `navigator.standalone` (an iOS-only
-      flag) into the offline-status subscription, so an installed Android app reports
-      `standalone: false` on the probe page. Use the existing `isStandalone()` from
-      `src/probe/capabilities.js`, which already checks the standard
+What the 2026-08-17 pass added, all feature-detected and iOS-neutral:
+
+- [x] **Compass.** `src/sensors/heading.js` now subscribes to `deviceorientationabsolute` **in
+      addition to** `deviceorientation`, never instead of it — some Chromium devices with no
+      relative-orientation sensor feed absolute data into the plain event, and swapping the
+      subscription (rather than adding to it) would have broken that device's working compass.
+      Detected via `'ondeviceorientationabsolute' in target`, not truthiness — Chromium exposes
+      the property as an unassigned `null`. `toHeadingReading`'s existing `absolute` + `alpha`
+      branch converts the reading; only the subscription changed. iOS is unaffected — WebKit has
+      never implemented the property, so the `in` check resolves to exactly the one listener it
+      has always had, enforced by a fence test.
+- [x] **Standalone detection.** `isStandalone()` moved from `src/probe/capabilities.js` to
+      `src/app/standalone.js` (avoiding a directory-level import cycle with `offlineStatus.js`,
+      which needs it too) and is now used by `readOfflineStatus`/`subscribeOfflineStatus`
+      instead of a bare `Boolean(navigator.standalone)`. An installed Android PWA now correctly
+      reports `standalone: true` on the probe page via the standard
       `(display-mode: standalone)` media query.
-- [ ] **A device pass.** An Android section in `docs/ios-manual-checklist.md`: install from
-      Chrome's menu (the maskable icon should render uncropped), compass shows a heading after
-      Start with no permission prompt, share-sheet export flips the Exported badge, the app
-      launches offline from the icon, a screen-lock mid-trace comes back as one straight
-      segment, voice notes record and play back.
+- [x] **Touch hardening.** `overscroll-behavior-y: contain` (scoped to browser-tab mode only, so
+      installed apps on both platforms keep their bounce), `-webkit-tap-highlight-color:
+transparent`, and `user-select: none` on buttons/photo-control labels (not the coordinate
+      readouts). See `docs/styling.md` → "Touch hardening for Android" for the full reasoning.
+- [x] **`mobile-chrome` e2e coverage.** `playwright.config.js` gained a `devices['Pixel 7']`
+      project. It shares `browserName: 'chromium'` with the desktop project, so every spec
+      already gated on that runs at mobile viewport with touch automatically — no guard changes
+      needed, and all 15 tests passed unmodified.
+- [ ] **A device pass.** `docs/android-manual-checklist.md` — install from Chrome's menu (the
+      maskable icon should render uncropped), compass shows a heading after Start with no
+      permission prompt, share-sheet export flips the Exported badge, the app launches offline
+      from the icon, a screen-lock mid-trace comes back as one straight segment, voice notes
+      record and play back, plus several items (share-sheet cancellation, the `canShare` fallback
+      path, the sticky history header's safe-area) that could only be identified, not verified,
+      by reading source. **Nothing on it has been run yet** — no Android device was available for
+      this pass.
 - [ ] **A known cosmetic difference to accept.** Android reports no compass accuracy figure, so
       the locator deliberately draws its widest, faintest beam — the designed treatment for an
       unknown uncertainty, not a bug.
+
+Deliberately out of scope: a custom `beforeinstallprompt` install affordance (Chrome's own
+"Install app" menu entry covers it) and `screen.orientation.lock()` (unnecessary — Android already
+honours the manifest's portrait lock, unlike iOS).
 
 ## Deploy
 

@@ -42,8 +42,9 @@ observation `synced`/`syncedAt` fields still exist in stored records, unused —
 component's treatment, and the constraints binding on change; read it before restyling anything.
 The one-accent rule (at most one accent-filled button per surface, always the one that moves the
 record toward saved) holds everywhere except recording-with-a-good-fix, where Finish and Save
-each move their own record. Android is not a target; README → Android records the audit and the
-TODO list if that changes.
+each move their own record. iOS Safari remains the design target and the sign-off gate; Android is
+a supported platform (2026-08-17) — see README → Android for what that pass covered and
+`docs/android-manual-checklist.md` for the (unrun) device gate.
 
 **Trace modes**: _trace a path_ (walk, record a LineString — hedgerow, track, watercourse) and
 _trace a boundary_ (walk a perimeter, closed into a Polygon). The decisions below are settled —
@@ -175,7 +176,13 @@ for a `*.browser.test.js` file).
 - `src/sensors/` — `position.js`/`heading.js`: browser sensor adapters, each taking its browser
   dependency as a parameter (`navigator.geolocation`, `window`) rather than reading globals, so
   they're unit-testable with fakes. `format.js` holds all display formatting (accuracy always in
-  metres, never a tick).
+  metres, never a tick). `heading.js`'s `watchHeading` subscribes to `deviceorientationabsolute`
+  **in addition to** `deviceorientation` when `'ondeviceorientationabsolute' in target` (Android
+  Chrome delivers absolute headings there; its plain event is relative) — additive, never a swap,
+  because some Chromium devices feed absolute data into the plain event instead and a swap would
+  break that device's compass. `toHeadingReading` already converts either shape; only the
+  subscription list changes. A fence test pins the additive shape and another pins iOS at exactly
+  one listener — don't "simplify" either away.
 - `src/photo/` — `dimensions.js` (pure aspect-ratio math, node-testable) and `encode.js` (real
   Canvas/Image decode+encode, browser-only — never import it outside `main.js`).
 - `src/audio/` — voice notes. `recordingTypes.js` (the candidate mime list, shared with the probe
@@ -198,16 +205,24 @@ for a `*.browser.test.js` file).
   `db`/`newId`/`nowIso`. Stateless — every call re-reads IndexedDB, which is what makes it correct
   after a force-quit and relaunch.
 - `src/app/offlineStatus.js` — `readOfflineStatus({ serviceWorker, cacheStorage, isSecureContext,
-standalone })`, browser globals injected same as `probe/capabilities.js`, so it's node-testable
-  with fakes (`.browser.test.js` covers real Cache Storage naming separately). Reports whether
-  _this install_ can actually work offline (`registered`/`controlled`/`precachedCount`/
-  `offlineReady`) — there's no console on an installed iOS PWA, so this has to be answerable on the
-  phone, not inferred from a passing test on a laptop. `ProbePage.js`'s "Recheck" button calls it
-  directly. `subscribeOfflineStatus(deps, onChange)` wraps it for `main.js`: emits once after
-  `serviceWorker.ready` settles, again on `controllerchange` (e.g. after the update-reload below),
-  and once via a timeout backstop if registration never settles — deliberately _not_ on first call,
-  so the app never reports a startup snapshot. `CapturePage.js` shows a warning banner only when a
-  reported `precachedCount === 0`.
+standalone, matchMedia })`, browser globals injected same as `app/standalone.js`, so it's
+  node-testable with fakes (`.browser.test.js` covers real Cache Storage naming separately).
+  Reports whether _this install_ can actually work offline (`registered`/`controlled`/
+  `precachedCount`/`offlineReady`) — there's no console on an installed iOS PWA, so this has to be
+  answerable on the phone, not inferred from a passing test on a laptop. `standalone` is resolved
+  through `isStandalone()` (`app/standalone.js`) rather than a bare `Boolean(navigator.standalone)`,
+  so an installed Android PWA reports correctly too — in both the success path and the `.catch`
+  fallback, which must resolve it the same way or the two paths could disagree. `ProbePage.js`'s
+  "Recheck" button calls it directly. `subscribeOfflineStatus(deps, onChange)` wraps it for
+  `main.js`: emits once after `serviceWorker.ready` settles, again on `controllerchange` (e.g.
+  after the update-reload below), and once via a timeout backstop if registration never settles —
+  deliberately _not_ on first call, so the app never reports a startup snapshot. `CapturePage.js`
+  shows a warning banner only when a reported `precachedCount === 0`.
+- `src/app/standalone.js` — `isStandalone({ standalone, matchMedia })`: `navigator.standalone`
+  (iOS's legacy flag) first, falling back to the standard `(display-mode: standalone)` media
+  query (which Android answers too). Lives in `app/`, not `probe/`, because `offlineStatus.js`
+  needs it and `probe/ProbePage.js` already imports `app/offlineStatus.js` — the other direction
+  would be a cycle.
 - `src/export/` — `buildSessionExport.js` (node-testable: session + observations + photo Blobs →
   `{filename, entries}`, reusing `domain/geojson.js` + `domain/canonical-json.js` as-is, so the zip's
   `session.geojson` is byte-identical to what sync will eventually commit), `zip.js` (browser-only
@@ -275,9 +290,11 @@ standalone })`, browser globals injected same as `probe/capabilities.js`, so it'
 
 ## Platform constraints
 
-- Target is iOS Safari installed to the home screen, portrait only. Don't add Android compatibility
-  code, but don't actively block Android either — README → Android holds the audit and TODO list
-  should support ever be wanted.
+- iOS Safari installed to the home screen, portrait only, is the design target and the sign-off
+  gate — every phase still needs a real-device iOS pass. Android is a genuinely supported second
+  platform (2026-08-17): Android-specific code is welcome where it is feature-detected and
+  provably iOS-neutral (an unchanged code path, or a fence test proving one), never a guess that
+  it's probably fine. See README → Android and `docs/android-manual-checklist.md`.
 - Offline-first: launching the app, showing the map, taking GPS/compass readings, capturing photos,
   and saving observations must all work with no network. Network is only required for sync.
 - No backend — static hosting (GitHub Pages) plus the GitHub API only. The app repo
