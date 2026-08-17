@@ -109,11 +109,14 @@ webServer also runs plain `vite preview` locally, so gating on CI-absence would 
 against it.** This was mistaken for an app bug once already: the dev server's empty-manifest SW
 looks installed and controlling, so a home-screen icon backed by it fails offline exactly like a
 broken PWA would. Use `npm run build && npm run preview:mobile` for any offline/SW verification.
-Two easy-to-miss details: `preview:mobile` does **not** build for you (run `npm run build` first,
+Three easy-to-miss details: `preview:mobile` does **not** build for you (run `npm run build` first,
 or the icon will be testing a stale bundle), and it serves on port **4173** vs dev's **5173** —
 different origin, so re-add to the home screen from the new URL rather than reusing the old icon.
 `preview:mobile` also squats on port 4173 with HTTPS, which collides with `npm run test:e2e`'s own
-`vite preview` (plain HTTP, same port) — stop it before running the e2e suite locally.
+`vite preview` (plain HTTP, same port) — stop it before running the e2e suite locally. And use the
+**trailing slash** — `https://<LAN-IP>:4173/`, not the bare origin — `vite preview`'s static
+serving doesn't reliably resolve the latter to `index.html`, and the omission looks exactly like a
+broken/blank page (found 2026-08-17 testing Android support; cost real debugging time).
 
 Because that confusion is exactly what caused the false bug report, offline-readiness is now
 self-diagnosing rather than something to infer: `src/app/offlineStatus.js`'s `readOfflineStatus()`

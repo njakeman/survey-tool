@@ -14,6 +14,11 @@ checklist is what closes that gap, the same relationship the WebKit e2e project 
 
 Device/OS this will be run on: _not yet run_
 
+**Include the trailing slash** on the preview URL — `https://<LAN-IP>:4173/`, not
+`https://<LAN-IP>:4173`. `vite preview`'s static serving doesn't reliably resolve the bare origin
+to `index.html`; the omission looked exactly like a broken/blank page during this pass and cost
+real debugging time before the cause was found.
+
 ## Install
 
 - [ ] Open the deployed URL in Chrome, use the browser menu's "Install app" (there is no custom

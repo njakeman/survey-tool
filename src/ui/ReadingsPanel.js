@@ -81,7 +81,16 @@ function CompassReadout({ heading, headingStatus, onEnableCompass, onRetryCompas
     return html`<p class="readings-waiting">Waiting for compass…</p>`;
   }
   if (headingStatus === 'denied') {
-    return html`<p class="position-only warns">Position only — no compass</p>`;
+    // iOS stores this answer permanently per origin — a further tap just
+    // resolves 'denied' again with no dialog (useHeading.js's enable()), so
+    // Retry would be a dead end and is deliberately withheld. The generic
+    // "no compass" wording below is honestly ambiguous between "denied" and
+    // "no magnetometer"; this branch instead names the actual fix, since it
+    // is the one case where the surveyor themselves can resolve it.
+    return html`<p class="position-only warns">
+      Position only — compass access is blocked for this site. Reset it in Settings → Safari →
+      Advanced → Website Data (or delete and re-add the home screen icon), then reload.
+    </p>`;
   }
   // 'unavailable': the watch tears itself down after its no-heading timeout
   // and nothing re-arms it, so without an explicit retry the compass is gone

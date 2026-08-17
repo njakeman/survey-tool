@@ -151,6 +151,25 @@ describe('compass', () => {
     expect(screen.getByText(/position only/i)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /retry|try again/i })).not.toBeInTheDocument();
   });
+
+  // iOS stores a compass-permission denial permanently per origin — a Retry
+  // tap would just resolve 'denied' again with no dialog (see enable() in
+  // useHeading.js), so the message has to tell the surveyor how to actually
+  // fix it rather than imply the device has no magnetometer. Distinct from
+  // the generic 'unavailable' text below, which genuinely may mean that.
+  test('a denied compass names the fix — a Settings reset, not a broken device', () => {
+    renderPanel({ headingStatus: 'denied' });
+
+    expect(screen.getByText(/settings/i)).toBeInTheDocument();
+    expect(screen.getByText(/website data/i)).toBeInTheDocument();
+  });
+
+  test('an unavailable compass (genuinely no reading) keeps the generic message, not the denied one', () => {
+    renderPanel({ headingStatus: 'unavailable' });
+
+    expect(screen.queryByText(/settings/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/website data/i)).not.toBeInTheDocument();
+  });
 });
 
 describe('ReadingsPanel — grid reference', () => {
