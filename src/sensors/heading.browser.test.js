@@ -10,16 +10,31 @@ import { headingEventTypes } from './heading.js';
 // WebKit is not Safari (CLAUDE.md), but it is the closest automated proxy
 // available for "does this engine have the property at all", which is what
 // the `in` check depends on.
+//
+// The engine discriminator is navigator.userAgent, not `'chrome' in window`:
+// window.chrome is a legacy Chrome-branding object whose presence is not
+// guaranteed by spec, and it is one of the classic headless-Chromium
+// detection signals precisely because it can genuinely be absent in
+// automated/headless contexts — confirmed the hard way when this file
+// passed locally (Windows, headed-by-default local run) but failed in CI
+// (Linux headless): `chrome in window` was false there even though
+// `ondeviceorientationabsolute in window` was correctly true.
+// navigator.userAgent's "Chrome/" token is a core identification field
+// Chromium sets consistently regardless of platform or headless mode.
+function isChromiumEngine() {
+  return navigator.userAgent.includes('Chrome');
+}
+
 describe('headingEventTypes — real window', () => {
   test('Chromium exposes ondeviceorientationabsolute; WebKit does not', () => {
-    const isChromium = 'chrome' in window;
-    expect('ondeviceorientationabsolute' in window).toBe(isChromium);
+    expect('ondeviceorientationabsolute' in window).toBe(isChromiumEngine());
   });
 
   test('subscribes to both events on Chromium, one on WebKit', () => {
-    const isChromium = 'chrome' in window;
     expect(headingEventTypes(window)).toEqual(
-      isChromium ? ['deviceorientation', 'deviceorientationabsolute'] : ['deviceorientation'],
+      isChromiumEngine()
+        ? ['deviceorientation', 'deviceorientationabsolute']
+        : ['deviceorientation'],
     );
   });
 });
