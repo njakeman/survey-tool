@@ -3,6 +3,12 @@
 // handler in CapturePage, which calls requestHeadingPermission() before any
 // await. Heading comes from webkitCompassHeading (true north, clockwise) on
 // iOS, falling back to the standard absolute+alpha for other browsers.
+//
+// Android Chrome delivers absolute headings on the separate
+// deviceorientationabsolute event — its plain deviceorientation is relative
+// (absolute: false), which toHeadingReading correctly maps to null. See
+// headingEventTypes for the subscription logic and why it is additive, not
+// a swap.
 
 export const HEADING_PERMISSION = {
   GRANTED: 'granted',
@@ -47,6 +53,27 @@ export function toHeadingReading(event) {
   return null;
 }
 
+// Which events can carry a heading on this target. iOS Safari has only
+// deviceorientation (WebKit has never implemented the absolute event, and
+// webkitCompassHeading rides on the plain one); Chromium's plain
+// deviceorientation is *relative*, and absolute headings arrive on
+// deviceorientationabsolute instead.
+//
+// Subscribed in ADDITION to the plain event, never instead of it: a
+// Chromium build with no relative-orientation sensor falls back to
+// absolute data on the plain event with absolute: true, and that device's
+// compass works today — swapping the subscription would take it away.
+// Relative events map to null in toHeadingReading, which deliberately does
+// not cancel the no-heading timeout, so the extra stream costs nothing
+// anywhere. The `in` check (not truthiness — Chromium exposes the property
+// as an unassigned null) is what keeps iOS at exactly the one listener it
+// has always had.
+export function headingEventTypes(target) {
+  return 'ondeviceorientationabsolute' in target
+    ? ['deviceorientation', 'deviceorientationabsolute']
+    : ['deviceorientation'];
+}
+
 export function watchHeading(
   target,
   {
@@ -63,6 +90,8 @@ export function watchHeading(
     onUnavailable?.({ reason: 'unsupported' });
     return () => {};
   }
+
+  const eventTypes = headingEventTypes(target);
 
   let stopped = false;
   let lastDeliveredAt = null;
@@ -98,11 +127,11 @@ export function watchHeading(
     if (stopped) return;
     stopped = true;
     clearTimer();
-    target.removeEventListener('deviceorientation', handleEvent);
+    for (const type of eventTypes) target.removeEventListener(type, handleEvent);
   }
 
   timeoutId = setTimeoutFn(handleTimeout, timeoutMs);
-  target.addEventListener('deviceorientation', handleEvent);
+  for (const type of eventTypes) target.addEventListener(type, handleEvent);
 
   return stop;
 }

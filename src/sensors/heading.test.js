@@ -3,6 +3,7 @@ import {
   requestHeadingPermission,
   toHeadingReading,
   watchHeading,
+  headingEventTypes,
   HEADING_PERMISSION,
 } from './heading.js';
 
@@ -80,9 +81,28 @@ describe('toHeadingReading', () => {
   });
 });
 
-function createFakeTarget() {
+describe('headingEventTypes', () => {
+  test('deviceorientation only when the target has no ondeviceorientationabsolute (iOS Safari)', () => {
+    expect(headingEventTypes({})).toEqual(['deviceorientation']);
+  });
+
+  test('both events when the target exposes ondeviceorientationabsolute (Chromium)', () => {
+    // The property is an unassigned null, never absent and never truthy —
+    // this fails a truthiness-based implementation on purpose.
+    expect(headingEventTypes({ ondeviceorientationabsolute: null })).toEqual([
+      'deviceorientation',
+      'deviceorientationabsolute',
+    ]);
+  });
+
+  test('deviceorientation only for a target that supports just the plain event', () => {
+    expect(headingEventTypes({ ondeviceorientation: null })).toEqual(['deviceorientation']);
+  });
+});
+
+function createFakeTarget({ hasAbsoluteEvent = false } = {}) {
   const listeners = {};
-  return {
+  const target = {
     addEventListener: vi.fn((type, handler) => {
       listeners[type] = handler;
     }),
@@ -96,6 +116,13 @@ function createFakeTarget() {
       return Boolean(listeners[type]);
     },
   };
+  // Chromium exposes the on-handler property for every event it supports,
+  // unassigned and null — never absent, never truthy — which is why
+  // headingEventTypes detects with `in` and not truthiness. The fake
+  // declares it the same way, so a truthiness-based implementation fails
+  // these tests instead of passing them by luck.
+  if (hasAbsoluteEvent) target.ondeviceorientationabsolute = null;
+  return target;
 }
 
 function createFakeScheduler() {
@@ -145,6 +172,131 @@ describe('watchHeading', () => {
       headingAccuracyDeg: 5,
       source: 'webkit-compass',
     });
+  });
+
+  // The iOS fence: a target with no ondeviceorientationabsolute must get
+  // exactly the one listener it has always had. Written before the Android
+  // fix, so the fix physically cannot be shaped in a way that adds a
+  // listener on iOS without this test catching it.
+  test('adds only the deviceorientation listener on a target with no ondeviceorientationabsolute (iOS Safari)', () => {
+    const target = createFakeTarget();
+    const scheduler = createFakeScheduler();
+
+    watchHeading(target, {
+      setTimeoutFn: scheduler.setTimeoutFn,
+      clearTimeoutFn: scheduler.clearTimeoutFn,
+    });
+
+    expect(target.addEventListener).toHaveBeenCalledTimes(1);
+    expect(target.addEventListener.mock.calls[0][0]).toBe('deviceorientation');
+  });
+
+  test('delivers a reading from deviceorientationabsolute when the target exposes it (Android Chrome)', () => {
+    const target = createFakeTarget({ hasAbsoluteEvent: true });
+    const onReading = vi.fn();
+    const scheduler = createFakeScheduler();
+
+    watchHeading(target, {
+      onReading,
+      setTimeoutFn: scheduler.setTimeoutFn,
+      clearTimeoutFn: scheduler.clearTimeoutFn,
+    });
+    target.dispatch('deviceorientationabsolute', { absolute: true, alpha: 90 });
+
+    expect(onReading).toHaveBeenCalledWith({
+      headingDeg: 270,
+      headingAccuracyDeg: null,
+      source: 'absolute-alpha',
+    });
+    expect(scheduler.isScheduled()).toBe(false); // the no-heading timeout is cancelled
+  });
+
+  // The anti-swap fence: subscribing to deviceorientationabsolute must be in
+  // ADDITION to deviceorientation, never instead of it. Some Chromium
+  // devices with no relative-orientation sensor feed absolute data into the
+  // plain deviceorientation event (absolute: true) — that device's compass
+  // works today, and swapping the subscription would take it away. Green
+  // under the additive design, red under swap-on-detect — its absence is
+  // what would let a future "simplification" reintroduce the regression.
+  test('still reads an absolute plain deviceorientation event on a target that also exposes the absolute event', () => {
+    const target = createFakeTarget({ hasAbsoluteEvent: true });
+    const onReading = vi.fn();
+    const scheduler = createFakeScheduler();
+
+    watchHeading(target, {
+      onReading,
+      setTimeoutFn: scheduler.setTimeoutFn,
+      clearTimeoutFn: scheduler.clearTimeoutFn,
+    });
+    target.dispatch('deviceorientation', { absolute: true, alpha: 90 });
+
+    expect(onReading).toHaveBeenCalledWith({
+      headingDeg: 270,
+      headingAccuracyDeg: null,
+      source: 'absolute-alpha',
+    });
+  });
+
+  test('stop() removes both listeners on a target that exposes the absolute event', () => {
+    const target = createFakeTarget({ hasAbsoluteEvent: true });
+    const onReading = vi.fn();
+    const scheduler = createFakeScheduler();
+
+    const stop = watchHeading(target, {
+      onReading,
+      setTimeoutFn: scheduler.setTimeoutFn,
+      clearTimeoutFn: scheduler.clearTimeoutFn,
+    });
+
+    expect(target.hasListener('deviceorientationabsolute')).toBe(true);
+    stop();
+
+    expect(target.hasListener('deviceorientation')).toBe(false);
+    expect(target.hasListener('deviceorientationabsolute')).toBe(false);
+
+    target.dispatch('deviceorientationabsolute', { absolute: true, alpha: 90 });
+    expect(onReading).not.toHaveBeenCalled();
+  });
+
+  test('the no-heading timeout removes both listeners on a target that exposes the absolute event', () => {
+    const target = createFakeTarget({ hasAbsoluteEvent: true });
+    const onUnavailable = vi.fn();
+    const scheduler = createFakeScheduler();
+
+    watchHeading(target, {
+      onUnavailable,
+      setTimeoutFn: scheduler.setTimeoutFn,
+      clearTimeoutFn: scheduler.clearTimeoutFn,
+    });
+
+    expect(target.hasListener('deviceorientationabsolute')).toBe(true);
+    scheduler.fire();
+
+    expect(onUnavailable).toHaveBeenCalledWith({ reason: 'no-heading' });
+    expect(target.hasListener('deviceorientation')).toBe(false);
+    expect(target.hasListener('deviceorientationabsolute')).toBe(false);
+  });
+
+  test('throttles across both event streams — the absolute event gets no budget of its own', () => {
+    const target = createFakeTarget({ hasAbsoluteEvent: true });
+    const onReading = vi.fn();
+    const scheduler = createFakeScheduler();
+    let currentTime = 0;
+
+    watchHeading(target, {
+      onReading,
+      minIntervalMs: 200,
+      now: () => currentTime,
+      setTimeoutFn: scheduler.setTimeoutFn,
+      clearTimeoutFn: scheduler.clearTimeoutFn,
+    });
+
+    currentTime = 0;
+    target.dispatch('deviceorientationabsolute', { absolute: true, alpha: 90 });
+    currentTime = 50;
+    target.dispatch('deviceorientation', { absolute: true, alpha: 180 });
+
+    expect(onReading).toHaveBeenCalledTimes(1);
   });
 
   test('throttles: two readings within minIntervalMs deliver only the first, a third past the interval delivers', () => {
