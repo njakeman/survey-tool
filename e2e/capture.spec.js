@@ -7,8 +7,10 @@ import { fileURLToPath } from 'node:url';
 const PHOTO = readFileSync(fileURLToPath(new URL('./fixtures/test-photo.png', import.meta.url)));
 
 // Covers the one thing no unit test can: real IndexedDB persistence across a
-// reload with real geolocation plumbing. Chromium only — this proves wiring,
-// not iOS; see docs/ios-manual-checklist.md for the real device verification
+// reload with real geolocation plumbing. Runs on every Chromium-engine
+// project (desktop chromium and mobile-chrome) — this proves wiring, not a
+// real device; see docs/ios-manual-checklist.md and
+// docs/android-manual-checklist.md for on-device verification
 // (standalone-mode permission prompts, WebKit's webkitCompassHeading, etc).
 test.describe('capture flow', () => {
   test.skip(

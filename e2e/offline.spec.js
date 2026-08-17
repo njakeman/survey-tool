@@ -2,9 +2,10 @@ import { test, expect } from '@playwright/test';
 
 // Proves the app survives a real network cut, served entirely by the
 // service worker's precache — not just that a SW registered (install.spec.js
-// already covers that). Chromium only: Playwright's setOffline reaches
-// Chromium's service worker target at our pinned version, but not
-// WebKit's — confirmed by reading Playwright's own source, not assumed.
+// already covers that). Runs on every Chromium-engine project (desktop
+// chromium and mobile-chrome): Playwright's setOffline reaches Chromium's
+// service worker target at our pinned version, but not WebKit's — confirmed
+// by reading Playwright's own source, not assumed.
 test.describe('offline reload', () => {
   test.skip(
     ({ browserName }) => browserName !== 'chromium',

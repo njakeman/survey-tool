@@ -2,8 +2,9 @@ import { test, expect } from '@playwright/test';
 
 // The trace walk, end to end against real IndexedDB: start a path, step the
 // geolocation through a short walk, finish, save with a note, and find the
-// traced observation still there after a reload. Chromium only, like
-// capture.spec.js — this proves wiring, not iOS.
+// traced observation still there after a reload. Runs on every
+// Chromium-engine project, like capture.spec.js — this proves wiring, not a
+// real device.
 test.describe('trace flow', () => {
   test.skip(
     ({ browserName }) => browserName !== 'chromium',

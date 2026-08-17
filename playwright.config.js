@@ -19,5 +19,9 @@ export default defineConfig({
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
     { name: 'webkit', use: { ...devices['Desktop Safari'] } },
+    // Mobile viewport + touch, on the same Chromium engine Android ships.
+    // browserName is still 'chromium' here, so every spec gated on
+    // browserName === 'chromium' runs this too, automatically.
+    { name: 'mobile-chrome', use: { ...devices['Pixel 7'] } },
   ],
 });
