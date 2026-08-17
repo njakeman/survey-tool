@@ -26,13 +26,45 @@ describe('shareOrDownload', () => {
     expect(result).toEqual({ method: 'share', cancelled: true });
   });
 
-  test('rethrows a genuine share failure (not AbortError)', async () => {
+  test('falls back to download on a genuine share failure (not AbortError)', async () => {
     const realError = new Error('something went wrong');
     const navigatorLike = { canShare: () => true, share: vi.fn().mockRejectedValue(realError) };
+    const anchor = { click: vi.fn() };
 
-    await expect(shareOrDownload(fakeFile(), { navigatorLike })).rejects.toThrow(
-      'something went wrong',
-    );
+    const result = await shareOrDownload(fakeFile(), {
+      navigatorLike,
+      createAnchor: () => anchor,
+      createObjectURL: () => 'blob:fake-url',
+      revokeObjectURL: vi.fn(),
+      setTimeoutFn: vi.fn(),
+    });
+
+    expect(anchor.click).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ method: 'download' });
+  });
+
+  // The real-world case: desktop Chrome rejects share() with NotAllowedError
+  // ("Permission denied") once the triggering tap's transient user
+  // activation has expired — realistic for a session whose zip build
+  // (IndexedDB reads + compression) takes more than a couple of seconds.
+  // Firefox desktop never enters this branch at all (no canShare), which is
+  // why the same export "just works" there — not because either browser
+  // differs in what it permits, only in whether it attempts share() first.
+  test('falls back to download on NotAllowedError (Chrome: expired user activation)', async () => {
+    const notAllowed = Object.assign(new Error('Permission denied'), { name: 'NotAllowedError' });
+    const navigatorLike = { canShare: () => true, share: vi.fn().mockRejectedValue(notAllowed) };
+    const anchor = { click: vi.fn() };
+
+    const result = await shareOrDownload(fakeFile(), {
+      navigatorLike,
+      createAnchor: () => anchor,
+      createObjectURL: () => 'blob:fake-url',
+      revokeObjectURL: vi.fn(),
+      setTimeoutFn: vi.fn(),
+    });
+
+    expect(anchor.click).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ method: 'download' });
   });
 
   test('falls back to a Blob download when Share is unavailable', async () => {

@@ -383,6 +383,10 @@ describe('SessionHistoryPage — detail', () => {
     fireEvent.click(screen.getByRole('button', { name: /^export$/i }));
 
     await screen.findByText(/zip failed/);
+    // The success tick must not appear on the error path — an earlier
+    // version rendered it unconditionally whenever exportMessage was set,
+    // so a share() failure surfaced as "✓ Permission denied".
+    expect(screen.queryByText('✓')).not.toBeInTheDocument();
   });
 });
 

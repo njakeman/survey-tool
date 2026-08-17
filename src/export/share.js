@@ -6,6 +6,15 @@
 // DOM (createAnchor/createObjectURL) is exercised for real in the browser
 // tier, only navigator.share/canShare need faking since headless
 // automation can't trigger a native share sheet regardless.
+//
+// The fallback fires on ANY share failure that isn't a user cancellation —
+// not just when Share is unsupported. Desktop Chrome rejects share() with
+// NotAllowedError ("Permission denied") once the triggering tap's transient
+// user activation has expired, which a session's zip build (IndexedDB reads
+// + compression, all before this function is ever called) can realistically
+// outlast. A fallback exists precisely to catch the primary path failing
+// for any reason, not one enumerated error — the alternative is dead-ending
+// an export the surveyor is entitled to get out of the device.
 
 const DOWNLOAD_REVOKE_DELAY_MS = 10_000;
 
@@ -29,7 +38,9 @@ export async function shareOrDownload(
       if (error.name === 'AbortError') {
         return { method: 'share', cancelled: true }; // user dismissed the sheet — not a failure
       }
-      throw error;
+      // Any other failure (e.g. Chrome's NotAllowedError on expired
+      // activation) falls through to the download fallback below, rather
+      // than rethrowing — see the header comment.
     }
   }
 

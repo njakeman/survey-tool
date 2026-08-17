@@ -270,7 +270,15 @@ export function SessionHistoryPage({
         ${
           exportMessage
             ? html`<p class="session-history-export-message" role="status">
-                <span class="save-confirmation-tick" aria-hidden="true">✓</span> ${exportMessage}
+                ${
+                  // The tick means success — an export that threw and landed
+                  // on this same message state (e.g. a Chrome share()
+                  // failure) must not read as "✓ Permission denied".
+                  exportState === 'error'
+                    ? null
+                    : html`<span class="save-confirmation-tick" aria-hidden="true">✓</span>`
+                }
+                ${exportMessage}
               </p>`
             : null
         }
