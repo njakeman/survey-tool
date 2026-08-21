@@ -81,6 +81,17 @@ export function formatDate(isoString) {
   return isoString.slice(0, 10);
 }
 
+// "12 Apr 2025" — the reference survey's date as the surveyor reads it on
+// the revisit surfaces, where the ISO form would read as machinery.
+export function formatDateLong(isoString) {
+  if (isoString == null) return '—';
+  return new Date(isoString).toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
 export function formatAge(ageMs) {
   if (!Number.isFinite(ageMs) || ageMs < 3000) return 'just now';
   if (ageMs < 60000) return `${Math.floor(ageMs / 1000)} s ago`;

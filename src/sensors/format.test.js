@@ -10,7 +10,18 @@ import {
   formatDistance,
   formatTime,
   formatDate,
+  formatDateLong,
 } from './format.js';
+
+describe('formatDateLong', () => {
+  test('renders an ISO date as day, short month, year — the reference date the surveyor reads', () => {
+    expect(formatDateLong('2025-04-12T09:00:00.000Z')).toBe('12 Apr 2025');
+  });
+
+  test('an unknown date is an em dash, like every other formatter here', () => {
+    expect(formatDateLong(null)).toBe('—');
+  });
+});
 
 describe('formatLatLon', () => {
   test('formats to 6 decimal places, comma-separated', () => {

@@ -11,14 +11,14 @@ describe('SessionBar — no open session', () => {
     expect(screen.getByRole('button', { name: /start session/i })).toBeInTheDocument();
   });
 
-  test('Start calls onStart with the (possibly edited) name', () => {
+  test('Start calls onStart with the (possibly edited) name and no reference', () => {
     const onStart = vi.fn();
     render(html`<${SessionBar} session=${null} defaultName="2026-08-06" onStart=${onStart} />`);
 
     fireEvent.input(screen.getByLabelText(/session name/i), { target: { value: 'Ashton Keynes' } });
     fireEvent.click(screen.getByRole('button', { name: /start session/i }));
 
-    expect(onStart).toHaveBeenCalledWith('Ashton Keynes');
+    expect(onStart).toHaveBeenCalledWith('Ashton Keynes', null);
   });
 
   test('a blank name does not call onStart', () => {
@@ -43,6 +43,97 @@ describe('SessionBar — no open session', () => {
     const mark = document.querySelector('.brand-mark');
     expect(mark).toBeInTheDocument();
     expect(mark).toHaveAttribute('alt', '');
+  });
+});
+
+describe('SessionBar — session types', () => {
+  const loadedReference = {
+    buffer: new ArrayBuffer(4),
+    stations: [{ id: 'ref-1', note: 'Culvert head.', lat: 51.5002, lon: -0.14 }],
+    reference: {
+      filename: 'long-barrow-2025-04-12.zip',
+      hash: 'a'.repeat(64),
+      sessionId: 'ref-sess-1',
+      sessionName: 'Long Barrow south',
+      startedAt: '2025-04-12T09:00:00.000Z',
+      stationCount: 1,
+      photoCount: 1,
+    },
+  };
+
+  function renderStart(overrides = {}) {
+    const props = {
+      session: null,
+      defaultName: '2026-08-21',
+      onStart: vi.fn(),
+      loadReference: vi.fn().mockResolvedValue(loadedReference),
+      ...overrides,
+    };
+    render(html`<${SessionBar} ...${props} />`);
+    return props;
+  }
+
+  async function pickReferenceFile() {
+    fireEvent.click(screen.getByRole('button', { name: /revisit a survey/i }));
+    const file = new File(['PK'], 'long-barrow-2025-04-12.zip', { type: 'application/zip' });
+    fireEvent.change(document.querySelector('input[type="file"]'), { target: { files: [file] } });
+    await screen.findByText('long-barrow-2025-04-12.zip');
+  }
+
+  test('offers the two session types, New survey pressed by default', () => {
+    renderStart();
+
+    const newSurvey = screen.getByRole('button', { name: /new survey/i });
+    const revisit = screen.getByRole('button', { name: /revisit a survey/i });
+    expect(newSurvey).toHaveAttribute('aria-pressed', 'true');
+    expect(revisit).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  test('choosing Revisit relabels Start and disables it until a reference is loaded', () => {
+    renderStart();
+
+    fireEvent.click(screen.getByRole('button', { name: /revisit a survey/i }));
+
+    const start = screen.getByRole('button', { name: /start revisit session/i });
+    expect(start).toBeDisabled();
+    expect(screen.getByText(/load a previous export/i)).toBeInTheDocument();
+  });
+
+  test('a loaded reference enables Start, and Start hands the whole load over', async () => {
+    const { onStart, loadReference } = renderStart();
+
+    await pickReferenceFile();
+
+    expect(loadReference).toHaveBeenCalledTimes(1);
+    const start = screen.getByRole('button', { name: /start revisit session/i });
+    expect(start).not.toBeDisabled();
+    fireEvent.click(start);
+    expect(onStart).toHaveBeenCalledWith('2026-08-21', loadedReference);
+  });
+
+  test('a failed load names its reason and Start stays disabled', async () => {
+    const loadReference = vi
+      .fn()
+      .mockRejectedValue(new Error('Could not load reference: no session.geojson inside'));
+    renderStart({ loadReference });
+
+    fireEvent.click(screen.getByRole('button', { name: /revisit a survey/i }));
+    const file = new File(['nope'], 'not-a-zip.txt', { type: 'text/plain' });
+    fireEvent.change(document.querySelector('input[type="file"]'), { target: { files: [file] } });
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(/no session\.geojson/);
+    expect(screen.getByRole('button', { name: /start revisit session/i })).toBeDisabled();
+  });
+
+  test('switching back to New survey collapses the reference and starts a plain session', async () => {
+    const { onStart } = renderStart();
+    await pickReferenceFile();
+
+    fireEvent.click(screen.getByRole('button', { name: /new survey/i }));
+
+    expect(screen.queryByText('long-barrow-2025-04-12.zip')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /^start session$/i }));
+    expect(onStart).toHaveBeenCalledWith('2026-08-21', null);
   });
 });
 

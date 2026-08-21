@@ -655,6 +655,299 @@ button {
   color: var(--text-secondary);
 }
 
+/* ---- Session types + revisit setup (design t8) ------------------------- */
+
+.session-type-chooser {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* Two stacked choice cards, 64px so the title + hint both breathe. The
+   pressed state is a 2px accent border plus a check glyph — weight and
+   shape, never colour alone. Padding drops 1px when the border grows so
+   nothing reflows on selection. */
+.session-type-choice {
+  min-height: 4rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 3px;
+  padding: 10px 13px;
+  text-align: left;
+  background: var(--surface);
+  border: 1px solid var(--control-rule);
+  border-radius: var(--radius);
+  color: var(--ink);
+  font-size: var(--type-control);
+}
+
+.session-type-choice[aria-pressed='true'] {
+  border: 2px solid var(--accent);
+  padding: 9px 12px;
+}
+
+.session-type-title {
+  font-weight: 700;
+}
+
+.session-type-choice[aria-pressed='true'] .session-type-title::after {
+  content: ' ✓';
+  color: var(--accent-ink);
+}
+
+.session-type-hint {
+  font-size: var(--type-fine);
+  color: var(--text-secondary);
+}
+
+.revisit-setup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* The two file pickers are labels wearing the outline treatment — labels
+   miss the global button min-height, so it is restated here. */
+.revisit-setup-pick {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--touch-target);
+  cursor: pointer;
+}
+
+.revisit-setup-label {
+  margin: 0;
+  font-family: var(--font-label);
+  font-size: var(--type-label);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.revisit-setup-caption {
+  font-family: inherit;
+  font-weight: 400;
+  letter-spacing: normal;
+  text-transform: none;
+  font-size: var(--type-fine);
+}
+
+.revisit-setup-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: 11px 12px;
+  background: var(--surface);
+  border: 1px solid var(--control-rule);
+  border-radius: var(--radius);
+}
+
+.revisit-setup-file {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.revisit-setup-filename {
+  font-family: var(--font-label);
+  font-size: var(--type-meta);
+  font-weight: 700;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.revisit-setup-summary {
+  margin: 0;
+  font-size: var(--type-meta);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.revisit-setup-actions {
+  display: flex;
+  gap: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--rule-faint);
+}
+
+.revisit-setup-actions > * {
+  flex: 1;
+}
+
+.revisit-setup-error {
+  margin: 0;
+  font-size: var(--type-small);
+  color: var(--danger-strong);
+}
+
+.revisit-setup-nearest-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.revisit-setup-nearest-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: 11px 0 10px;
+  border-bottom: 1px solid var(--rule-faint);
+}
+
+.revisit-setup-nearest-distance {
+  font-weight: 700;
+  flex: none;
+  width: 4rem;
+}
+
+.revisit-setup-nearest-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+}
+
+.revisit-setup-nearest-compass {
+  color: var(--text-secondary);
+}
+
+/* ---- Station list (the 8d state vocabulary) ---------------------------- */
+
+.station-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.station-list-row {
+  border-bottom: 1px solid var(--rule-faint);
+}
+
+.station-list-static,
+.station-list-select {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 11px 0 10px;
+}
+
+.station-list-select {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  color: inherit;
+  font-size: var(--type-body);
+  text-align: left;
+}
+
+.station-list-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.station-list-walk,
+.station-list-reason {
+  font-size: var(--type-small);
+  color: var(--text-secondary);
+}
+
+.station-list-row .chip {
+  margin-left: auto;
+  flex: none;
+}
+
+/* The shape half of every state: diamonds for stations (rotated squares),
+   an × for no access. Colour varies but never carries the state alone —
+   the chip word beside it always repeats it. */
+.station-glyph {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  transform: rotate(45deg);
+}
+
+.station-glyph-done {
+  background: var(--ink);
+}
+
+.station-glyph-todo {
+  border: 2px solid var(--ink);
+}
+
+.station-glyph-current {
+  border: 2px solid var(--accent);
+}
+
+.station-glyph-skipped {
+  border: 2px dashed var(--control-rule);
+}
+
+.station-glyph-noaccess {
+  transform: none;
+  position: relative;
+  border: none;
+}
+
+.station-glyph-noaccess::before,
+.station-glyph-noaccess::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 4px;
+  width: 9px;
+  height: 2px;
+  background: var(--text-secondary);
+}
+
+.station-glyph-noaccess::before {
+  transform: rotate(45deg);
+}
+
+.station-glyph-noaccess::after {
+  transform: rotate(-45deg);
+}
+
+/* Station chips ride the base .chip; the states map onto the exported
+   badge registers — done fills like badge-exported, to-do and skipped stay
+   dashed like badge-not-exported, current takes the accent border. */
+.station-chip-done {
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
+}
+
+.station-chip-current {
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+.station-chip-todo,
+.station-chip-skipped {
+  border-style: dashed;
+  color: var(--text-secondary);
+}
+
+.station-chip-noaccess,
+.station-chip-readonly {
+  color: var(--text-secondary);
+}
+
 /* ---- Readings ---------------------------------------------------------- */
 
 .readings-panel {
