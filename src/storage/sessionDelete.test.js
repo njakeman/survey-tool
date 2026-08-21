@@ -13,6 +13,7 @@ import {
   listTraceVertices,
   putTraceDraft,
 } from './traceDraftStore.js';
+import { getReference, listStationStates, putReference, putStationState } from './revisitStore.js';
 import { createSession, closeSession } from '../domain/session.js';
 import { createObservation } from '../domain/observation.js';
 
@@ -107,6 +108,48 @@ describe('deleteSessionWithData', () => {
     db.close();
   });
 
+  test('deletes a revisit session’s reference bytes and station claims along with it', async () => {
+    // The reference is keyed to the session and invisible everywhere else —
+    // leaving it behind would be multi-megabyte storage nothing collects.
+    const db = await openDatabase('session-delete-revisit');
+    await putSession(db, makeSession('sess-1'));
+    await putSession(db, makeSession('sess-2'));
+    await putReference(db, {
+      sessionId: 'sess-1',
+      arrayBuffer: new ArrayBuffer(8),
+      filename: 'ref.zip',
+      hash: 'a'.repeat(64),
+    });
+    await putReference(db, {
+      sessionId: 'sess-2',
+      arrayBuffer: new ArrayBuffer(8),
+      filename: 'other.zip',
+      hash: 'b'.repeat(64),
+    });
+    await putStationState(db, {
+      sessionId: 'sess-1',
+      refObsId: 'ref-2',
+      state: 'skipped',
+      reason: null,
+      updatedAt: '2026-08-21T10:00:00.000Z',
+    });
+    await putStationState(db, {
+      sessionId: 'sess-2',
+      refObsId: 'ref-1',
+      state: 'noAccess',
+      reason: null,
+      updatedAt: '2026-08-21T10:00:00.000Z',
+    });
+
+    await deleteSessionWithData(db, 'sess-1');
+
+    expect(await getReference(db, 'sess-1')).toBeUndefined();
+    expect(await listStationStates(db, 'sess-1')).toEqual([]);
+    expect(await getReference(db, 'sess-2')).toBeDefined();
+    expect(await listStationStates(db, 'sess-2')).toHaveLength(1);
+    db.close();
+  });
+
   test('opens exactly one transaction, spanning every store a session can reach', async () => {
     // A kill between separate deletes would orphan media or vertices that
     // nothing would ever collect — same rule as captureDelete.js.
@@ -130,7 +173,16 @@ describe('deleteSessionWithData', () => {
     await deleteSessionWithData(trackingDb, 'sess-1');
 
     expect(opened).toEqual([
-      ['audio', 'observations', 'photos', 'sessions', 'traceDrafts', 'traceVertices'],
+      [
+        'audio',
+        'observations',
+        'photos',
+        'revisitReferences',
+        'revisitStations',
+        'sessions',
+        'traceDrafts',
+        'traceVertices',
+      ],
     ]);
     db.close();
   });

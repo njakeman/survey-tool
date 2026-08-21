@@ -1,7 +1,7 @@
 import { openDB } from 'idb';
 
 export const DB_NAME = 'survey-tool';
-export const DB_VERSION = 6;
+export const DB_VERSION = 7;
 
 // `name` is overridable so tests can open an isolated database per test
 // instead of sharing state through the default name.
@@ -56,6 +56,18 @@ export function openDatabase(name = DB_NAME) {
         // persistence rule; only trace recording ever writes here.
         db.createObjectStore('traceDrafts', { keyPath: 'id' });
         db.createObjectStore('traceVertices', { keyPath: ['draftId', 'seq'] });
+      }
+      if (oldVersion < 7) {
+        // Revisit mode. 'revisitReferences': the reference export's zip
+        // bytes, one record per revisit session (ArrayBuffer, never a Blob —
+        // see photoStore.js), keyed by the session so it lives and dies with
+        // it. Written once at session start and never rewritten — mutable
+        // facts live on the session record instead, the basemap-metadata
+        // rule. 'revisitStations': the surveyor's explicit skip/no-access
+        // claims, one record per [sessionId, refObsId] — done/to-do are
+        // derived from observations (domain/revisit.js), never stamped here.
+        db.createObjectStore('revisitReferences', { keyPath: 'sessionId' });
+        db.createObjectStore('revisitStations', { keyPath: ['sessionId', 'refObsId'] });
       }
     },
   });

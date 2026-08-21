@@ -4,7 +4,7 @@ import { openDB } from 'idb';
 import { openDatabase, DB_VERSION } from './db.js';
 
 describe('openDatabase', () => {
-  test('creates the sessions, observations, photos, basemap, settings, featureLayers, audio and trace stores', async () => {
+  test('creates the sessions, observations, photos, basemap, settings, featureLayers, audio, trace and revisit stores', async () => {
     const db = await openDatabase('db-test-stores');
     expect([...db.objectStoreNames].sort()).toEqual([
       'audio',
@@ -12,6 +12,8 @@ describe('openDatabase', () => {
       'featureLayers',
       'observations',
       'photos',
+      'revisitReferences',
+      'revisitStations',
       'sessions',
       'settings',
       'traceDrafts',
@@ -139,6 +141,40 @@ describe('openDatabase', () => {
     expect([...db.objectStoreNames]).toContain('traceDrafts');
     expect([...db.objectStoreNames]).toContain('traceVertices');
     expect((await db.get('audio', 'obs-1')).arrayBuffer.byteLength).toBe(6);
+    db.close();
+  });
+
+  test('upgrades a v6 database to v7, adding the revisit stores without disturbing a trace draft', async () => {
+    // v6 is what shipped with trace modes; a force-quit can leave a draft
+    // mid-walk, and the upgrade must not cost the surveyor that recovery.
+    const v6 = await openDB('db-test-upgrade-v7', 6, {
+      upgrade(db) {
+        db.createObjectStore('sessions', { keyPath: 'id' });
+        const observations = db.createObjectStore('observations', { keyPath: 'id' });
+        observations.createIndex('by-session', 'sessionId');
+        db.createObjectStore('photos', { keyPath: 'id' });
+        db.createObjectStore('basemap', { keyPath: 'id' });
+        db.createObjectStore('settings', { keyPath: 'key' });
+        db.createObjectStore('featureLayers', { keyPath: 'id' });
+        db.createObjectStore('audio', { keyPath: 'id' });
+        db.createObjectStore('traceDrafts', { keyPath: 'id' });
+        db.createObjectStore('traceVertices', { keyPath: ['draftId', 'seq'] });
+      },
+    });
+    await v6.put('traceDrafts', { id: 'draft-1', sessionId: 'sess-1', mode: 'path' });
+    await v6.put('traceVertices', { draftId: 'draft-1', seq: 0, lat: 51.5, lon: -0.14 });
+    v6.close();
+
+    const db = await openDatabase('db-test-upgrade-v7');
+
+    expect(db.version).toBe(DB_VERSION);
+    expect([...db.objectStoreNames]).toContain('revisitReferences');
+    expect([...db.objectStoreNames]).toContain('revisitStations');
+    expect(await db.get('traceDrafts', 'draft-1')).toEqual({
+      id: 'draft-1',
+      sessionId: 'sess-1',
+      mode: 'path',
+    });
     db.close();
   });
 });
