@@ -1,6 +1,6 @@
 import { html } from 'htm/preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { formatDate } from '../sensors/format.js';
+import { formatDate, formatDateLong } from '../sensors/format.js';
 import {
   isExported,
   countUnexported,
@@ -238,6 +238,18 @@ export function SessionHistoryPage({
             changed=${hasChangedSinceExport(selected.session)}
           />
         </p>
+        ${
+          // Self-describing, not self-contained: the reference identity
+          // lives on the session record, so this line survives the zip's
+          // bytes being long gone. Built in JS (the htm-trims rule).
+          selected.session.sessionType === 'revisit' && selected.session.reference
+            ? html`<p class="session-detail-reference">
+                ${`Revisit of ${selected.session.reference.sessionName} · ${formatDateLong(
+                  selected.session.reference.startedAt,
+                )}`}
+              </p>`
+            : null
+        }
         <${HistoryMap}
           activeRegionId=${activeRegionId}
           statusKnown=${statusKnown}
@@ -421,7 +433,14 @@ export function SessionHistoryPage({
                           onClick=${() => openSession(session)}
                         >
                           <span class="session-history-body">
-                            <span class="session-history-name">${session.name}</span>
+                            <span class="session-history-name">
+                              ${session.name}
+                              ${
+                                session.sessionType === 'revisit'
+                                  ? html` <span class="chip session-revisit-chip">Revisit</span>`
+                                  : null
+                              }
+                            </span>
                             <span class="session-history-date">${meta}</span>
                           </span>
                           <${ExportBadge}

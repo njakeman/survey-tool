@@ -84,6 +84,41 @@ do not reopen them:
   comes back as a straight segment, indistinguishable from a pause. Deliberately not coded
   around (no wake-lock); it is a checklist item.
 
+**Revisit mode** (2026-08-21, design pass t8): re-photograph a previous export's stations so a
+longitudinal record builds up. A revisit is a **session type** chosen at start (`createSession`
+enforces type↔reference both-halves); the reference zip loads at pick time in `SessionBar`
+(never inside Start — `enableCompass()` must stay synchronous-first) and its bytes land in
+`revisitReferences` (DB v7, one transaction with the session put; basemap ArrayBuffer rules).
+The settled decisions:
+
+- **The reference is read-only, decoded lazily**: `zipReader`'s `listZipEntries`/`readZipEntry`
+  split reads one photo at a time out of the stored buffer; `parseReferenceExport` reuses
+  `parseSessionExport`'s validation, returning photo _filenames_, verified against the entries.
+- **States derive, claims store**: DONE = a saved observation paired via
+  `referenceObservationId` (Undo honestly reverts it); only skip/no-access are written
+  (`revisitStations`, `[sessionId, refObsId]`), precedence `done > noAccess > skipped > todo`
+  (`domain/revisit.js`). Skip confirms _after_ the fact with Undo; no-access confirms first
+  (accent commit, not danger — it records a claim, destroys nothing).
+- **Pairing rides export/import**: `ref_obs_id`/`ref_photo` on **every** feature (`?? null` both
+  ways — this changed all export bytes once, the feature-link precedent), plus a
+  `survey_revisit` foreign member (reference file/hash/session identity + every station with
+  its state) on revisit sessions only. A revisit export **imports as a plain closed survey
+  copy** with pairing intact — self-describing, not self-contained. Export carries the **new
+  photos only**; join reference photos by the `photo` string, never `obs_id + '.jpg'`.
+- **The framing step uses the native camera via the file-input path** — no getUserMedia, no
+  ghost overlay (user decision 2026-08-21; the design is built so this is complete). It never
+  gates the shutter. `BodyPortal` now lives in its own module; still never preact/compat.
+- **The current station is sticky** — defaulted to the nearest to-do, advanced when the target
+  resolves, never re-picked on a GPS tick. The disarm ("Record something new instead") is
+  tracked per station id, not as a flag reset by an effect (an effect raced the click).
+- **A missing reference degrades, never blocks**: the session still captures with one honest
+  line; history names the referenced survey from `session.reference`, which outlives the bytes.
+- Map stations are runtime-generated diamond images (`overlays.js`) above traces, below
+  `position-accuracy` (asserted in the browser tier); the plan diagram is token-coloured DOM
+  SVG, deliberately not on the canvas so night mode is free.
+- Deferred, by decision: reference traces drawn lighter on the map; history-as-reference-source;
+  any overlay framing.
+
 A few pointers the styling record leans on: every map trace line rides a **solid casing**
 (`traceCasingColor()` in `overlays.js`, flipped near-black at night through the adapter's
 `setNightMode`); `src/ui/traceGlyphs.js` holds the path/boundary glyph pair used by the chooser

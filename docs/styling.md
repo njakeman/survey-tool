@@ -561,3 +561,60 @@ The mark is an `<img>` pointing at `public/icons/icon.svg` (see Assets, above) r
 redraw — the one deliberate exception, so the header can't drift from the actual home-screen tile.
 Its fixed ink/paper/accent colours don't follow the palette tokens, so night mode dims it to 72%
 opacity rather than letting it become the brightest thing above the fold; dark mode needed nothing.
+
+## Revisit mode (design pass t8, 2026-08-21)
+
+A revisit session is a session _type_, chosen at start; the only screen that changes is the one
+that composes an observation. New surfaces, all riding existing tokens — the pass added **no new
+colour tokens** (nothing to keep in lockstep across the two dark blocks):
+
+- **Session-type chooser** (`.session-type-chooser`/`-choice`, SessionBar's no-session branch):
+  two 64px choice cards, title + one-line hint. Selected is a 2px accent border with a check
+  appended to the title (`::after`) — weight and shape, never colour alone; padding drops 1px as
+  the border grows so nothing reflows on selection. `aria-pressed` is the styling hook.
+- **Reference block** (`.revisit-setup*`): filename in `--font-label` with a `Read only` chip;
+  the two file pickers are labels wearing `.button-outline` (labels miss the global button
+  min-height, so `.revisit-setup-pick` restates 44px — the PhotoField discipline). Nearest
+  stations reuse the list-row shape (distance bold in a fixed column · name · compass point).
+- **Station list** (`.station-list*`, the 8d vocabulary): every state is a shape **plus** a chip
+  word. Glyphs are CSS boxes (9px rotated squares; no-access is two crossed bars, pseudo-element
+  ×). Chips ride `.chip` with variants mapped onto the exported-badge registers: done fills like
+  `badge-exported`, to-do/skipped stay dashed like `badge-not-exported`, current takes the accent
+  border. Rows are wrapped in a button only when tappable (the Change chooser); Review renders
+  them static.
+- **Station block** (`.station-block*`): the mock's 30px distance renders at `--type-heading-xl`
+  (25px) and its 9.5/10/12.5px labels at `--type-badge`/`--type-label`/`--type-fine` — the mock's
+  numbers map to tokens, never copied literally (the brand-lockup precedent). The bearing arrow
+  is inline SVG rotated by the bearing directly — the map never rotates, so north-up needs no
+  compass. The **no-access confirm replaces the action rows in place** (the house idiom) and its
+  commit is **accent, not danger**: it records a claim about the world — moves a record toward
+  saved — and destroys nothing; the danger register stays at exactly its two destructive
+  confirms.
+- **Plan diagram** (`.plan-diagram*`, 86px viewBox): DOM SVG in the page flow, coloured by
+  tokens, so every scheme including night arrives free — the reason it is not drawn on the map
+  canvas. Rings dashed at half/full radius, adaptive scale with an 8px corner caption (inside an
+  86px viewBox — a caption, not interface text, the one sub-token size).
+- **Map**: station diamonds are runtime-rasterised symbol images (overlays.js — filled ink done,
+  hollow to-do, accent + ring current; skipped/no-access draw hollow like to-do, the words live
+  in the list), pale-cased like the trace lines, inserted above traces and below
+  `position-accuracy`. The `◆ Stations · N` pill (`.capture-map-stations`) stacks under the
+  region pill top-left — the mock put it bottom-left, but the bottom edge belongs to the control
+  row.
+- **Framing screen** (`.framing-screen*`): the photo lightbox's skeleton — fixed, z-index 10,
+  near-black scrim in every mode, 44px back control inside the safe-area insets, dvh-capped
+  image. With the native camera (no live view, no overlay — settled decision), the reference
+  photo takes the whole middle: that _is_ the "at size" the step exists for. The shutter is a
+  label wearing `.button-primary` at 64px — the one control the step exists for. The line
+  "Close enough is your call. The app measures, it does not gate." is load-bearing copy.
+- **Pairing strip**: the linked-feature strip verbatim ("Revisiting: West stile" · "Record
+  something new instead") — same placement above Save, same reversibility rule.
+- **End summary** (`.session-revisit-summary`, shown with the End confirm): segmented bar where
+  the segments carry shape as well as colour — filled done, hatched no-access
+  (repeating-gradient), dashed remaining.
+- **History**: revisit rows wear a `Revisit` chip; the detail adds one `--text-secondary` line
+  naming the referenced survey from the session record, so it survives the reference bytes being
+  evicted.
+
+Skip confirms **after** the fact (a dismissible status line with Undo); no-access confirms
+before. Both per the design's reasoning: skip is cheap and reversible, no-access lands in the
+export.

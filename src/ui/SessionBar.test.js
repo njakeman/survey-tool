@@ -181,4 +181,37 @@ describe('SessionBar — open session', () => {
 
     expect(document.querySelector('.brand-lockup')).not.toBeInTheDocument();
   });
+
+  test('confirming End on a revisit shows the four outcomes together — the only place they are', () => {
+    const summary = { total: 12, done: 9, skipped: 2, noAccess: 1, remaining: 0, newCount: 3 };
+    render(
+      html`<${SessionBar}
+        session=${session}
+        observationCount=${12}
+        revisitProgress=${{ done: 9, total: 12 }}
+        revisitSummary=${summary}
+        onEnd=${vi.fn()}
+      />`,
+    );
+
+    expect(document.querySelector('.session-revisit-summary')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /end session/i }));
+
+    const block = document.querySelector('.session-revisit-summary');
+    expect(block).not.toBeNull();
+    expect(block.textContent).toMatch(/9\s*of 12 revisited/);
+    expect(block.textContent).toMatch(/1 no access · 2 skipped · 3 new observations/);
+    // Shape as well as words: filled / hatched / dashed segments.
+    expect(block.querySelector('.session-summary-done')).not.toBeNull();
+    expect(block.querySelector('.session-summary-noaccess')).not.toBeNull();
+    expect(block.querySelector('.session-summary-remaining')).not.toBeNull();
+  });
+
+  test('an ordinary survey confirms End without any revisit summary', () => {
+    render(html`<${SessionBar} session=${session} observationCount=${3} onEnd=${vi.fn()} />`);
+
+    fireEvent.click(screen.getByRole('button', { name: /end session/i }));
+
+    expect(document.querySelector('.session-revisit-summary')).toBeNull();
+  });
 });

@@ -24,7 +24,12 @@ import {
   hasChangedSinceExport,
   isRevisit,
 } from '../domain/session.js';
-import { deriveStations, nearestStations, revisitProgress } from '../domain/revisit.js';
+import {
+  deriveStations,
+  nearestStations,
+  revisitProgress,
+  revisitSummary,
+} from '../domain/revisit.js';
 import { openReference } from '../import/referenceZip.js';
 import { polygonCentroid, polygonExtentM } from '../geo/centroid.js';
 import {
@@ -761,6 +766,7 @@ export function CapturePage({
         busy=${sessionBusy}
         position=${position}
         revisitProgress=${stationProgress}
+        revisitSummary=${derivedStations ? revisitSummary(derivedStations, observations) : null}
         onStart=${handleStart}
         onEnd=${handleEnd}
       />

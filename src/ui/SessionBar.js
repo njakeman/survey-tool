@@ -18,6 +18,7 @@ export function SessionBar({
   busy = false,
   position = null,
   revisitProgress = null,
+  revisitSummary = null,
   onStart,
   onEnd,
   // Injected like the sensor adapters, so tests hand in a fake; the real
@@ -127,6 +128,52 @@ export function SessionBar({
     `;
   }
 
+  // The end-of-session summary (design 8d): shown at the confirm tap — the
+  // moment it is actionable — and the only place the four outcomes appear
+  // together. Segments carry shape as well as colour: filled done, hatched
+  // no-access, dashed remaining. Lines built in JS (the htm-trims rule).
+  const rest = revisitSummary
+    ? revisitSummary.total - revisitSummary.done - revisitSummary.noAccess
+    : 0;
+  const summaryBlock =
+    confirmingEnd && revisitSummary
+      ? html`<div class="session-revisit-summary" role="status">
+          <p class="session-summary-headline">
+            <span class="session-summary-count">${revisitSummary.done}</span>
+            ${` of ${revisitSummary.total} revisited`}
+          </p>
+          <div class="session-summary-bar" aria-hidden="true">
+            ${
+              revisitSummary.done > 0
+                ? html`<span
+                    class="session-summary-done"
+                    style=${`flex: ${revisitSummary.done}`}
+                  ></span>`
+                : null
+            }
+            ${
+              revisitSummary.noAccess > 0
+                ? html`<span
+                    class="session-summary-noaccess"
+                    style=${`flex: ${revisitSummary.noAccess}`}
+                  ></span>`
+                : null
+            }
+            ${
+              rest > 0
+                ? html`<span class="session-summary-remaining" style=${`flex: ${rest}`}></span>`
+                : null
+            }
+          </div>
+          <p class="session-summary-lines">
+            ${`${revisitSummary.noAccess} no access · ${revisitSummary.skipped} skipped · ${revisitSummary.newCount} new observations`}
+          </p>
+          <p class="session-summary-lines">
+            ${`All ${revisitSummary.total} stations travel in the export, with their state.`}
+          </p>
+        </div>`
+      : null;
+
   return html`
     <div class="session-bar">
       <span class="session-live-dot" aria-hidden="true"></span>
@@ -170,5 +217,6 @@ export function SessionBar({
             </button>`
       }
     </div>
+    ${summaryBlock}
   `;
 }

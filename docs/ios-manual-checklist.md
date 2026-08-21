@@ -618,3 +618,35 @@ read-only map above the list, on whichever basemap is currently active.
       now requests it at launch)
 - [ ] With two or more saved observations: the OBSERVATIONS row flips the list newest-first,
       the choice survives a relaunch, and the toggle is absent below two rows
+
+## Revisit mode (2026-08-21)
+
+Run against `https://survey.field.works/`, installed to the home screen, with a real previous
+export zip in the Files app.
+
+- [ ] Choose "Revisit a survey" → "Load reference export" opens the Files sheet in standalone
+      mode; picking the zip shows its name, station/photo counts and date; a non-export file
+      fails with a named reason, not a dead tap
+- [ ] With a fix, Nearest stations lists real distances and compass points before starting
+- [ ] Start revisit session: the compass prompt still appears (the pick did not consume the
+      gesture); the station block aims at the nearest station with the plan diagram, arrow,
+      distance and the dated reference note
+- [ ] Walk toward the station: the distance falls, the arrow tracks, and the current target does
+      NOT jump to a different station on GPS jitter
+- [ ] Frame the photo: the reference photo renders at size from the stored zip; Take photo opens
+      the rear camera; returning from the camera lands back on capture with the photo attached
+      and the pairing strip still armed (memory pressure is the risk — an in-memory photo and a
+      portal are exactly what iOS sheds)
+- [ ] Framing screen respects the notch and home-bar insets; the shutter is reachable
+      one-handed
+- [ ] Save marks the station DONE on the map (filled diamond) and in the list; Undo reverts it
+      to a hollow to-do
+- [ ] Skip shows the dismissible line with Undo; Can't reach it asks first, takes a reason, and
+      the summary at End shows all four outcomes
+- [ ] Night mode: the station diamonds stay legible on the dimmed canvas; the plan diagram and
+      station block follow the night palette; the framing screen's scrim is unchanged
+- [ ] A ~40-photo reference held across a full session: no crash, framing stays responsive, and
+      a force-quit mid-session reopens with guidance intact (the zip is re-read from IndexedDB)
+- [ ] Export the revisit; re-import the export elsewhere: it arrives as an ordinary session
+      whose observations still carry ref_obs_id; history names the referenced survey
+- [ ] Sunlight: the segmented summary bar's three textures are distinguishable outdoors

@@ -34,6 +34,23 @@ const OBS = {
   photoId: null,
 };
 
+const CLOSED_REVISIT = {
+  id: 'sess-r',
+  name: '2026-08-21',
+  status: 'closed',
+  startedAt: '2026-08-21T09:00:00.000Z',
+  sessionType: 'revisit',
+  reference: {
+    filename: 'long-barrow-2025-04-12.zip',
+    hash: 'a'.repeat(64),
+    sessionId: 'ref-sess-1',
+    sessionName: 'Long Barrow south',
+    startedAt: '2025-04-12T09:00:00.000Z',
+    stationCount: 12,
+    photoCount: 41,
+  },
+};
+
 function createFakeService({ openSession = null, sessions = [], observationsBySession = {} } = {}) {
   return {
     getOpenSession: vi.fn().mockResolvedValue(openSession),
@@ -177,6 +194,43 @@ describe('SessionHistoryPage — list', () => {
     fireEvent.click(screen.getByRole('button', { name: /back to capture/i }));
 
     expect(onBack).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('SessionHistoryPage — revisit sessions', () => {
+  test('a revisit row wears the Revisit chip', async () => {
+    const service = createFakeService({ sessions: [CLOSED_A, CLOSED_REVISIT] });
+    render(
+      html`<${SessionHistoryPage} service=${service} exportSession=${vi.fn()} onBack=${vi.fn()} />`,
+    );
+
+    const row = (await screen.findByRole('button', { name: /2026-08-21/ })).closest('button');
+    // Natural case in the DOM; CSS uppercases the chip.
+    expect(within(row).getByText('Revisit')).toBeInTheDocument();
+  });
+
+  test('the detail names the referenced survey — kept even when the zip itself is long gone', async () => {
+    const service = createFakeService({ sessions: [CLOSED_REVISIT] });
+    render(
+      html`<${SessionHistoryPage} service=${service} exportSession=${vi.fn()} onBack=${vi.fn()} />`,
+    );
+    await screen.findByText('2026-08-21');
+
+    fireEvent.click(screen.getByRole('button', { name: /2026-08-21/ }));
+
+    expect(
+      await screen.findByText(/Revisit of Long Barrow south · 12 Apr 2025/),
+    ).toBeInTheDocument();
+  });
+
+  test('an ordinary session shows neither chip nor reference line', async () => {
+    const service = createFakeService({ sessions: [CLOSED_A] });
+    render(
+      html`<${SessionHistoryPage} service=${service} exportSession=${vi.fn()} onBack=${vi.fn()} />`,
+    );
+    await screen.findByText('Site A');
+
+    expect(screen.queryByText('Revisit')).toBeNull();
   });
 });
 
