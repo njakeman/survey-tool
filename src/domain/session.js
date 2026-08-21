@@ -3,10 +3,27 @@
 // named). Pure record construction — id/timestamp generation and persistence
 // live elsewhere (domain/id.js, storage/).
 
-export function createSession({ id, name, startedAt }) {
+const SESSION_TYPES = new Set(['survey', 'revisit']);
+
+export function createSession({ id, name, startedAt, sessionType = 'survey', reference = null }) {
   if (!id) throw new Error('createSession: id is required');
   if (!name || !name.trim()) throw new Error('createSession: name is required');
   if (!startedAt) throw new Error('createSession: startedAt is required');
+  if (!SESSION_TYPES.has(sessionType)) {
+    throw new Error(
+      `createSession: sessionType must be one of ${[...SESSION_TYPES].join(', ')} (got ${sessionType})`,
+    );
+  }
+  // Both halves or neither (the feature-link rule in observation.js): a
+  // revisit is defined by the survey it stands against, so one without a
+  // reference is unconstructible, and a reference on an ordinary survey
+  // would be a revisit that doesn't say so.
+  if (sessionType === 'revisit' && !reference) {
+    throw new Error("createSession: sessionType 'revisit' requires a reference");
+  }
+  if (reference && sessionType !== 'revisit') {
+    throw new Error("createSession: a reference requires sessionType 'revisit'");
+  }
 
   return {
     id,
@@ -14,7 +31,21 @@ export function createSession({ id, name, startedAt }) {
     startedAt,
     endedAt: null,
     status: 'open',
+    // 'survey' (a blank sheet) or 'revisit' (re-photographing the stations of
+    // a previous export). The reference identifies that export — the picked
+    // file's name and hash, the survey_session facts, and the counts the UI
+    // shows — and survives the zip's bytes being evicted, so history can
+    // still name the referenced survey.
+    sessionType,
+    reference,
   };
+}
+
+// Old records predate sessionType and read as ordinary surveys — undefined
+// is falsy, which is the honest default for everything saved before revisit
+// mode existed.
+export function isRevisit(session) {
+  return session?.sessionType === 'revisit';
 }
 
 export function closeSession(session, endedAt) {

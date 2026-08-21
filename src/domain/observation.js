@@ -120,6 +120,12 @@ export function createObservation({
   // lastExportedAt to mark records whose export is stale — see
   // isChangedSinceExport in session.js.
   changedAt = null,
+  // The revisit pairing: which reference station this observation revisits,
+  // and that station's photo filename inside the reference zip. The id is
+  // the key longitudinal comparison joins on; the filename is a convenience
+  // that survives the reference's own ids being reminted on re-export.
+  referenceObservationId = null,
+  referencePhoto = null,
 }) {
   if (!id) throw new Error('createObservation: id is required');
   if (!sessionId) throw new Error('createObservation: sessionId is required');
@@ -174,6 +180,16 @@ export function createObservation({
   // The label is a convenience on top of the link, never the link itself.
   const linked = Boolean(featureLayerId);
 
+  // Half of both-halves: a reference photo filename without its station id
+  // joins to nothing. The id alone IS legal — a station may honestly have no
+  // photo, and the pairing is still a pairing.
+  if (referencePhoto && !referenceObservationId) {
+    throw new Error(
+      'createObservation: referencePhoto requires referenceObservationId (got ' +
+        `referencePhoto=${referencePhoto} alone)`,
+    );
+  }
+
   return {
     id,
     sessionId,
@@ -196,6 +212,8 @@ export function createObservation({
     geometry,
     audioDurationMs,
     changedAt,
+    referenceObservationId,
+    referencePhoto,
     synced: false,
     syncedAt: null,
   };

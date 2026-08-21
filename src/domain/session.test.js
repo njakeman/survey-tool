@@ -5,10 +5,23 @@ import {
   reopenSession,
   findOpenSession,
   isExported,
+  isRevisit,
   countUnexported,
   isChangedSinceExport,
   hasChangedSinceExport,
 } from './session.js';
+
+// A loaded reference export, as RevisitSetup would hand it over: identity of
+// the picked file plus the survey_session facts and counts the UI shows.
+const reference = {
+  filename: 'long-barrow-2025-04-12.zip',
+  hash: 'a'.repeat(64),
+  sessionId: 'ref-sess-1',
+  sessionName: 'Long Barrow south',
+  startedAt: '2025-04-12T09:00:00.000Z',
+  stationCount: 12,
+  photoCount: 41,
+};
 
 describe('createSession', () => {
   test('creates an open session with the given id, name and start time', () => {
@@ -23,6 +36,8 @@ describe('createSession', () => {
       startedAt: '2026-08-06T10:00:00.000Z',
       endedAt: null,
       status: 'open',
+      sessionType: 'survey',
+      reference: null,
     });
   });
 
@@ -43,6 +58,93 @@ describe('createSession', () => {
   });
 });
 
+describe('revisit sessions', () => {
+  test('a revisit session carries its reference — the survey it stands against', () => {
+    const session = createSession({
+      id: 'sess-1',
+      name: '2026-08-21',
+      startedAt: '2026-08-21T09:00:00.000Z',
+      sessionType: 'revisit',
+      reference,
+    });
+
+    expect(session.sessionType).toBe('revisit');
+    expect(session.reference).toEqual(reference);
+  });
+
+  test('rejects a session type it does not know', () => {
+    expect(() =>
+      createSession({
+        id: 'sess-1',
+        name: '2026-08-21',
+        startedAt: '2026-08-21T09:00:00.000Z',
+        sessionType: 'resurvey',
+      }),
+    ).toThrow(/sessionType/);
+  });
+
+  test('a revisit without a reference is unconstructible — it would have nothing to stand against', () => {
+    expect(() =>
+      createSession({
+        id: 'sess-1',
+        name: '2026-08-21',
+        startedAt: '2026-08-21T09:00:00.000Z',
+        sessionType: 'revisit',
+      }),
+    ).toThrow(/reference/);
+  });
+
+  test('a reference on an ordinary survey is rejected, mirroring the both-halves rule', () => {
+    expect(() =>
+      createSession({
+        id: 'sess-1',
+        name: '2026-08-21',
+        startedAt: '2026-08-21T09:00:00.000Z',
+        reference,
+      }),
+    ).toThrow(/reference/);
+  });
+
+  test('closing and reopening preserve the type and reference — a continuation, not a reset', () => {
+    const revisit = createSession({
+      id: 'sess-1',
+      name: '2026-08-21',
+      startedAt: '2026-08-21T09:00:00.000Z',
+      sessionType: 'revisit',
+      reference,
+    });
+
+    const closed = closeSession(revisit, '2026-08-21T12:00:00.000Z');
+    expect(closed.sessionType).toBe('revisit');
+    expect(closed.reference).toEqual(reference);
+
+    const reopened = reopenSession(closed);
+    expect(reopened.sessionType).toBe('revisit');
+    expect(reopened.reference).toEqual(reference);
+  });
+
+  test('isRevisit reads the type, treating records from before the field as surveys', () => {
+    const revisit = createSession({
+      id: 'sess-1',
+      name: '2026-08-21',
+      startedAt: '2026-08-21T09:00:00.000Z',
+      sessionType: 'revisit',
+      reference,
+    });
+    const survey = createSession({
+      id: 'sess-2',
+      name: 'Ashton Keynes',
+      startedAt: '2026-08-06T10:00:00.000Z',
+    });
+
+    expect(isRevisit(revisit)).toBe(true);
+    expect(isRevisit(survey)).toBe(false);
+    // Stored records predating sessionType have no such key.
+    expect(isRevisit({ id: 'sess-0', status: 'closed' })).toBe(false);
+    expect(isRevisit(null)).toBe(false);
+  });
+});
+
 describe('closeSession', () => {
   test('marks an open session closed with the given end time', () => {
     const open = createSession({
@@ -57,6 +159,8 @@ describe('closeSession', () => {
       startedAt: '2026-08-06T10:00:00.000Z',
       endedAt: '2026-08-06T12:00:00.000Z',
       status: 'closed',
+      sessionType: 'survey',
+      reference: null,
     });
   });
 
@@ -98,6 +202,8 @@ describe('reopenSession', () => {
       startedAt: '2026-08-06T10:00:00.000Z',
       endedAt: null,
       status: 'open',
+      sessionType: 'survey',
+      reference: null,
     });
   });
 

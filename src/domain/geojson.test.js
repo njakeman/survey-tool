@@ -80,6 +80,8 @@ describe('sessionToFeatureCollection', () => {
           os_grid_ref: null,
           position_source: 'gps',
           trace_length_m: null,
+          ref_obs_id: null,
+          ref_photo: null,
           session_name: 'Ashton Keynes',
           app_version: '0.1.0',
         },
@@ -434,5 +436,139 @@ describe('traced observations', () => {
 
     expect(fc.features[0].geometry.type).toBe('Point');
     expect(fc.features[0].properties.trace_length_m).toBeNull();
+  });
+});
+
+describe('revisit exports', () => {
+  const reference = {
+    filename: 'long-barrow-2025-04-12.zip',
+    hash: 'a'.repeat(64),
+    sessionId: 'ref-sess-1',
+    sessionName: 'Long Barrow south',
+    startedAt: '2025-04-12T09:00:00.000Z',
+    stationCount: 2,
+    photoCount: 1,
+  };
+  const revisitSession = createSession({
+    id: 'sess-2',
+    name: '2026-08-21',
+    startedAt: '2026-08-21T09:00:00.000Z',
+    sessionType: 'revisit',
+    reference,
+  });
+
+  function pairedObservation() {
+    return createObservation({
+      id: 'obs-1',
+      sessionId: 'sess-2',
+      recordedAt: '2026-08-21T10:00:00.000Z',
+      fixAt: '2026-08-21T09:59:20.000Z',
+      lat: 51.5,
+      lon: -0.14,
+      gpsAccuracyM: 8.2,
+      referenceObservationId: 'ref-obs-4',
+      referencePhoto: 'ref-obs-4.jpg',
+    });
+  }
+
+  test('a paired observation exports its pairing key — the correspondence must never drop', () => {
+    const fc = sessionToFeatureCollection(revisitSession, [pairedObservation()], {
+      appVersion: '0.1.0',
+    });
+
+    expect(fc.features[0].properties.ref_obs_id).toBe('ref-obs-4');
+    expect(fc.features[0].properties.ref_photo).toBe('ref-obs-4.jpg');
+  });
+
+  test('records stored before the pairing fields existed export the same columns, null', () => {
+    // `?? null` reads, because canonicalStringify drops undefined and the
+    // column set must not depend on which rows happened to be paired.
+    const legacy = {
+      id: 'obs-old',
+      sessionId: 'sess-1',
+      recordedAt: '2026-08-06T10:00:00.000Z',
+      fixAt: '2026-08-06T09:59:20.000Z',
+      lat: 51.5,
+      lon: -0.14,
+      gpsAccuracyM: 8.2,
+    };
+
+    const fc = sessionToFeatureCollection(session, [legacy], { appVersion: '0.1.0' });
+
+    expect(fc.features[0].properties).toHaveProperty('ref_obs_id', null);
+    expect(fc.features[0].properties).toHaveProperty('ref_photo', null);
+  });
+
+  test('a revisit session carries a survey_revisit foreign member with provenance and stations', () => {
+    const stations = [
+      { ref_obs_id: 'ref-obs-1', state: 'done', reason: null },
+      { ref_obs_id: 'ref-obs-2', state: 'no_access', reason: 'field flooded' },
+    ];
+
+    const fc = sessionToFeatureCollection(revisitSession, [pairedObservation()], {
+      appVersion: '0.1.0',
+      revisitStations: stations,
+    });
+
+    expect(fc.survey_revisit).toEqual({
+      reference_file: 'long-barrow-2025-04-12.zip',
+      reference_hash: 'a'.repeat(64),
+      reference_session_id: 'ref-sess-1',
+      reference_session_name: 'Long Barrow south',
+      reference_started_at: '2025-04-12T09:00:00.000Z',
+      stations,
+    });
+  });
+
+  test('an ordinary survey export has no survey_revisit member at all', () => {
+    // Absent, not null: existing exports' canonical bytes must be untouched
+    // by a member their sessions never had.
+    const fc = sessionToFeatureCollection(session, [], { appVersion: '0.1.0' });
+
+    expect('survey_revisit' in fc).toBe(false);
+  });
+
+  test('fence: this pass changes an ordinary export by exactly the two pairing columns', () => {
+    const obs = createObservation({
+      id: 'obs-1',
+      sessionId: 'sess-1',
+      recordedAt: '2026-08-06T10:00:00.000Z',
+      fixAt: '2026-08-06T09:59:20.000Z',
+      lat: 51.5,
+      lon: -0.14,
+      gpsAccuracyM: 8.2,
+    });
+
+    const fc = sessionToFeatureCollection(session, [obs], { appVersion: '0.1.0' });
+
+    expect(Object.keys(fc).sort()).toEqual(['features', 'survey_session', 'type']);
+    expect(Object.keys(fc.features[0].properties).sort()).toEqual(
+      [
+        'obs_id',
+        'recorded_at',
+        'fix_at',
+        'lat',
+        'lon',
+        'gps_accuracy_m',
+        'altitude_m',
+        'altitude_accuracy_m',
+        'heading_deg',
+        'heading_accuracy_deg',
+        'note',
+        'photo',
+        'audio',
+        'audio_duration_ms',
+        'feature_layer',
+        'feature_id',
+        'feature_label',
+        'os_grid_ref',
+        'position_source',
+        'trace_length_m',
+        'ref_obs_id',
+        'ref_photo',
+        'session_name',
+        'app_version',
+      ].sort(),
+    );
   });
 });

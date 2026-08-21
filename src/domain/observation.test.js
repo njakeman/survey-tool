@@ -36,8 +36,36 @@ describe('createObservation', () => {
       geometry: null,
       audioDurationMs: null,
       changedAt: null,
+      referenceObservationId: null,
+      referencePhoto: null,
       synced: false,
       syncedAt: null,
+    });
+  });
+
+  describe('revisit pairing', () => {
+    test('carries the reference station it revisits, and that station’s photo filename', () => {
+      const obs = createObservation({
+        ...baseFields,
+        referenceObservationId: 'ref-obs-4',
+        referencePhoto: 'ref-obs-4.jpg',
+      });
+
+      expect(obs.referenceObservationId).toBe('ref-obs-4');
+      expect(obs.referencePhoto).toBe('ref-obs-4.jpg');
+    });
+
+    test('a station with no photo still pairs — the id alone is a legal link', () => {
+      const obs = createObservation({ ...baseFields, referenceObservationId: 'ref-obs-4' });
+
+      expect(obs.referenceObservationId).toBe('ref-obs-4');
+      expect(obs.referencePhoto).toBeNull();
+    });
+
+    test('rejects a reference photo without its station — a filename joins to nothing', () => {
+      expect(() => createObservation({ ...baseFields, referencePhoto: 'ref-obs-4.jpg' })).toThrow(
+        /referencePhoto/,
+      );
     });
   });
 

@@ -68,6 +68,14 @@ function observationToFeature(obs, session, appVersion, gridRef, audioFilename) 
       // Walked length of a trace, null on every point row — emitted always,
       // for the same column-set reason as the feature link above.
       trace_length_m: traceLengthM(geometry),
+      // The revisit pairing: the reference station this observation revisits
+      // and that station's photo filename inside the reference zip. Emitted
+      // on every row (`?? null`, the feature-link precedent) — which changed
+      // the exported bytes of existing sessions once, free while nothing
+      // diffs old exports against new ones. The pairing key is what makes a
+      // longitudinal record joinable; it must never drop.
+      ref_obs_id: obs.referenceObservationId ?? null,
+      ref_photo: obs.referencePhoto ?? null,
       session_name: session.name,
       app_version: appVersion,
     },
@@ -87,12 +95,32 @@ function compareObservations(a, b) {
 export function sessionToFeatureCollection(
   session,
   observations,
-  { appVersion, gridRef, audioFilename },
+  { appVersion, gridRef, audioFilename, revisitStations },
 ) {
   const features = observations
     .slice()
     .sort(compareObservations)
     .map((obs) => observationToFeature(obs, session, appVersion, gridRef, audioFilename));
+
+  // A second foreign member for revisit sessions only — absent entirely for
+  // ordinary surveys, so their canonical bytes carry no member their
+  // sessions never had. Names the reference export (self-describing, not
+  // self-contained: the reference itself is never copied in) and carries
+  // every station with its end state, so the consumer sees the whole plan,
+  // not just the stations that produced a feature.
+  const revisit =
+    session.sessionType === 'revisit' && session.reference
+      ? {
+          survey_revisit: {
+            reference_file: session.reference.filename,
+            reference_hash: session.reference.hash,
+            reference_session_id: session.reference.sessionId ?? null,
+            reference_session_name: session.reference.sessionName ?? null,
+            reference_started_at: session.reference.startedAt ?? null,
+            stations: revisitStations ?? [],
+          },
+        }
+      : {};
 
   return {
     type: 'FeatureCollection',
@@ -109,6 +137,7 @@ export function sessionToFeatureCollection(
       started_at: session.startedAt,
       ended_at: session.endedAt ?? null,
     },
+    ...revisit,
     features,
   };
 }
