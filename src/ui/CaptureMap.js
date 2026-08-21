@@ -46,6 +46,8 @@ export function CaptureMap({
   pickedPoint,
   onPickPoint,
   activeTrace,
+  stations = null,
+  currentStationId = null,
   canPick = true,
   gridRef,
   visible,
@@ -213,6 +215,17 @@ export function CaptureMap({
   }, [selectedFeature, adapterReady]);
 
   useEffect(() => {
+    // Revisit stations. Keyed on the derived array reference (CapturePage
+    // memoises it per observation/claim change) plus the current target —
+    // never per GPS tick.
+    guarded(() =>
+      adapterRef.current?.setStations?.(
+        stations ? { stations, currentId: currentStationId } : null,
+      ),
+    );
+  }, [stations, currentStationId, adapterReady]);
+
+  useEffect(() => {
     // The CSS filter handles the tiles; the canvas-drawn trace casings need
     // their colour flipped to hold against the dimmed ground.
     guarded(() => adapterRef.current?.setNightMode?.(night));
@@ -310,6 +323,15 @@ export function CaptureMap({
         // to open the picker.
         regionName
           ? html`<p class="capture-map-caption capture-map-region">${regionName}</p>`
+          : null
+      }
+      ${
+        // How many reference stations this revisit stands against — the
+        // diamonds' legend, in one number. Natural case; CSS uppercases.
+        stations && stations.length > 0
+          ? html`<p class="capture-map-caption capture-map-stations">
+              <span aria-hidden="true">◆</span> Stations · ${stations.length}
+            </p>`
           : null
       }
       ${

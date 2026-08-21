@@ -15,6 +15,7 @@ function fakeAdapter() {
     setPickedPoint: vi.fn(),
     setHighlight: vi.fn(),
     setActiveTrace: vi.fn(),
+    setStations: vi.fn(),
     setNightMode: vi.fn(),
     setLocator: vi.fn(),
     centreOn: vi.fn(),
@@ -542,5 +543,55 @@ describe('CaptureMap - active trace', () => {
 
     await waitFor(() => expect(adapter.setActiveTrace).toHaveBeenCalled());
     expect(screen.queryByRole('button', { name: /mark a distant point/i })).toBeNull();
+  });
+});
+
+describe('CaptureMap — revisit stations', () => {
+  const STATIONS = [
+    { id: 'ref-1', lat: 51.5, lon: -0.14, state: 'done' },
+    { id: 'ref-2', lat: 51.501, lon: -0.141, state: 'todo' },
+  ];
+
+  test('forwards the stations and current target to the adapter', async () => {
+    const adapter = fakeAdapter();
+    renderMap({
+      createMap: vi.fn().mockResolvedValue(adapter),
+      stations: STATIONS,
+      currentStationId: 'ref-2',
+    });
+
+    await waitFor(() =>
+      expect(adapter.setStations).toHaveBeenCalledWith({
+        stations: STATIONS,
+        currentId: 'ref-2',
+      }),
+    );
+  });
+
+  test('clears the stations when a revisit ends', async () => {
+    const adapter = fakeAdapter();
+    const { rerender } = renderMap({
+      createMap: vi.fn().mockResolvedValue(adapter),
+      stations: STATIONS,
+      currentStationId: null,
+    });
+    await waitFor(() => expect(adapter.setStations).toHaveBeenCalled());
+
+    rerender({ stations: null, currentStationId: null });
+
+    await waitFor(() => expect(adapter.setStations).toHaveBeenLastCalledWith(null));
+  });
+
+  test('shows the station count badge while a revisit is under way', async () => {
+    renderMap({ stations: STATIONS, currentStationId: null });
+
+    // Natural case in the DOM; CSS uppercases (docs/styling.md).
+    expect(screen.getByText(/Stations · 2/)).toBeInTheDocument();
+  });
+
+  test('no stations, no badge', () => {
+    renderMap({});
+
+    expect(screen.queryByText(/Stations ·/)).toBeNull();
   });
 });

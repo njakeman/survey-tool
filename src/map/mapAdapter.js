@@ -16,8 +16,13 @@ import {
   activeTraceData,
   activeTraceLayers,
   traceCasingColor,
+  stationsCollection,
+  stationLayers,
+  stationDiamondImage,
   OBSERVATION_SHAPES_SOURCE_ID,
   ACTIVE_TRACE_SOURCE_ID,
+  STATIONS_SOURCE_ID,
+  STATION_ICONS,
 } from './overlays.js';
 import {
   featureLayerIds,
@@ -250,6 +255,7 @@ export async function createMapAdapter({
   let pendingHighlight;
   let pendingActiveTrace;
   let pendingNightMode;
+  let pendingStations;
 
   function featureLayersBefore() {
     // beforeId only once the target layers exist. During the initial load
@@ -347,6 +353,19 @@ export async function createMapAdapter({
         map.addLayer(definition);
       }
 
+      // Revisit stations: targets on the ground, above the walked shapes,
+      // below the accuracy ring and markers (nothing may cover the fix).
+      // The three diamond images are rasterised at runtime (overlays.js) —
+      // no sprite files, nothing new to precache.
+      for (const [variant, name] of Object.entries(STATION_ICONS)) {
+        const image = stationDiamondImage(variant);
+        map.addImage(name, image, { pixelRatio: image.pixelRatio });
+      }
+      map.addSource(STATIONS_SOURCE_ID, { type: 'geojson', data: stationsCollection(null, null) });
+      for (const definition of stationLayers()) {
+        map.addLayer(definition);
+      }
+
       // The paint lives in overlays.js with the rest of the pure marker
       // logic, so the pending/synced distinction is node-testable rather
       // than only visible on a real map.
@@ -399,6 +418,10 @@ export async function createMapAdapter({
       if (pendingActiveTrace !== undefined) {
         setActiveTrace(pendingActiveTrace);
         pendingActiveTrace = undefined;
+      }
+      if (pendingStations !== undefined) {
+        setStations(pendingStations);
+        pendingStations = undefined;
       }
       if (pendingNightMode !== undefined) {
         setNightMode(pendingNightMode);
@@ -507,6 +530,19 @@ export async function createMapAdapter({
     // point, and the traced ones their walked shape underneath.
     map.getSource('observations')?.setData(observationsFeatureCollection(observations));
     map.getSource(OBSERVATION_SHAPES_SOURCE_ID)?.setData(observationShapesCollection(observations));
+  }
+
+  // Revisit stations, as { stations, currentId } or null. One setData feeds
+  // the whole set — the current target is baked into each feature's icon by
+  // stationsCollection, so there is no second pending slot to race.
+  function setStations(state) {
+    if (!styleLoaded) {
+      pendingStations = state;
+      return;
+    }
+    map
+      .getSource(STATIONS_SOURCE_ID)
+      ?.setData(stationsCollection(state?.stations, state?.currentId ?? null));
   }
 
   // The walk in progress, as a bare coordinates array (or null). Rendered
@@ -673,6 +709,7 @@ export async function createMapAdapter({
     setPickedPoint,
     setHighlight,
     setActiveTrace,
+    setStations,
     setNightMode,
     setLocator,
     // The browser tier's read-through: whether the DOM marker is on the map.

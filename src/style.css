@@ -841,6 +841,26 @@ button {
   background: color-mix(in srgb, var(--paper) 72%, transparent);
 }
 
+/* The revisit stations count — the diamonds' legend in one number. Stacked
+   under the region pill (both top-left; the bottom edge belongs to the
+   control row), same pill treatment, uppercased like every label. */
+.capture-map-stations {
+  position: absolute;
+  top: calc(var(--space-2) + 1.65rem);
+  left: var(--space-2);
+  z-index: 1;
+  font-size: var(--type-badge);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+  padding: 3px 6px;
+  border-radius: 3px;
+  border: 1px solid var(--control-rule);
+  background: color-mix(in srgb, var(--paper) 72%, transparent);
+  color: color-mix(in srgb, var(--ink) 72%, transparent);
+}
+
 /* Every map control in one row, thumb-reachable along the bottom edge rather
    than under the hand holding the phone.
    

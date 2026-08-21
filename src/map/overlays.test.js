@@ -11,8 +11,13 @@ import {
   activeTraceData,
   activeTraceLayers,
   traceCasingColor,
+  stationsCollection,
+  stationLayers,
+  stationDiamondImage,
   OBSERVATION_SHAPES_SOURCE_ID,
   ACTIVE_TRACE_SOURCE_ID,
+  STATIONS_SOURCE_ID,
+  STATION_ICONS,
 } from './overlays.js';
 
 describe('positionFeature', () => {
@@ -304,5 +309,95 @@ describe('active trace', () => {
     const casing = activeTraceLayers().find((l) => l.id === 'active-trace-line-casing');
     expect(casing.paint['line-color']).toBe(traceCasingColor());
     expect(casing.paint['line-dasharray']).toBeUndefined();
+  });
+});
+
+describe('station markers', () => {
+  const stations = [
+    { id: 'ref-1', lat: 51.5, lon: -0.14, state: 'done' },
+    { id: 'ref-2', lat: 51.501, lon: -0.141, state: 'todo' },
+    { id: 'ref-3', lat: 51.502, lon: -0.142, state: 'noAccess' },
+  ];
+
+  test('stationsCollection bakes one icon per station, the current one outranking its state', () => {
+    const fc = stationsCollection(stations, 'ref-2');
+
+    expect(fc.features.map((f) => f.properties.icon)).toEqual([
+      STATION_ICONS.done,
+      STATION_ICONS.current,
+      STATION_ICONS.todo,
+    ]);
+    expect(fc.features.map((f) => f.properties.station_id)).toEqual(['ref-1', 'ref-2', 'ref-3']);
+    expect(fc.features[0].geometry).toEqual({ type: 'Point', coordinates: [-0.14, 51.5] });
+  });
+
+  test('a skipped or no-access station draws hollow like to-do — no new photo yet either way', () => {
+    const fc = stationsCollection(stations, null);
+
+    expect(fc.features[2].properties.icon).toBe(STATION_ICONS.todo);
+  });
+
+  test('an empty or missing list is an empty collection', () => {
+    expect(stationsCollection(null, null).features).toEqual([]);
+  });
+
+  test('the symbol layer reads the baked icon and never hides overlapping stations', () => {
+    const [layer] = stationLayers();
+
+    expect(layer.type).toBe('symbol');
+    expect(layer.source).toBe(STATIONS_SOURCE_ID);
+    expect(layer.layout['icon-image']).toEqual(['get', 'icon']);
+    // Two stations ten metres apart must both stay visible — symbol
+    // placement culling would silently drop one.
+    expect(layer.layout['icon-allow-overlap']).toBe(true);
+    expect(layer.layout['icon-ignore-placement']).toBe(true);
+  });
+
+  // The image assertions read alpha, not hue: filled-versus-hollow is the
+  // signal that has to survive greyscale and the night filter.
+  function alphaAt(image, x, y) {
+    return image.data[(y * image.width + x) * 4 + 3];
+  }
+
+  test('done is a filled diamond, to-do a hollow one — alpha at the centre tells them apart', () => {
+    const done = stationDiamondImage('done');
+    const todo = stationDiamondImage('todo');
+    const cx = Math.floor(done.width / 2);
+    const cy = Math.floor(done.height / 2);
+
+    expect(done.width).toBe(todo.width);
+    expect(alphaAt(done, cx, cy)).toBe(255);
+    expect(alphaAt(todo, cx, cy)).toBe(0);
+    // Both still draw a diamond: an opaque band sits on the diagonal edge.
+    expect(alphaAt(todo, cx, cy - 14)).toBe(255);
+    expect(alphaAt(done, cx, cy - 14)).toBe(255);
+  });
+
+  test('the current image adds a ring beyond the diamond — shape, not colour, marks the target', () => {
+    const done = stationDiamondImage('done');
+    const current = stationDiamondImage('current');
+
+    const maxOpaqueRadius = (image) => {
+      const c = (image.width - 1) / 2;
+      let max = 0;
+      for (let y = 0; y < image.height; y += 1) {
+        for (let x = 0; x < image.width; x += 1) {
+          if (image.data[(y * image.width + x) * 4 + 3] > 0) {
+            max = Math.max(max, Math.hypot(x - c, y - c));
+          }
+        }
+      }
+      return max;
+    };
+
+    expect(maxOpaqueRadius(current)).toBeGreaterThan(maxOpaqueRadius(done) + 4);
+  });
+
+  test('the image data is plain bytes at a declared pixel ratio, addImage-ready', () => {
+    const image = stationDiamondImage('done');
+
+    expect(image.data).toBeInstanceOf(Uint8ClampedArray);
+    expect(image.data.length).toBe(image.width * image.height * 4);
+    expect(image.pixelRatio).toBe(2);
   });
 });

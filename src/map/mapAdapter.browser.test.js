@@ -263,6 +263,54 @@ describe('mapAdapter against real MapLibre', () => {
     expect(await adapter.getSourceFeatureCount('observations')).toBe(2);
   });
 
+  test('stations draw above the traces and below the accuracy ring', async () => {
+    // A station diamond is a target on the ground: above the walked shapes,
+    // never above the live fix or its ring. Only the composed stack can
+    // prove the order, same as the feature-layer guarantee below.
+    const adapter = await createAdapter();
+    await adapter.ready;
+
+    adapter.setStations({
+      stations: [
+        { id: 'ref-1', lat: 51.5, lon: -0.14, state: 'done' },
+        { id: 'ref-2', lat: 51.51, lon: -0.15, state: 'todo' },
+      ],
+      currentId: 'ref-2',
+    });
+
+    const order = adapter.getLayerOrder();
+    expect(await adapter.getSourceFeatureCount('stations')).toBe(2);
+    expect(order.indexOf('stations-symbols')).toBeGreaterThan(order.indexOf('active-trace-line'));
+    expect(order.indexOf('stations-symbols')).toBeLessThan(order.indexOf('position-accuracy'));
+  });
+
+  test('stations set before the style has loaded are applied, not dropped', async () => {
+    // A reopened revisit hands its stations over once, on the same early
+    // tick as everything else CaptureMap forwards.
+    const adapter = await createAdapter();
+
+    adapter.setStations({
+      stations: [{ id: 'ref-1', lat: 51.5, lon: -0.14, state: 'todo' }],
+      currentId: null,
+    });
+
+    await adapter.ready;
+    expect(await adapter.getSourceFeatureCount('stations')).toBe(1);
+  });
+
+  test('clearing the stations empties the source — ending a revisit leaves no ghosts', async () => {
+    const adapter = await createAdapter();
+    await adapter.ready;
+
+    adapter.setStations({
+      stations: [{ id: 'ref-1', lat: 51.5, lon: -0.14, state: 'todo' }],
+      currentId: null,
+    });
+    adapter.setStations(null);
+
+    expect(await adapter.getSourceFeatureCount('stations')).toBe(0);
+  });
+
   test('a cleared fix set before load stays cleared, rather than being replayed', async () => {
     const adapter = await createAdapter();
 

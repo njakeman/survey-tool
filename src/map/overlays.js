@@ -215,6 +215,114 @@ export function traceShapeLayers() {
   ];
 }
 
+// Revisit stations: the reference survey's observations as map targets.
+// Diamonds against the observations' circles — a station is a place to
+// stand, not a record — with the exported vocabulary reused: filled = done,
+// hollow = still to do, and the current target wears a ring. The rotated
+// square needed a symbol layer with images (the route the circle-layer note
+// above left unbuilt); the images are generated at runtime by
+// stationDiamondImage below — no sprite files, nothing new to precache.
+export const STATIONS_SOURCE_ID = 'stations';
+
+export const STATION_ICONS = {
+  done: 'station-done',
+  todo: 'station-todo',
+  current: 'station-current',
+};
+
+// One baked icon per feature rather than a state expression: skipped and
+// no-access draw hollow like to-do (no new photo exists either way — the
+// words live in the station list), so only three images exist, and baking
+// keeps the layer static and this function the only place with an opinion.
+export function stationsCollection(stations, currentId) {
+  return {
+    type: 'FeatureCollection',
+    features: (stations ?? []).map((station) => ({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [station.lon, station.lat] },
+      properties: {
+        station_id: station.id,
+        icon:
+          station.id === currentId
+            ? STATION_ICONS.current
+            : station.state === 'done'
+              ? STATION_ICONS.done
+              : STATION_ICONS.todo,
+      },
+    })),
+  };
+}
+
+export function stationLayers() {
+  return [
+    {
+      id: 'stations-symbols',
+      type: 'symbol',
+      source: STATIONS_SOURCE_ID,
+      layout: {
+        'icon-image': ['get', 'icon'],
+        // Two stations ten metres apart must both stay visible — symbol
+        // placement culling would silently drop one, and a dropped target
+        // reads as "already done".
+        'icon-allow-overlap': true,
+        'icon-ignore-placement': true,
+      },
+    },
+  ];
+}
+
+// The three station images, rasterised here rather than shipped as sprites:
+// pure byte-pushing, so filled-versus-hollow is node-testable by reading
+// alpha. Drawn at 2× and declared so via pixelRatio, addImage-ready.
+// Geometry in data pixels: a diamond is the L1 ball |x|+|y| <= r.
+const STATION_IMAGE_SIZE = 56; // 28 CSS px
+const STATION_DIAMOND_R = 16;
+const STATION_STROKE = 4;
+const STATION_CASING = 3;
+const STATION_RING_R = 24;
+const STATION_RING_W = 4;
+
+const INK_RGB = [30, 36, 51]; // MARKER_INK
+const OUTLINE_RGB = [244, 240, 232]; // MARKER_OUTLINE
+const ACCENT_RGB = [194, 97, 31]; // the picked point's accent
+
+export function stationDiamondImage(variant) {
+  const size = STATION_IMAGE_SIZE;
+  const data = new Uint8ClampedArray(size * size * 4);
+  const centre = (size - 1) / 2;
+  const fillRgb = variant === 'current' ? ACCENT_RGB : variant === 'done' ? INK_RGB : null;
+
+  for (let y = 0; y < size; y += 1) {
+    for (let x = 0; x < size; x += 1) {
+      const d1 = Math.abs(x - centre) + Math.abs(y - centre);
+      let rgb = null;
+      if (d1 <= STATION_DIAMOND_R - STATION_STROKE) {
+        rgb = fillRgb; // hollow stays transparent
+      } else if (d1 <= STATION_DIAMOND_R) {
+        // The stroke band: the fill colour where there is one, ink on the
+        // hollow variant — the diamond must exist either way.
+        rgb = fillRgb ?? INK_RGB;
+      } else if (d1 <= STATION_DIAMOND_R + STATION_CASING) {
+        // Pale casing, the same trick as the trace lines: holds on dark
+        // aerial imagery where bare ink disappears.
+        rgb = OUTLINE_RGB;
+      } else if (variant === 'current') {
+        const d2 = Math.hypot(x - centre, y - centre);
+        if (Math.abs(d2 - STATION_RING_R) <= STATION_RING_W / 2) rgb = ACCENT_RGB;
+      }
+      if (rgb) {
+        const at = (y * size + x) * 4;
+        data[at] = rgb[0];
+        data[at + 1] = rgb[1];
+        data[at + 2] = rgb[2];
+        data[at + 3] = 255;
+      }
+    }
+  }
+
+  return { width: size, height: size, data, pixelRatio: 2 };
+}
+
 // The trace being walked right now. Accent and dashed — the provisional
 // visual language of the picked point, against the ink of saved shapes.
 export const ACTIVE_TRACE_SOURCE_ID = 'active-trace';
