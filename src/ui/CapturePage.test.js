@@ -1876,6 +1876,33 @@ describe('CapturePage — revisit', () => {
     expect(screen.getByText('Culvert head')).toBeInTheDocument();
   });
 
+  test('Frame the photo opens the framing step, and the shot lands in the compose photo', async () => {
+    const service = revisitService();
+    const { sensors, pushPosition } = createFakeSensors();
+    const downscale = vi
+      .fn()
+      .mockResolvedValue({ blob: new Blob(['x'], { type: 'image/jpeg' }), width: 100, height: 80 });
+    renderPage({ service, sensors, downscale });
+    pushPosition(POSITION);
+    await screen.findByText('Station 1 of 2');
+
+    fireEvent.click(screen.getByRole('button', { name: /frame the photo/i }));
+    await screen.findByRole('dialog', { name: /frame the photo/i });
+
+    const file = new File([new Uint8Array([1])], 'photo.jpg', { type: 'image/jpeg' });
+    fireEvent.change(document.querySelector('.framing-screen input[type="file"]'), {
+      target: { files: [file] },
+    });
+
+    await waitFor(() => expect(downscale).toHaveBeenCalledWith(file));
+    // The step closes; capture is back with the photo attached and the
+    // station still armed for Save.
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: /frame the photo/i })).toBeNull(),
+    );
+    expect(screen.getByText(/revisiting: west stile/i)).toBeInTheDocument();
+  });
+
   test('a missing reference degrades to a plain session with one honest line', async () => {
     const service = revisitService({ referenceRecord: undefined });
     const { sensors, pushPosition } = createFakeSensors();

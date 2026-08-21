@@ -1,5 +1,4 @@
 import { html } from 'htm/preact';
-import { render } from 'preact';
 import {
   formatLatLon,
   formatAccuracy,
@@ -14,35 +13,9 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { ExportBadge } from './ExportBadge.js';
 import { TraceGlyph } from './traceGlyphs.js';
 import { VoiceTransport } from './VoiceTransport.js';
+import { BodyPortal } from './BodyPortal.js';
 
 const cameraGlyph = html`<span class="glyph-camera" aria-hidden="true"></span>`;
-
-// A hand-rolled portal: renders its children into a container appended to
-// document.body, so a position:fixed overlay can never be captured by an
-// ancestor's filter/transform (design pass 4 §7c). Deliberately NOT
-// preact/compat's createPortal — importing compat patches Preact's global
-// options as a side effect (onChange re-aliasing among them), which broke
-// the file inputs' change handlers app-wide when tried.
-function BodyPortal({ children }) {
-  const containerRef = useRef(null);
-  if (!containerRef.current) {
-    containerRef.current = document.createElement('div');
-  }
-  useEffect(() => {
-    const el = containerRef.current;
-    document.body.appendChild(el);
-    return () => {
-      render(null, el);
-      el.remove();
-    };
-  }, []);
-  // No deps: the overlay's content closes over row state (busy, the delete
-  // confirm), so it must re-render with every parent render.
-  useEffect(() => {
-    render(children, containerRef.current);
-  });
-  return null;
-}
 
 // A saved voice note, loaded only when the surveyor asks to hear it — the
 // bytes stay in IndexedDB until the tap. The chip states the duration when

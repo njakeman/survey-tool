@@ -3121,6 +3121,145 @@ button {
    the brightest thing on a screen whose subject is a photograph), and one
    caption line says which record this is. Rendered through a body portal —
    see BodyPortal in ObservationsList.js. */
+/* ---- Framing screen (revisit, design 8c) ------------------------------- */
+
+/* The photo lightbox's skeleton: fixed, scrimmed near-black in every mode,
+   controls inside the safe-area insets, z-index 10 (the lightbox tier). */
+.framing-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: calc(env(safe-area-inset-top, 0px) + var(--space-3)) var(--space-3)
+    calc(env(safe-area-inset-bottom, 0px) + var(--space-3));
+  background: rgba(13, 14, 17, 0.94);
+  color: #f4f0e8;
+}
+
+.framing-screen-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.framing-screen-back {
+  flex: none;
+  min-width: var(--touch-target);
+  min-height: var(--touch-target);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid rgba(244, 240, 232, 0.4);
+  border-radius: var(--radius);
+  color: inherit;
+}
+
+.framing-screen-back svg {
+  width: 15px;
+  height: 15px;
+}
+
+.framing-screen-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--type-control);
+  font-weight: 700;
+}
+
+.framing-screen-count {
+  font-weight: 400;
+  color: rgba(244, 240, 232, 0.7);
+  font-variant-numeric: tabular-nums;
+}
+
+.framing-screen-walk {
+  flex: none;
+  font-size: var(--type-control);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.framing-screen-label {
+  margin: 0;
+  font-family: var(--font-label);
+  font-size: var(--type-label);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(244, 240, 232, 0.7);
+}
+
+/* With no live view sharing the height (native camera, no overlay), the
+   reference takes the whole middle of the screen — this IS the "at size"
+   the step exists for. */
+.framing-screen-reference {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+}
+
+.framing-screen-photo {
+  max-width: 100%;
+  max-height: calc(
+    100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 12rem
+  );
+  object-fit: contain;
+  border-radius: var(--radius);
+}
+
+.framing-screen-caption {
+  margin: 0;
+  font-family: var(--font-label);
+  font-size: var(--type-badge);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: rgba(244, 240, 232, 0.85);
+  font-variant-numeric: tabular-nums;
+}
+
+.framing-screen-note {
+  margin: 0;
+  font-size: var(--type-small);
+  color: rgba(244, 240, 232, 0.75);
+  text-align: center;
+}
+
+.framing-screen-foot {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* The shutter is a label wearing the accent treatment — labels miss the
+   global button min-height, so it is restated, taller than the floor: this
+   is the one control the whole step exists for. */
+.framing-screen-shutter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 4rem;
+  font-size: var(--type-title);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.framing-screen-hint {
+  margin: 0;
+  font-size: var(--type-fine);
+  color: rgba(244, 240, 232, 0.7);
+  text-align: center;
+}
+
 .photo-lightbox {
   position: fixed;
   inset: 0;

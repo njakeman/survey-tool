@@ -14,6 +14,7 @@ import { TraceStrip } from './TraceStrip.js';
 import { TraceGlyph } from './traceGlyphs.js';
 import { StationBlock } from './StationBlock.js';
 import { StationList } from './StationList.js';
+import { FramingScreen } from './FramingScreen.js';
 import { formatLatLon } from '../sensors/format.js';
 import { chooseActive } from '../map/basemapSelection.js';
 import {
@@ -130,6 +131,7 @@ export function CapturePage({
   // no-access) or the surveyor changes it deliberately.
   const [currentStationId, setCurrentStationId] = useState(null);
   const [choosingStation, setChoosingStation] = useState(false);
+  const [framing, setFraming] = useState(false);
   // "Record something new instead": the next Save deliberately carries no
   // pairing. Holds the id of the station it disarms rather than a bare
   // flag, so changing target re-arms by construction — no reset effect to
@@ -464,6 +466,7 @@ export function CapturePage({
       setStationClaims([]);
       setCurrentStationId(null);
       setChoosingStation(false);
+      setFraming(false);
       setRecordNewFor(null);
       setSkippedNotice(null);
       return undefined;
@@ -566,6 +569,14 @@ export function CapturePage({
     } catch (error) {
       setSaveError(error.message || 'Could not undo that skip');
     }
+  }
+
+  // The framed shot: close the step first, then run the shared downscale
+  // path — the photo lands in the same compose state a direct pick would,
+  // with the station still armed for Save.
+  async function handleFramedPhoto(file) {
+    setFraming(false);
+    await handlePhotoSelect(file);
   }
 
   async function handleNoAccess(reason) {
@@ -927,9 +938,25 @@ export function CapturePage({
               referenceStartedAt=${session?.reference?.startedAt}
               busy=${saveState === 'saving'}
               onChange=${() => setChoosingStation(true)}
-              onFrame=${() => {}}
+              onFrame=${() => setFraming(true)}
               onSkip=${handleSkipStation}
               onNoAccess=${handleNoAccess}
+            />`
+          : null
+      }
+      ${
+        // The framing step, full-screen through BodyPortal — the one moment
+        // the reference photo has to be on screen at size.
+        framing && revisit && currentStation && referenceState && referenceState !== 'missing'
+          ? html`<${FramingScreen}
+              station=${currentStation}
+              stationCount=${derivedStations.length}
+              position=${position}
+              referenceStartedAt=${session?.reference?.startedAt}
+              readPhoto=${referenceState.readPhoto}
+              busy=${photoBusy}
+              onPhoto=${handleFramedPhoto}
+              onClose=${() => setFraming(false)}
             />`
           : null
       }
