@@ -36,7 +36,9 @@ export function parseReferenceExport(geojsonData, entryNames) {
   const stations = collection.features.map((feature, index) => {
     const observation = observationFrom(feature, index, 'reference');
     const claimed = feature?.properties?.photo ?? null;
-    const entryName = claimed ? (entryByLowerName.get(`photos/${claimed}`.toLowerCase()) ?? null) : null;
+    const entryName = claimed
+      ? (entryByLowerName.get(`photos/${claimed}`.toLowerCase()) ?? null)
+      : null;
     return {
       ...observation,
       photoFilename: entryName ? claimed : null,

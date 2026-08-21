@@ -43,9 +43,7 @@ export function RevisitSetup({
 }) {
   const [reviewing, setReviewing] = useState(false);
 
-  const errorLine = error
-    ? html`<p class="revisit-setup-error" role="alert">${error}</p>`
-    : null;
+  const errorLine = error ? html`<p class="revisit-setup-error" role="alert">${error}</p>` : null;
 
   if (!loaded) {
     // No hint line: the chooser button that revealed this block already
@@ -83,24 +81,25 @@ export function RevisitSetup({
         </button>
       </div>
     </div>
-    ${errorLine}
-    ${reviewing ? html`<${StationList} stations=${stations} />` : null}
-    ${nearest.length > 0
-      ? html`<div class="revisit-setup-nearest">
-          <p class="revisit-setup-label">
-            Nearest stations <span class="revisit-setup-caption">by distance</span>
-          </p>
-          <ul class="revisit-setup-nearest-list">
-            ${nearest.map(
-              ({ station, distanceM: away, bearingDeg: bearing }) =>
-                html`<li class="revisit-setup-nearest-row" key=${station.id}>
-                  <span class="revisit-setup-nearest-distance">${formatDistance(away)}</span>
-                  <span class="revisit-setup-nearest-name">${station.name}</span>
-                  <span class="revisit-setup-nearest-compass">${compassPoint(bearing)}</span>
-                </li>`,
-            )}
-          </ul>
-        </div>`
-      : null}
+    ${errorLine} ${reviewing ? html`<${StationList} stations=${stations} />` : null}
+    ${
+      nearest.length > 0
+        ? html`<div class="revisit-setup-nearest">
+            <p class="revisit-setup-label">
+              Nearest stations <span class="revisit-setup-caption">by distance</span>
+            </p>
+            <ul class="revisit-setup-nearest-list">
+              ${nearest.map(
+                ({ station, distanceM: away, bearingDeg: bearing }) =>
+                  html`<li class="revisit-setup-nearest-row" key=${station.id}>
+                    <span class="revisit-setup-nearest-distance">${formatDistance(away)}</span>
+                    <span class="revisit-setup-nearest-name">${station.name}</span>
+                    <span class="revisit-setup-nearest-compass">${compassPoint(bearing)}</span>
+                  </li>`,
+              )}
+            </ul>
+          </div>`
+        : null
+    }
   </div>`;
 }

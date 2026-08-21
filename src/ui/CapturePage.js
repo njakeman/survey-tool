@@ -12,6 +12,8 @@ import { CaptureMap } from './CaptureMap.js';
 import { FeatureSheet } from './FeatureSheet.js';
 import { TraceStrip } from './TraceStrip.js';
 import { TraceGlyph } from './traceGlyphs.js';
+import { StationBlock } from './StationBlock.js';
+import { StationList } from './StationList.js';
 import { formatLatLon } from '../sensors/format.js';
 import { chooseActive } from '../map/basemapSelection.js';
 import {
@@ -19,7 +21,10 @@ import {
   isExported,
   isChangedSinceExport,
   hasChangedSinceExport,
+  isRevisit,
 } from '../domain/session.js';
+import { deriveStations, nearestStations, revisitProgress } from '../domain/revisit.js';
+import { openReference } from '../import/referenceZip.js';
 import { polygonCentroid, polygonExtentM } from '../geo/centroid.js';
 import {
   acceptFix,
@@ -113,6 +118,24 @@ export function CapturePage({
   // Offered, never auto-resumed: recording again is a decision.
   const [recoveredDraft, setRecoveredDraft] = useState(null);
   const [confirmingRecoveredDiscard, setConfirmingRecoveredDiscard] = useState(false);
+
+  // Revisit mode. The reference is re-opened from IndexedDB whenever a
+  // revisit session is the open one (mount, start, reopen, force-quit
+  // relaunch) — 'missing' when eviction took the bytes, in which case the
+  // session still captures and one line says why the guidance is gone.
+  const [referenceState, setReferenceState] = useState(null); // null | 'missing' | { stations, readPhoto }
+  const [stationClaims, setStationClaims] = useState([]);
+  // Which station the guidance aims at. Sticky — never re-picked on a GPS
+  // tick; it advances only when the current one resolves (saved, skipped,
+  // no-access) or the surveyor changes it deliberately.
+  const [currentStationId, setCurrentStationId] = useState(null);
+  const [choosingStation, setChoosingStation] = useState(false);
+  // "Record something new instead": the next Save deliberately carries no
+  // pairing. Holds the id of the station it disarms rather than a bare
+  // flag, so changing target re-arms by construction — no reset effect to
+  // race the click that set it.
+  const [recordNewFor, setRecordNewFor] = useState(null);
+  const [skippedNotice, setSkippedNotice] = useState(null); // { id, name }
 
   const { reading: position, error: positionError } = usePosition(sensors.watchPosition);
   const {
@@ -208,12 +231,19 @@ export function CapturePage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [position, traceSession]);
 
-  async function handleStart(name) {
+  async function handleStart(name, loadedReference = null) {
     enableCompass(); // synchronous, before any await — iOS gesture rule
+    // The reference zip was read at pick time in SessionBar, on its own tap
+    // — nothing here may precede the enableCompass call above.
     setSessionBusy(true);
     setLastSaved(null); // an Undo must never cross a session boundary
     try {
-      await service.startSession(name);
+      await service.startSession(
+        name,
+        loadedReference
+          ? { reference: loadedReference.reference, referenceBuffer: loadedReference.buffer }
+          : {},
+      );
       await refreshSession();
     } finally {
       setSessionBusy(false);
@@ -374,6 +404,16 @@ export function CapturePage({
               fixAt: pendingTrace.fixAt,
             }
           : null,
+        // The revisit pairing: armed by the current station unless the
+        // surveyor disarmed it ("Record something new instead"), in which
+        // case this is exactly an ordinary observation.
+        station:
+          revisit && currentStation && !recordNew
+            ? {
+                referenceObservationId: currentStation.id,
+                referencePhoto: currentStation.photoFilename ?? null,
+              }
+            : null,
       });
       setNote('');
       setPhoto(null);
@@ -390,6 +430,8 @@ export function CapturePage({
       // attach the next observation to a place the surveyor has walked away
       // from — and unlike a stale note, nothing on screen would look wrong.
       setPickedPoint(null);
+      setRecordNewFor(null);
+      setSkippedNotice(null);
       setLastSaved(observation);
       await refreshSession();
     } catch (error) {
@@ -408,6 +450,133 @@ export function CapturePage({
     } catch (error) {
       // Keep lastSaved so the surveyor can retry the undo.
       setSaveError(error.message || 'Could not undo that save');
+    }
+  }
+
+  // ---- Revisit mode -------------------------------------------------------
+
+  const revisit = Boolean(session) && isRevisit(session);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!revisit) {
+      setReferenceState(null);
+      setStationClaims([]);
+      setCurrentStationId(null);
+      setChoosingStation(false);
+      setRecordNewFor(null);
+      setSkippedNotice(null);
+      return undefined;
+    }
+    (async () => {
+      try {
+        const [record, claims] = await Promise.all([
+          service.getReferenceRecord(session.id),
+          service.listStationStates(session.id),
+        ]);
+        if (cancelled) return;
+        setStationClaims(claims ?? []);
+        if (!record) {
+          setReferenceState('missing');
+          return;
+        }
+        const opened = await openReference(record.arrayBuffer);
+        if (!cancelled) {
+          setReferenceState({ stations: opened.stations, readPhoto: opened.readPhoto });
+        }
+      } catch {
+        // An unreadable reference degrades exactly like a missing one — the
+        // session must still capture.
+        if (!cancelled) setReferenceState('missing');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Keyed on the session's identity, not the record object — refreshSession
+    // replaces the object on every save.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [revisit, session?.id]);
+
+  const derivedStations = useMemo(
+    () =>
+      revisit && referenceState && referenceState !== 'missing'
+        ? deriveStations(referenceState.stations, observations, stationClaims)
+        : null,
+    [revisit, referenceState, observations, stationClaims],
+  );
+  const currentStation =
+    derivedStations?.find((station) => station.id === currentStationId) ?? null;
+  const stationProgress = derivedStations ? revisitProgress(derivedStations) : null;
+
+  useEffect(() => {
+    // The default target: nearest to-do, picked when there is no current
+    // station or the current one just resolved to done. Deliberately NOT
+    // keyed on position — the guidance must never change under a walking
+    // surveyor because a GPS tick reordered the distances. Any unresolved
+    // choice (to-do, skipped, no-access) is respected: re-aiming at a
+    // skipped station is a legal, deliberate act.
+    if (!derivedStations) {
+      if (currentStationId) setCurrentStationId(null);
+      return;
+    }
+    const current = derivedStations.find((station) => station.id === currentStationId);
+    if (current && current.state !== 'done') return;
+    const todos = derivedStations.filter((station) => station.state === 'todo');
+    if (todos.length === 0) {
+      if (currentStationId) setCurrentStationId(null);
+      return;
+    }
+    const next = position
+      ? (nearestStations(todos, position, 1)[0]?.station ?? todos[0])
+      : todos[0];
+    setCurrentStationId(next.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [derivedStations, currentStationId]);
+
+  // Whether the next Save is deliberately unpaired: only while the current
+  // station is the one the surveyor disarmed.
+  const recordNew = Boolean(currentStation) && recordNewFor === currentStation.id;
+
+  async function refreshStationClaims() {
+    setStationClaims((await service.listStationStates(session.id)) ?? []);
+  }
+
+  async function handleSkipStation() {
+    const station = currentStation;
+    if (!station) return;
+    try {
+      await service.setStationState(station.id, 'skipped');
+      await refreshStationClaims();
+      setSkippedNotice({ id: station.id, name: station.name });
+      // The advance: with the claim in place the pick effect finds the
+      // nearest remaining to-do.
+      setCurrentStationId(null);
+    } catch (error) {
+      setSaveError(error.message || 'Could not skip that station');
+    }
+  }
+
+  async function handleUndoSkip() {
+    if (!skippedNotice) return;
+    try {
+      await service.clearStationState(skippedNotice.id);
+      setSkippedNotice(null);
+      await refreshStationClaims();
+    } catch (error) {
+      setSaveError(error.message || 'Could not undo that skip');
+    }
+  }
+
+  async function handleNoAccess(reason) {
+    const station = currentStation;
+    if (!station) return;
+    try {
+      await service.setStationState(station.id, 'noAccess', reason);
+      await refreshStationClaims();
+      setCurrentStationId(null);
+    } catch (error) {
+      setSaveError(error.message || 'Could not record no access');
     }
   }
 
@@ -579,6 +748,8 @@ export function CapturePage({
         defaultName=${todayDateString()}
         observationCount=${observations.length}
         busy=${sessionBusy}
+        position=${position}
+        revisitProgress=${stationProgress}
         onStart=${handleStart}
         onEnd=${handleEnd}
       />
@@ -616,6 +787,8 @@ export function CapturePage({
         pickedPoint=${pickedPoint}
         onPickPoint=${setPickedPoint}
         activeTrace=${activeTraceCoords}
+        stations=${derivedStations}
+        currentStationId=${currentStationId}
         ${
           '' /* Marking a point and a pending trace arm the same Save; two
              provisional positions at once could only disagree. */
@@ -707,6 +880,78 @@ export function CapturePage({
         onRecord=${handleRecordHere}
         onDismiss=${() => setTappedFeature(null)}
       />
+      ${
+        // The revisit guidance: the one screen a revisit changes. A station
+        // waiting where a new survey has a blank note — everything below it
+        // (note, photo, voice, trace, Save) is the untouched compose path.
+        revisit && referenceState === 'missing'
+          ? html`<p class="revisit-missing" role="status">
+              Reference file missing — station guidance unavailable. Observations still save into
+              this session.
+            </p>`
+          : null
+      }
+      ${
+        revisit && derivedStations && choosingStation
+          ? html`<div class="station-chooser">
+              <div class="station-block-head">
+                <span class="station-block-label">Choose a station</span>
+                <button
+                  type="button"
+                  class="button-outline"
+                  onClick=${() => setChoosingStation(false)}
+                >
+                  Back
+                </button>
+              </div>
+              <${StationList}
+                stations=${derivedStations}
+                currentId=${currentStationId}
+                position=${position}
+                onSelect=${(id) => {
+                  setCurrentStationId(id);
+                  setChoosingStation(false);
+                }}
+              />
+            </div>`
+          : null
+      }
+      ${
+        revisit && derivedStations && !choosingStation && currentStation
+          ? html`<${StationBlock}
+              station=${currentStation}
+              stationCount=${derivedStations.length}
+              stations=${derivedStations}
+              currentId=${currentStationId}
+              position=${position}
+              referenceStartedAt=${session?.reference?.startedAt}
+              busy=${saveState === 'saving'}
+              onChange=${() => setChoosingStation(true)}
+              onFrame=${() => {}}
+              onSkip=${handleSkipStation}
+              onNoAccess=${handleNoAccess}
+            />`
+          : null
+      }
+      ${
+        revisit && derivedStations && !choosingStation && !currentStation
+          ? html`<p class="revisit-complete" role="status">
+              ${`All ${derivedStations.length} stations are accounted for — ${
+                stationProgress.done
+              } revisited. New observations still save as usual.`}
+            </p>`
+          : null
+      }
+      ${
+        // Skip is cheap and reversible, so it confirms after the fact —
+        // dismissed by the Undo, the next save, or simply moving on.
+        skippedNotice
+          ? html`<p class="revisit-skip-notice" role="status">
+              <span>${skippedNotice.name} skipped. It stays in the list and in the count.</span>
+              <button type="button" class="link" onClick=${handleUndoSkip}>Undo</button>
+            </p>`
+          : null
+      }
       ${
         // The observation being composed, as one group: note, then the
         // two-up Photo / Voice note row. Gated whole on the session (§5a) —
@@ -809,6 +1054,29 @@ export function CapturePage({
                 aria-label=${`Unlink ${linkedFeature.title}`}
               >
                 Unlink
+              </button>
+            </p>`
+          : null
+      }
+      ${
+        // The pairing strip: which station the next Save stands for, with a
+        // visible way out — the linked-feature idiom. Above Save because
+        // that is the moment it takes effect.
+        revisit && currentStation
+          ? html`<p class="linked-feature">
+              <span class="linked-feature-label">
+                ${recordNew ? 'Recording a new observation' : `Revisiting: ${currentStation.name}`}
+              </span>
+              <button
+                type="button"
+                class="link"
+                onClick=${() => setRecordNewFor(recordNew ? null : currentStation.id)}
+              >
+                ${
+                  recordNew
+                    ? `Revisit ${currentStation.name} instead`
+                    : 'Record something new instead'
+                }
               </button>
             </p>`
           : null

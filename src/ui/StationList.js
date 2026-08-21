@@ -50,15 +50,17 @@ export function StationList({ stations, currentId = null, position = null, onSel
       ${chipFor(station.state, isCurrent)}
     `;
     return html`<li class="station-list-row" key=${station.id}>
-      ${onSelect
-        ? html`<button
-            type="button"
-            class="station-list-select"
-            onClick=${() => onSelect(station.id)}
-          >
-            ${body}
-          </button>`
-        : html`<span class="station-list-static">${body}</span>`}
+      ${
+        onSelect
+          ? html`<button
+              type="button"
+              class="station-list-select"
+              onClick=${() => onSelect(station.id)}
+            >
+              ${body}
+            </button>`
+          : html`<span class="station-list-static">${body}</span>`
+      }
     </li>`;
   };
 

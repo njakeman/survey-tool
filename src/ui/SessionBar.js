@@ -17,6 +17,7 @@ export function SessionBar({
   observationCount = 0,
   busy = false,
   position = null,
+  revisitProgress = null,
   onStart,
   onEnd,
   // Injected like the sensor adapters, so tests hand in a fake; the real
@@ -86,15 +87,17 @@ export function SessionBar({
             'Load a previous export and re-photograph its stations.',
           )}
         </div>
-        ${revisit
-          ? html`<${RevisitSetup}
-              loaded=${loaded}
-              busy=${loadBusy}
-              error=${loadError}
-              position=${position}
-              onPickFile=${handlePickFile}
-            />`
-          : null}
+        ${
+          revisit
+            ? html`<${RevisitSetup}
+                loaded=${loaded}
+                busy=${loadBusy}
+                error=${loadError}
+                position=${position}
+                onPickFile=${handlePickFile}
+              />`
+            : null
+        }
         <label class="field">
           <span class="field-label">Session name</span>
           <input
@@ -128,6 +131,17 @@ export function SessionBar({
     <div class="session-bar">
       <span class="session-live-dot" aria-hidden="true"></span>
       <span class="session-name">${session.name}</span>
+      ${
+        // The one header change a revisit makes: what this session is, and
+        // how far through the stations it is. Natural case; CSS uppercases
+        // the chip.
+        revisitProgress
+          ? html`<span class="chip session-revisit-chip">Revisit</span>
+              <span class="session-revisit-progress"
+                >${revisitProgress.done} of ${revisitProgress.total} stations</span
+              >`
+          : null
+      }
       <span class="session-count">${observationCount} saved</span>
       ${
         confirmingEnd

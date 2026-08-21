@@ -46,10 +46,10 @@ function collectionBytes({ features, session = true }) {
 
 describe('parseReferenceExport', () => {
   test('returns the reference session identity, id included', () => {
-    const { session } = parseReferenceExport(
-      collectionBytes({ features: [feature({})] }),
-      ['session.geojson', 'photos/ref-1.jpg'],
-    );
+    const { session } = parseReferenceExport(collectionBytes({ features: [feature({})] }), [
+      'session.geojson',
+      'photos/ref-1.jpg',
+    ]);
 
     expect(session).toEqual({
       id: 'ref-sess-1',

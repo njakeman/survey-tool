@@ -27,9 +27,7 @@ function winningClaim(claims, record) {
 }
 
 export function deriveStations(refStations, observations, stateRecords) {
-  const doneIds = new Set(
-    observations.map((obs) => obs.referenceObservationId).filter(Boolean),
-  );
+  const doneIds = new Set(observations.map((obs) => obs.referenceObservationId).filter(Boolean));
   const claims = new Map();
   for (const record of stateRecords) {
     claims.set(record.refObsId, winningClaim(claims.get(record.refObsId), record));

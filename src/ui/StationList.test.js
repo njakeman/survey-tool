@@ -36,11 +36,13 @@ describe('StationList', () => {
   });
 
   test('the current station reads Current and shows the walk to it', () => {
-    render(html`<${StationList}
-      stations=${stations}
-      currentId="ref-2"
-      position=${{ lat: 51.5, lon: -0.14 }}
-    />`);
+    render(
+      html`<${StationList}
+        stations=${stations}
+        currentId="ref-2"
+        position=${{ lat: 51.5, lon: -0.14 }}
+      />`,
+    );
 
     expect(screen.getByText('Current')).toBeInTheDocument();
     // ~22 m due north of the fix.

@@ -1180,9 +1180,7 @@ describe('revisit sessions', () => {
 
     await service.clearStationState('ref-2');
 
-    expect((await service.listStationStates(session.id)).map((r) => r.refObsId)).toEqual([
-      'ref-3',
-    ]);
+    expect((await service.listStationStates(session.id)).map((r) => r.refObsId)).toEqual(['ref-3']);
   });
 
   test('a station claim with no open session is refused', async () => {

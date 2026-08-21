@@ -164,9 +164,11 @@ describe('stationsForExport', () => {
   });
 
   test('skipped exports as skipped — a deliberate pass is not the same as never reached', () => {
-    const stations = deriveStations(refStations, [], [
-      { refObsId: 'ref-1', state: 'skipped', reason: null },
-    ]);
+    const stations = deriveStations(
+      refStations,
+      [],
+      [{ refObsId: 'ref-1', state: 'skipped', reason: null }],
+    );
 
     expect(stationsForExport(stations)[0]).toEqual({
       ref_obs_id: 'ref-1',

@@ -168,10 +168,7 @@ describe('revisit exports', () => {
 
   async function seedRevisit(dbName, { withReferenceBytes = true } = {}) {
     const db = await openDatabase(dbName);
-    await putSession(
-      db,
-      makeSession({ name: '2026-08-21', sessionType: 'revisit', reference }),
-    );
+    await putSession(db, makeSession({ name: '2026-08-21', sessionType: 'revisit', reference }));
     if (withReferenceBytes) {
       await putReference(db, {
         sessionId: 'sess-1',

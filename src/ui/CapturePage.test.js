@@ -2,6 +2,7 @@ import { describe, expect, test, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/preact';
 import { html } from 'htm/preact';
 import { CapturePage } from './CapturePage.js';
+import { buildZip } from '../import/fixtures/buildZip.js';
 
 const OPEN_SESSION = {
   id: 'sess-1',
@@ -20,7 +21,13 @@ const POSITION = {
 };
 const HEADING = { headingDeg: 247, headingAccuracyDeg: 5, source: 'webkit-compass' };
 
-function createFakeService({ openSession = null, observations = [], traceDraft = null } = {}) {
+function createFakeService({
+  openSession = null,
+  observations = [],
+  traceDraft = null,
+  referenceRecord,
+  stationStates = [],
+} = {}) {
   return {
     getOpenSession: vi.fn().mockResolvedValue(openSession),
     startSession: vi.fn().mockResolvedValue(OPEN_SESSION),
@@ -38,6 +45,10 @@ function createFakeService({ openSession = null, observations = [], traceDraft =
     appendTraceVertex: vi.fn().mockResolvedValue(undefined),
     getTraceDraft: vi.fn().mockResolvedValue(traceDraft),
     discardTraceDraft: vi.fn().mockResolvedValue(undefined),
+    getReferenceRecord: vi.fn().mockResolvedValue(referenceRecord),
+    listStationStates: vi.fn().mockResolvedValue(stationStates),
+    setStationState: vi.fn().mockResolvedValue(undefined),
+    clearStationState: vi.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -421,11 +432,13 @@ describe('CapturePage — saving an observation', () => {
         audio: null,
         // All explicitly null rather than omitted, and asserted as part of
         // the exact object: an observation with no source feature, no
-        // marked point and no pending trace has to say so, or a stale one
-        // from a previous save could slip through unnoticed.
+        // marked point, no pending trace and no station pairing has to say
+        // so, or a stale one from a previous save could slip through
+        // unnoticed.
         feature: null,
         pickedPoint: null,
         trace: null,
+        station: null,
       }),
     );
   });
@@ -1678,5 +1691,211 @@ describe('CapturePage - trace modes', () => {
     expect(panel).not.toBeNull();
     expect(panel.querySelector('.trace-strip-dot')).toBeNull();
     expect(screen.getByRole('button', { name: 'Resume' }).className).toContain('button-primary');
+  });
+});
+
+describe('CapturePage — revisit', () => {
+  const REFERENCE = {
+    filename: 'long-barrow-2025-04-12.zip',
+    hash: 'a'.repeat(64),
+    sessionId: 'ref-sess-1',
+    sessionName: 'Long Barrow south',
+    startedAt: '2025-04-12T09:00:00.000Z',
+    stationCount: 2,
+    photoCount: 1,
+  };
+  const REVISIT_SESSION = { ...OPEN_SESSION, sessionType: 'revisit', reference: REFERENCE };
+
+  const referenceGeojson = JSON.stringify({
+    type: 'FeatureCollection',
+    survey_session: {
+      id: 'ref-sess-1',
+      name: 'Long Barrow south',
+      started_at: '2025-04-12T09:00:00.000Z',
+      ended_at: null,
+    },
+    features: [
+      {
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [-0.14, 51.5002] },
+        properties: {
+          obs_id: 'ref-1',
+          recorded_at: '2025-04-12T10:00:00.000Z',
+          fix_at: '2025-04-12T10:00:00.000Z',
+          lat: 51.5002, // ~22 m north of POSITION
+          lon: -0.14,
+          gps_accuracy_m: 4.1,
+          heading_deg: 38,
+          note: 'West stile, west boundary.',
+          photo: 'ref-1.jpg',
+        },
+      },
+      {
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [-0.14, 51.51] },
+        properties: {
+          obs_id: 'ref-2',
+          recorded_at: '2025-04-12T10:30:00.000Z',
+          fix_at: '2025-04-12T10:30:00.000Z',
+          lat: 51.51,
+          lon: -0.14,
+          gps_accuracy_m: 6.3,
+          note: 'Culvert head.',
+          photo: null,
+        },
+      },
+    ],
+  });
+
+  function revisitService(overrides = {}) {
+    return createFakeService({
+      openSession: REVISIT_SESSION,
+      referenceRecord: {
+        sessionId: 'sess-1',
+        arrayBuffer: buildZip([
+          { name: 'session.geojson', data: referenceGeojson },
+          { name: 'photos/ref-1.jpg', data: new Uint8Array([0xff, 0xd8]) },
+        ]),
+        filename: REFERENCE.filename,
+        hash: REFERENCE.hash,
+      },
+      ...overrides,
+    });
+  }
+
+  test('loads the reference and guides to the nearest to-do station', async () => {
+    const service = revisitService();
+    const { sensors, pushPosition } = createFakeSensors();
+    renderPage({ service, sensors });
+    pushPosition(POSITION);
+
+    // ref-1 is nearest and first in reference order.
+    await screen.findByText('Station 1 of 2');
+    expect(screen.getByText('West stile')).toBeInTheDocument();
+    expect(screen.getByText(/22 m/)).toBeInTheDocument();
+    expect(screen.getByText(/West stile, west boundary/)).toBeInTheDocument();
+  });
+
+  test('the header wears the Revisit chip and the progress count', async () => {
+    const service = revisitService();
+    const { sensors } = createFakeSensors();
+    renderPage({ service, sensors });
+
+    await screen.findByText('Revisit');
+    expect(screen.getByText('0 of 2 stations')).toBeInTheDocument();
+  });
+
+  test('Save carries the current station pairing, photo filename included', async () => {
+    const service = revisitService();
+    const { sensors, pushPosition } = createFakeSensors();
+    renderPage({ service, sensors });
+    pushPosition(POSITION);
+    await screen.findByText('Station 1 of 2');
+
+    fireEvent.click(screen.getByRole('button', { name: /save observation/i }));
+
+    await waitFor(() =>
+      expect(service.saveObservation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          station: { referenceObservationId: 'ref-1', referencePhoto: 'ref-1.jpg' },
+        }),
+      ),
+    );
+  });
+
+  test('Record something new instead disarms the pairing for that save', async () => {
+    const service = revisitService();
+    const { sensors, pushPosition } = createFakeSensors();
+    renderPage({ service, sensors });
+    pushPosition(POSITION);
+    await screen.findByText('Station 1 of 2');
+
+    fireEvent.click(screen.getByRole('button', { name: /record something new instead/i }));
+    await screen.findByText(/recording a new observation/i);
+    fireEvent.click(screen.getByRole('button', { name: /save observation/i }));
+
+    await waitFor(() =>
+      expect(service.saveObservation).toHaveBeenCalledWith(
+        expect.objectContaining({ station: null }),
+      ),
+    );
+  });
+
+  test('Skip claims the station, says so with an Undo, and moves on', async () => {
+    const service = revisitService();
+    const { sensors, pushPosition } = createFakeSensors();
+    renderPage({ service, sensors });
+    pushPosition(POSITION);
+    await screen.findByText('Station 1 of 2');
+    service.listStationStates.mockResolvedValue([
+      { sessionId: 'sess-1', refObsId: 'ref-1', state: 'skipped', reason: null },
+    ]);
+
+    fireEvent.click(screen.getByRole('button', { name: /skip for now/i }));
+
+    await waitFor(() => expect(service.setStationState).toHaveBeenCalledWith('ref-1', 'skipped'));
+    await screen.findByText(/West stile skipped\. It stays in the list and in the count\./);
+    // The next to-do station becomes current.
+    await screen.findByText('Station 2 of 2');
+
+    service.listStationStates.mockResolvedValue([]);
+    fireEvent.click(screen.getByRole('button', { name: /undo/i }));
+    await waitFor(() => expect(service.clearStationState).toHaveBeenCalledWith('ref-1'));
+  });
+
+  test("Can't reach it commits a no-access claim with its reason", async () => {
+    const service = revisitService();
+    const { sensors, pushPosition } = createFakeSensors();
+    renderPage({ service, sensors });
+    pushPosition(POSITION);
+    await screen.findByText('Station 1 of 2');
+    service.listStationStates.mockResolvedValue([
+      { sessionId: 'sess-1', refObsId: 'ref-1', state: 'noAccess', reason: 'bull in field' },
+    ]);
+
+    fireEvent.click(screen.getByRole('button', { name: /can't reach it/i }));
+    fireEvent.input(screen.getByLabelText(/reason/i), { target: { value: 'bull in field' } });
+    fireEvent.click(screen.getByRole('button', { name: /mark no access/i }));
+
+    await waitFor(() =>
+      expect(service.setStationState).toHaveBeenCalledWith('ref-1', 'noAccess', 'bull in field'),
+    );
+  });
+
+  test('Change opens the station chooser and a tap re-aims the guidance', async () => {
+    const service = revisitService();
+    const { sensors, pushPosition } = createFakeSensors();
+    renderPage({ service, sensors });
+    pushPosition(POSITION);
+    await screen.findByText('Station 1 of 2');
+
+    fireEvent.click(screen.getByRole('button', { name: /^change$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /culvert head/i }));
+
+    await screen.findByText('Station 2 of 2');
+    expect(screen.getByText('Culvert head')).toBeInTheDocument();
+  });
+
+  test('a missing reference degrades to a plain session with one honest line', async () => {
+    const service = revisitService({ referenceRecord: undefined });
+    const { sensors, pushPosition } = createFakeSensors();
+    renderPage({ service, sensors });
+    pushPosition(POSITION);
+
+    await screen.findByText(/reference file missing — station guidance unavailable/i);
+    // Capture itself still works.
+    expect(screen.getByRole('button', { name: /save observation/i })).not.toBeDisabled();
+  });
+
+  test('an ordinary survey shows none of the revisit furniture', async () => {
+    const service = createFakeService({ openSession: OPEN_SESSION });
+    const { sensors, pushPosition } = createFakeSensors();
+    renderPage({ service, sensors });
+    pushPosition(POSITION);
+
+    await screen.findByText('Ashton Keynes');
+    expect(screen.queryByText('Revisit')).toBeNull();
+    expect(screen.queryByText(/station 1 of/i)).toBeNull();
+    expect(service.getReferenceRecord).not.toHaveBeenCalled();
   });
 });

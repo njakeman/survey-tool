@@ -62,22 +62,26 @@ describe('RevisitSetup', () => {
   });
 
   test('a failed load shows the named reason and keeps offering the picker', () => {
-    render(html`<${RevisitSetup}
-      loaded=${null}
-      error="Could not load reference: the export has no observations to revisit"
-      onPickFile=${vi.fn()}
-    />`);
+    render(
+      html`<${RevisitSetup}
+        loaded=${null}
+        error="Could not load reference: the export has no observations to revisit"
+        onPickFile=${vi.fn()}
+      />`,
+    );
 
     expect(screen.getByRole('alert')).toHaveTextContent(/no observations to revisit/);
     expect(document.querySelector('input[type="file"]')).toBeInTheDocument();
   });
 
   test('nearest stations list by distance with a compass point — the am-I-in-the-right-place check', () => {
-    render(html`<${RevisitSetup}
-      loaded=${loaded}
-      position=${{ lat: 51.5, lon: -0.14 }}
-      onPickFile=${vi.fn()}
-    />`);
+    render(
+      html`<${RevisitSetup}
+        loaded=${loaded}
+        position=${{ lat: 51.5, lon: -0.14 }}
+        onPickFile=${vi.fn()}
+      />`,
+    );
 
     expect(screen.getByText('Nearest stations')).toBeInTheDocument();
     const rows = [...document.querySelectorAll('.revisit-setup-nearest-row')];
