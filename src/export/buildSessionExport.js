@@ -2,9 +2,13 @@ import { getSession } from '../storage/sessionStore.js';
 import { listObservationsForSession } from '../storage/observationStore.js';
 import { getPhoto } from '../storage/photoStore.js';
 import { getAudio } from '../storage/audioStore.js';
+import { getReference, listStationStates } from '../storage/revisitStore.js';
 import { sessionToFeatureCollection } from '../domain/geojson.js';
+import { isRevisit } from '../domain/session.js';
+import { deriveStations, stationsForExport } from '../domain/revisit.js';
 import { audioExtension } from '../domain/audio.js';
 import { canonicalStringify } from '../domain/canonical-json.js';
+import { openReference } from '../import/referenceZip.js';
 
 // Assembles the data for a session export — GeoJSON text + photo Blobs, as
 // {name, input} entries ready for a zip step (client-zip's own entry shape,
@@ -76,11 +80,42 @@ export async function buildSessionExport(db, { sessionId, appVersion, gridRef })
     photoId: obs.photoId && !presentPhotoIds.has(obs.photoId) ? null : obs.photoId,
     audioId: obs.audioId && !audioFilenames.has(obs.audioId) ? null : (obs.audioId ?? null),
   }));
+
+  // A revisit carries every reference station with its end state
+  // (survey_revisit). The full list needs the reference zip re-opened; if
+  // eviction took the bytes, the export still builds — the stations it can
+  // no longer enumerate are honestly absent rather than guessed at, and the
+  // claims + pairings it does hold still travel.
+  let revisitStations;
+  if (isRevisit(session)) {
+    const stateRecords = await listStationStates(db, sessionId);
+    let refStations = null;
+    const referenceRecord = await getReference(db, sessionId);
+    if (referenceRecord) {
+      try {
+        refStations = (await openReference(referenceRecord.arrayBuffer)).stations;
+      } catch {
+        refStations = null;
+      }
+    }
+    if (!refStations) {
+      const knownIds = new Set([
+        ...stateRecords.map((record) => record.refObsId),
+        ...exportObservations.map((obs) => obs.referenceObservationId).filter(Boolean),
+      ]);
+      refStations = [...knownIds].map((id) => ({ id, note: '' }));
+    }
+    revisitStations = stationsForExport(
+      deriveStations(refStations, exportObservations, stateRecords),
+    );
+  }
+
   const geojsonText = canonicalStringify(
     sessionToFeatureCollection(session, exportObservations, {
       appVersion,
       gridRef,
       audioFilename: (audioId) => audioFilenames.get(audioId) ?? null,
+      revisitStations,
     }),
   );
 

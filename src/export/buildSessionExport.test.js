@@ -9,6 +9,8 @@ import { createObservation } from '../domain/observation.js';
 import { sessionToFeatureCollection } from '../domain/geojson.js';
 import { canonicalStringify } from '../domain/canonical-json.js';
 import { buildSessionExport } from './buildSessionExport.js';
+import { putReference, putStationState } from '../storage/revisitStore.js';
+import { buildZip } from '../import/fixtures/buildZip.js';
 
 function makeSession(overrides = {}) {
   return createSession({
@@ -127,5 +129,113 @@ describe('buildSessionExport', () => {
 
     const geojson = JSON.parse(entries.find((e) => e.name === 'session.geojson').input);
     expect(geojson.features[0].properties.photo).toBe('obs-1.jpg');
+  });
+});
+
+describe('revisit exports', () => {
+  const referenceGeojson = JSON.stringify({
+    type: 'FeatureCollection',
+    survey_session: {
+      id: 'ref-sess-1',
+      name: 'Long Barrow south',
+      started_at: '2025-04-12T09:00:00.000Z',
+      ended_at: null,
+    },
+    features: ['ref-1', 'ref-2', 'ref-3'].map((id, index) => ({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [-0.14, 51.5 + index / 1000] },
+      properties: {
+        obs_id: id,
+        recorded_at: '2025-04-12T10:00:00.000Z',
+        fix_at: '2025-04-12T10:00:00.000Z',
+        lat: 51.5 + index / 1000,
+        lon: -0.14,
+        gps_accuracy_m: 5,
+        note: `Station ${id}.`,
+        photo: null,
+      },
+    })),
+  });
+  const reference = {
+    filename: 'long-barrow-2025-04-12.zip',
+    hash: 'a'.repeat(64),
+    sessionId: 'ref-sess-1',
+    sessionName: 'Long Barrow south',
+    startedAt: '2025-04-12T09:00:00.000Z',
+    stationCount: 3,
+    photoCount: 0,
+  };
+
+  async function seedRevisit(dbName, { withReferenceBytes = true } = {}) {
+    const db = await openDatabase(dbName);
+    await putSession(
+      db,
+      makeSession({ name: '2026-08-21', sessionType: 'revisit', reference }),
+    );
+    if (withReferenceBytes) {
+      await putReference(db, {
+        sessionId: 'sess-1',
+        arrayBuffer: buildZip([{ name: 'session.geojson', data: referenceGeojson }]),
+        filename: reference.filename,
+        hash: reference.hash,
+      });
+    }
+    await putObservation(db, makeObservation({ referenceObservationId: 'ref-2' }));
+    await putStationState(db, {
+      sessionId: 'sess-1',
+      refObsId: 'ref-3',
+      state: 'noAccess',
+      reason: 'field flooded',
+      updatedAt: '2026-08-21T10:00:00.000Z',
+    });
+    return db;
+  }
+
+  test('a revisit export carries survey_revisit with every station and its state', async () => {
+    const db = await seedRevisit('export-revisit-full');
+
+    const { entries } = await buildSessionExport(db, { sessionId: 'sess-1', appVersion: '0.1.0' });
+
+    const geojson = JSON.parse(entries.find((e) => e.name === 'session.geojson').input);
+    expect(geojson.survey_revisit).toEqual({
+      reference_file: 'long-barrow-2025-04-12.zip',
+      reference_hash: 'a'.repeat(64),
+      reference_session_id: 'ref-sess-1',
+      reference_session_name: 'Long Barrow south',
+      reference_started_at: '2025-04-12T09:00:00.000Z',
+      stations: [
+        { ref_obs_id: 'ref-1', state: 'not_visited', reason: null },
+        { ref_obs_id: 'ref-2', state: 'done', reason: null },
+        { ref_obs_id: 'ref-3', state: 'no_access', reason: 'field flooded' },
+      ],
+    });
+    expect(geojson.features[0].properties.ref_obs_id).toBe('ref-2');
+  });
+
+  test('with the reference bytes gone, the export still builds with the states it can know', async () => {
+    // Eviction can take the buffer; the export must not fail over it, and
+    // the stations it can no longer enumerate are honestly absent rather
+    // than guessed at.
+    const db = await seedRevisit('export-revisit-evicted', { withReferenceBytes: false });
+
+    const { entries } = await buildSessionExport(db, { sessionId: 'sess-1', appVersion: '0.1.0' });
+
+    const geojson = JSON.parse(entries.find((e) => e.name === 'session.geojson').input);
+    expect(geojson.survey_revisit.reference_file).toBe('long-barrow-2025-04-12.zip');
+    expect(geojson.survey_revisit.stations).toEqual([
+      { ref_obs_id: 'ref-2', state: 'done', reason: null },
+      { ref_obs_id: 'ref-3', state: 'no_access', reason: 'field flooded' },
+    ]);
+  });
+
+  test('an ordinary session export has no survey_revisit member', async () => {
+    const db = await openDatabase('export-revisit-none');
+    await putSession(db, makeSession());
+    await putObservation(db, makeObservation());
+
+    const { entries } = await buildSessionExport(db, { sessionId: 'sess-1', appVersion: '0.1.0' });
+
+    const geojson = JSON.parse(entries.find((e) => e.name === 'session.geojson').input);
+    expect('survey_revisit' in geojson).toBe(false);
   });
 });

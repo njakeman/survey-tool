@@ -30,6 +30,13 @@ import {
   listTraceVertices,
   putTraceDraft,
 } from '../storage/traceDraftStore.js';
+import {
+  putSessionWithReference,
+  getReference,
+  putStationState,
+  deleteStationState,
+  listStationStates as listStationStatesFromStore,
+} from '../storage/revisitStore.js';
 
 // Orchestration seam between the UI and storage. Stateless — every call
 // re-reads IndexedDB rather than caching the open session, which is what
@@ -45,11 +52,36 @@ export function createCaptureService({ db, newId, nowIso }) {
     return listSessionsFromStore(db);
   }
 
-  async function startSession(name) {
+  // A reference (loadReferenceFile's metadata + the picked zip's bytes)
+  // makes this a revisit session. The session record and the bytes land in
+  // one transaction — a revisit can never exist without its reference — and
+  // createSession enforces the type/reference pairing.
+  async function startSession(name, { reference = null, referenceBuffer = null } = {}) {
     const existing = await getOpenSession();
     if (existing) throw new Error('startSession: a session is already open');
-    const session = createSession({ id: newId(), name, startedAt: nowIso() });
-    await putSession(db, session);
+    const session = createSession({
+      id: newId(),
+      name,
+      startedAt: nowIso(),
+      sessionType: reference ? 'revisit' : 'survey',
+      reference,
+    });
+    if (reference) {
+      if (!referenceBuffer) {
+        throw new Error('startSession: a revisit needs the reference bytes (referenceBuffer)');
+      }
+      await putSessionWithReference(db, {
+        session,
+        referenceRecord: {
+          sessionId: session.id,
+          arrayBuffer: referenceBuffer,
+          filename: reference.filename,
+          hash: reference.hash,
+        },
+      });
+    } else {
+      await putSession(db, session);
+    }
     return session;
   }
 
@@ -117,6 +149,10 @@ export function createCaptureService({ db, newId, nowIso }) {
     feature = null,
     pickedPoint = null,
     trace = null,
+    // The revisit pairing: { referenceObservationId, referencePhoto }. Null
+    // for an ordinary save — and for a revisit's "record something new
+    // instead", which is exactly an observation with no counterpart.
+    station = null,
   }) {
     const session = await getOpenSession();
     if (!session) throw new Error('saveObservation: no open session');
@@ -156,6 +192,8 @@ export function createCaptureService({ db, newId, nowIso }) {
       // Measured by the recorder at stop — the one thing that lets a list
       // row say 0:12 without loading the blob.
       audioDurationMs: audio?.durationMs ?? null,
+      referenceObservationId: station?.referenceObservationId ?? null,
+      referencePhoto: station?.referencePhoto ?? null,
     });
 
     await saveObservationWithPhoto(db, {
@@ -165,6 +203,35 @@ export function createCaptureService({ db, newId, nowIso }) {
       traceDraftId: trace ? trace.draftId : null,
     });
     return observation;
+  }
+
+  // A revisit station claim: 'skipped' or 'noAccess', with an optional
+  // reason. One claim per station (composite key overwrites); clearing it
+  // is the Undo — done/to-do are derived from observations, never written.
+  async function setStationState(refObsId, state, reason = null) {
+    const session = await getOpenSession();
+    if (!session) throw new Error('setStationState: no open session');
+    await putStationState(db, {
+      sessionId: session.id,
+      refObsId,
+      state,
+      reason,
+      updatedAt: nowIso(),
+    });
+  }
+
+  async function clearStationState(refObsId) {
+    const session = await getOpenSession();
+    if (!session) throw new Error('clearStationState: no open session');
+    await deleteStationState(db, session.id, refObsId);
+  }
+
+  function listStationStates(sessionId) {
+    return listStationStatesFromStore(db, sessionId);
+  }
+
+  function getReferenceRecord(sessionId) {
+    return getReference(db, sessionId);
   }
 
   // The in-progress trace draft. One at a time in practice; getTraceDraft
@@ -292,6 +359,10 @@ export function createCaptureService({ db, newId, nowIso }) {
     endSession,
     reopenSession,
     saveObservation,
+    setStationState,
+    clearStationState,
+    listStationStates,
+    getReferenceRecord,
     startTraceDraft,
     appendTraceVertex,
     getTraceDraft,

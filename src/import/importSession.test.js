@@ -523,4 +523,51 @@ describe('traced observations through the round trip', () => {
     expect(parsed.observations[1].referenceObservationId).toBeNull();
     expect(parsed.observations[1].referencePhoto).toBeNull();
   });
+
+  test('a revisit export imports as a plain closed survey copy, pairing keys intact', async () => {
+    // The copy has no reference zip on this device, so it arrives as an
+    // ordinary survey — but its observations keep saying which stations they
+    // revisited: self-describing, not self-contained. The survey_revisit
+    // member is provenance for consumers, deliberately not re-imported.
+    const encoderEntry = (name, text) => ({ name, data: encoder.encode(text) });
+    const text = JSON.stringify({
+      type: 'FeatureCollection',
+      survey_session: { id: 's', name: 'Revisit copy', started_at: FIXED_NOW, ended_at: null },
+      survey_revisit: {
+        reference_file: 'ref.zip',
+        reference_hash: 'a'.repeat(64),
+        reference_session_id: 'ref-sess-1',
+        reference_session_name: 'Long Barrow south',
+        reference_started_at: '2025-04-12T09:00:00.000Z',
+        stations: [{ ref_obs_id: 'ref-4', state: 'done', reason: null }],
+      },
+      features: [
+        {
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [-0.14, 51.5] },
+          properties: {
+            obs_id: 'obs-1',
+            recorded_at: FIXED_NOW,
+            fix_at: FIXED_NOW,
+            lat: 51.5,
+            lon: -0.14,
+            gps_accuracy_m: 5,
+            ref_obs_id: 'ref-4',
+            ref_photo: 'ref-4.jpg',
+          },
+        },
+      ],
+    });
+
+    const parsed = parseSessionExport([encoderEntry('session.geojson', text)]);
+    const db = await openDatabase('import-revisit-copy');
+    await writeImportedSession(db, parsed, { newId: fakeIdGenerator('copy') });
+
+    const [imported] = await listSessions(db);
+    expect(imported.status).toBe('closed');
+    expect(imported.sessionType ?? 'survey').toBe('survey');
+    const observations = await listObservationsForSession(db, imported.id);
+    expect(observations[0].referenceObservationId).toBe('ref-4');
+    expect(observations[0].referencePhoto).toBe('ref-4.jpg');
+  });
 });

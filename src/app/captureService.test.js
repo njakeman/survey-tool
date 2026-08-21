@@ -1060,3 +1060,134 @@ describe('trace drafts', () => {
     expect(observation.positionSource).toBe('trace');
   });
 });
+
+describe('revisit sessions', () => {
+  const REFERENCE = {
+    filename: 'long-barrow-2025-04-12.zip',
+    hash: 'a'.repeat(64),
+    sessionId: 'ref-sess-1',
+    sessionName: 'Long Barrow south',
+    startedAt: '2025-04-12T09:00:00.000Z',
+    stationCount: 2,
+    photoCount: 1,
+  };
+  const BUFFER = new Uint8Array([0x50, 0x4b, 3, 4]).buffer;
+
+  test('startSession with a reference opens a revisit session and stores the bytes with it', async () => {
+    const service = await makeService('capture-service-revisit-start');
+
+    const session = await service.startSession('2026-08-21', {
+      reference: REFERENCE,
+      referenceBuffer: BUFFER,
+    });
+
+    expect(session.sessionType).toBe('revisit');
+    expect(session.reference).toEqual(REFERENCE);
+    const stored = await service.getReferenceRecord(session.id);
+    expect(stored.arrayBuffer.byteLength).toBe(4);
+    expect(stored.filename).toBe('long-barrow-2025-04-12.zip');
+  });
+
+  test('a reference without its bytes is refused — the record must never exist without them', async () => {
+    const service = await makeService('capture-service-revisit-no-buffer');
+
+    await expect(service.startSession('2026-08-21', { reference: REFERENCE })).rejects.toThrow(
+      /referenceBuffer/,
+    );
+    expect(await service.getOpenSession()).toBeNull();
+  });
+
+  test('plain startSession still opens an ordinary survey', async () => {
+    const service = await makeService('capture-service-revisit-plain');
+
+    const session = await service.startSession('Ashton Keynes');
+
+    expect(session.sessionType).toBe('survey');
+    expect(session.reference).toBeNull();
+  });
+
+  test('discarding an empty revisit removes the reference bytes too', async () => {
+    const service = await makeService('capture-service-revisit-discard');
+    const session = await service.startSession('2026-08-21', {
+      reference: REFERENCE,
+      referenceBuffer: BUFFER,
+    });
+
+    const { discarded } = await service.endSession();
+
+    expect(discarded).toBe(true);
+    expect(await service.getReferenceRecord(session.id)).toBeUndefined();
+  });
+
+  test('saveObservation carries the station pairing onto the record', async () => {
+    const service = await makeService('capture-service-revisit-save');
+    await service.startSession('2026-08-21', { reference: REFERENCE, referenceBuffer: BUFFER });
+
+    const observation = await service.saveObservation({
+      reading: READING,
+      heading: null,
+      note: 'stile still standing',
+      photo: null,
+      station: { referenceObservationId: 'ref-4', referencePhoto: 'ref-4.jpg' },
+    });
+
+    expect(observation.referenceObservationId).toBe('ref-4');
+    expect(observation.referencePhoto).toBe('ref-4.jpg');
+  });
+
+  test('without a station, a save in a revisit is simply a new observation', async () => {
+    const service = await makeService('capture-service-revisit-save-new');
+    await service.startSession('2026-08-21', { reference: REFERENCE, referenceBuffer: BUFFER });
+
+    const observation = await service.saveObservation({
+      reading: READING,
+      heading: null,
+      note: 'fallen ash',
+      photo: null,
+    });
+
+    expect(observation.referenceObservationId).toBeNull();
+    expect(observation.referencePhoto).toBeNull();
+  });
+
+  test('station claims write, list and clear against the open session', async () => {
+    const service = await makeService('capture-service-revisit-claims');
+    const session = await service.startSession('2026-08-21', {
+      reference: REFERENCE,
+      referenceBuffer: BUFFER,
+    });
+
+    await service.setStationState('ref-2', 'skipped');
+    await service.setStationState('ref-3', 'noAccess', 'field flooded');
+
+    const states = await service.listStationStates(session.id);
+    expect(states).toEqual([
+      {
+        sessionId: session.id,
+        refObsId: 'ref-2',
+        state: 'skipped',
+        reason: null,
+        updatedAt: FIXED_NOW,
+      },
+      {
+        sessionId: session.id,
+        refObsId: 'ref-3',
+        state: 'noAccess',
+        reason: 'field flooded',
+        updatedAt: FIXED_NOW,
+      },
+    ]);
+
+    await service.clearStationState('ref-2');
+
+    expect((await service.listStationStates(session.id)).map((r) => r.refObsId)).toEqual([
+      'ref-3',
+    ]);
+  });
+
+  test('a station claim with no open session is refused', async () => {
+    const service = await makeService('capture-service-revisit-claims-closed');
+
+    await expect(service.setStationState('ref-2', 'skipped')).rejects.toThrow(/no open session/);
+  });
+});
