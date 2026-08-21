@@ -479,4 +479,48 @@ describe('traced observations through the round trip', () => {
       /feature 1: .*two positions/i,
     );
   });
+
+  test('ref_obs_id and ref_photo parse back onto the observation — the pairing key never drops', () => {
+    const encoderEntry = (name, text) => ({ name, data: encoder.encode(text) });
+    const text = JSON.stringify({
+      type: 'FeatureCollection',
+      survey_session: { id: 's', name: 'S', started_at: FIXED_NOW, ended_at: null },
+      features: [
+        {
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [-0.14, 51.5] },
+          properties: {
+            obs_id: 'obs-1',
+            recorded_at: FIXED_NOW,
+            fix_at: FIXED_NOW,
+            lat: 51.5,
+            lon: -0.14,
+            gps_accuracy_m: 5,
+            ref_obs_id: 'ref-4',
+            ref_photo: 'ref-4.jpg',
+          },
+        },
+        {
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [-0.15, 51.6] },
+          properties: {
+            // A pre-revisit export: no ref_* keys at all → null, not undefined.
+            obs_id: 'obs-2',
+            recorded_at: FIXED_NOW,
+            fix_at: FIXED_NOW,
+            lat: 51.6,
+            lon: -0.15,
+            gps_accuracy_m: 5,
+          },
+        },
+      ],
+    });
+
+    const parsed = parseSessionExport([encoderEntry('session.geojson', text)]);
+
+    expect(parsed.observations[0].referenceObservationId).toBe('ref-4');
+    expect(parsed.observations[0].referencePhoto).toBe('ref-4.jpg');
+    expect(parsed.observations[1].referenceObservationId).toBeNull();
+    expect(parsed.observations[1].referencePhoto).toBeNull();
+  });
 });

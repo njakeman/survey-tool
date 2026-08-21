@@ -1,0 +1,127 @@
+import { describe, expect, test } from 'vitest';
+import { parseReferenceExport } from './parseReferenceExport.js';
+
+// The reference parse: the same validation as import (every feature back
+// through createObservation) but returning photo *filenames* instead of
+// bytes — the zip stays where it is and photos decode one at a time later.
+
+const encoder = new TextEncoder();
+
+function feature(props) {
+  return {
+    type: 'Feature',
+    geometry: { type: 'Point', coordinates: [props.lon, props.lat] },
+    properties: {
+      obs_id: 'ref-1',
+      recorded_at: '2025-04-12T10:00:00.000Z',
+      fix_at: '2025-04-12T09:59:20.000Z',
+      lat: 51.5,
+      lon: -0.14,
+      gps_accuracy_m: 4.1,
+      heading_deg: 38,
+      note: 'Stone stile, west boundary.',
+      photo: 'ref-1.jpg',
+      ...props,
+    },
+  };
+}
+
+function collectionBytes({ features, session = true }) {
+  const collection = {
+    type: 'FeatureCollection',
+    ...(session
+      ? {
+          survey_session: {
+            id: 'ref-sess-1',
+            name: 'Long Barrow south',
+            started_at: '2025-04-12T09:00:00.000Z',
+            ended_at: '2025-04-12T12:00:00.000Z',
+          },
+        }
+      : {}),
+    features,
+  };
+  return encoder.encode(JSON.stringify(collection));
+}
+
+describe('parseReferenceExport', () => {
+  test('returns the reference session identity, id included', () => {
+    const { session } = parseReferenceExport(
+      collectionBytes({ features: [feature({})] }),
+      ['session.geojson', 'photos/ref-1.jpg'],
+    );
+
+    expect(session).toEqual({
+      id: 'ref-sess-1',
+      name: 'Long Barrow south',
+      startedAt: '2025-04-12T09:00:00.000Z',
+      endedAt: '2025-04-12T12:00:00.000Z',
+    });
+  });
+
+  test('stations are validated observations in feature order, with their photo filenames', () => {
+    const bytes = collectionBytes({
+      features: [
+        feature({}),
+        feature({ obs_id: 'ref-2', photo: 'ref-2.jpg', note: 'Culvert head.' }),
+      ],
+    });
+
+    const { stations } = parseReferenceExport(bytes, [
+      'session.geojson',
+      'photos/ref-1.jpg',
+      'photos/ref-2.jpg',
+    ]);
+
+    expect(stations.map((s) => s.id)).toEqual(['ref-1', 'ref-2']);
+    expect(stations[0].lat).toBe(51.5);
+    expect(stations[0].headingDeg).toBe(38);
+    expect(stations[0].note).toBe('Stone stile, west boundary.');
+    expect(stations[0].photoFilename).toBe('ref-1.jpg');
+    expect(stations[0].photoEntryName).toBe('photos/ref-1.jpg');
+  });
+
+  test('a photo claim the zip cannot back is nulled, not trusted', () => {
+    const { stations } = parseReferenceExport(collectionBytes({ features: [feature({})] }), [
+      'session.geojson',
+    ]);
+
+    expect(stations[0].photoFilename).toBeNull();
+    expect(stations[0].photoEntryName).toBeNull();
+  });
+
+  test('a station without a photo is still a station', () => {
+    const { stations } = parseReferenceExport(
+      collectionBytes({ features: [feature({ photo: null })] }),
+      ['session.geojson'],
+    );
+
+    expect(stations[0].photoFilename).toBeNull();
+  });
+
+  test('refuses an export with nothing to revisit, by name', () => {
+    expect(() =>
+      parseReferenceExport(collectionBytes({ features: [] }), ['session.geojson']),
+    ).toThrow(/no observations to revisit/);
+  });
+
+  test('tolerates a v1 export with no survey_session member — the id is simply unknown', () => {
+    const bytes = collectionBytes({
+      features: [feature({ session_name: 'Old survey' })],
+      session: false,
+    });
+
+    const { session } = parseReferenceExport(bytes, ['session.geojson', 'photos/ref-1.jpg']);
+
+    expect(session.id).toBeNull();
+    expect(session.name).toBe('Old survey');
+  });
+
+  test('a malformed feature fails with a named reason, exactly as import does', () => {
+    expect(() =>
+      parseReferenceExport(collectionBytes({ features: [feature({ lat: 512 })] }), [
+        'session.geojson',
+      ]),
+    ).toThrow(/feature 1.*lat/i);
+  });
+});

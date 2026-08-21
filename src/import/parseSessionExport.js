@@ -16,7 +16,10 @@ import { polygonCentroid } from '../geo/centroid.js';
 
 const decoder = new TextDecoder();
 
-function parseCollection(text) {
+// Exported for parseReferenceExport.js, which shares this file's whole
+// validation path — the reference parse must never fork what "a valid
+// feature" means, or a zip that imports could fail to load as a reference.
+export function parseCollection(text) {
   let parsed;
   try {
     parsed = JSON.parse(text);
@@ -32,7 +35,7 @@ function parseCollection(text) {
 // Exports since format v2 carry the session as a foreign member; earlier
 // zips carried only session_name on each feature, so name and times are
 // reconstructed from the features themselves.
-function sessionFrom(collection) {
+export function sessionFrom(collection) {
   const meta = collection.survey_session;
   if (meta?.name && meta?.started_at) {
     return { name: meta.name, startedAt: meta.started_at, endedAt: meta.ended_at ?? null };
@@ -69,7 +72,7 @@ function representativeFrom(geometry) {
   return null;
 }
 
-function observationFrom(feature, index, sessionId) {
+export function observationFrom(feature, index, sessionId) {
   const props = feature?.properties ?? {};
   const geometry = feature?.geometry ?? null;
   // A non-Point geometry is a trace and rides into the record, where
@@ -108,6 +111,12 @@ function observationFrom(feature, index, sessionId) {
       // walked line, and createObservation rightly rejects 'gps' + geometry.
       positionSource: props.position_source ?? (traced ? 'trace' : 'gps'),
       geometry: traced ? geometry : null,
+      // The revisit pairing key — a copy must keep saying which reference
+      // station each observation revisited, or the longitudinal join breaks
+      // on first re-import. `?? null` for every export from before the
+      // fields existed.
+      referenceObservationId: props.ref_obs_id ?? null,
+      referencePhoto: props.ref_photo ?? null,
       // os_grid_ref is ignored: derived from lat/lon at export time, it
       // would only ever be re-derived, never stored. trace_length_m too —
       // both restate the geometry.

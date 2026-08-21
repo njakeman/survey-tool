@@ -32,7 +32,13 @@ async function inflateRaw(bytes) {
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
-export async function readZip(buffer) {
+// The listing half: central-directory walk → [{ name, method, dataStart,
+// compressedSize }], no data decoded. Exists so a reference zip's photos can
+// be read one at a time (readZipEntry below) instead of inflating the whole
+// archive — 41 frames must never go into memory together. Error messages
+// keep the readZip: prefix; the pair is one reader, split, and the failures
+// are the same failures.
+export function listZipEntries(buffer) {
   const view = new DataView(buffer);
   const bytes = new Uint8Array(buffer);
 
@@ -73,19 +79,33 @@ export async function readZip(buffer) {
       throw new Error(`readZip: entry ${name} runs past the end of the file`);
     }
 
-    if (method === STORE) {
-      // slice, not subarray: the returned entry must not pin the whole
-      // archive buffer in memory through a view over it.
-      entries.push({ name, data: bytes.slice(dataStart, dataStart + compressedSize) });
-    } else if (method === DEFLATE) {
-      entries.push({
-        name,
-        data: await inflateRaw(bytes.subarray(dataStart, dataStart + compressedSize)),
-      });
-    } else {
-      throw new Error(`readZip: unsupported compression method ${method} for ${name}`);
-    }
+    entries.push({ name, method, dataStart, compressedSize });
   }
 
+  return entries;
+}
+
+// The decoding half: one listed entry → its bytes. The buffer must be the
+// same archive the entry was listed from.
+export async function readZipEntry(buffer, entry) {
+  const bytes = new Uint8Array(buffer);
+  const { name, method, dataStart, compressedSize } = entry;
+
+  if (method === STORE) {
+    // slice, not subarray: the returned entry must not pin the whole
+    // archive buffer in memory through a view over it.
+    return bytes.slice(dataStart, dataStart + compressedSize);
+  }
+  if (method === DEFLATE) {
+    return inflateRaw(bytes.subarray(dataStart, dataStart + compressedSize));
+  }
+  throw new Error(`readZip: unsupported compression method ${method} for ${name}`);
+}
+
+export async function readZip(buffer) {
+  const entries = [];
+  for (const entry of listZipEntries(buffer)) {
+    entries.push({ name: entry.name, data: await readZipEntry(buffer, entry) });
+  }
   return entries;
 }

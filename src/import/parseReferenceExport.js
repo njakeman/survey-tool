@@ -1,0 +1,48 @@
+// The reference-mode parse: session.geojson bytes + the zip's entry names →
+// { session, stations }, ready for a revisit to stand against. Reuses
+// parseSessionExport's validation wholesale (every feature back through
+// createObservation) but returns photo *filenames* verified against the
+// entry list instead of photo bytes — the archive stays where it is and
+// photos decode one at a time through referenceZip.js. Read-only by
+// construction: nothing here can write, and nothing downstream ever writes
+// to the reference.
+
+import { parseCollection, sessionFrom, observationFrom } from './parseSessionExport.js';
+
+const decoder = new TextDecoder();
+
+export function parseReferenceExport(geojsonData, entryNames) {
+  const collection = parseCollection(decoder.decode(geojsonData));
+
+  if (collection.features.length === 0) {
+    throw new Error('Could not load reference: the export has no observations to revisit');
+  }
+
+  const meta = sessionFrom(collection);
+  const session = {
+    // sessionFrom serves import, which mints its own id; a reference keeps
+    // the original id so provenance can name it. Null for v1 exports, which
+    // carried no survey_session member.
+    id: collection.survey_session?.id ?? null,
+    name: meta.name,
+    startedAt: meta.startedAt,
+    endedAt: meta.endedAt,
+  };
+
+  // Join by the photo property string, matched case-insensitively like
+  // import does — never by assuming obs_id + '.jpg', because a retake mints
+  // a fresh photo id. A claim with no backing entry is nulled, not trusted.
+  const entryByLowerName = new Map(entryNames.map((name) => [name.toLowerCase(), name]));
+  const stations = collection.features.map((feature, index) => {
+    const observation = observationFrom(feature, index, 'reference');
+    const claimed = feature?.properties?.photo ?? null;
+    const entryName = claimed ? (entryByLowerName.get(`photos/${claimed}`.toLowerCase()) ?? null) : null;
+    return {
+      ...observation,
+      photoFilename: entryName ? claimed : null,
+      photoEntryName: entryName,
+    };
+  });
+
+  return { session, stations };
+}
