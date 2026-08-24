@@ -388,6 +388,44 @@ describe('traced observations through the round trip', () => {
     expect(obs.note).toBe('north hedgerow');
   });
 
+  test('inferred-segment flags survive the round trip — they are not derivable from geometry', async () => {
+    const db = await openDatabase('roundtrip-gaps-source');
+    const service = createCaptureService({
+      db,
+      newId: fakeIdGenerator('orig'),
+      nowIso: () => FIXED_NOW,
+    });
+    await service.startSession('Hedgerow survey');
+    const draft = await service.startTraceDraft({ mode: 'path' });
+    await service.saveObservation({
+      reading: null,
+      heading: null,
+      note: 'interrupted walk',
+      trace: {
+        draftId: draft.id,
+        geometry: TRACE_GEOMETRY,
+        representative: { lat: 51.5005, lon: -0.1405 },
+        gpsAccuracyM: 11,
+        fixAt: '2026-08-06T09:40:00.000Z',
+        gaps: [2],
+      },
+    });
+
+    const [sourceSession] = await listSessions(db);
+    const { entries } = await buildSessionExport(db, {
+      sessionId: sourceSession.id,
+      appVersion: '0.9.0',
+    });
+    const parsed = parseSessionExport(await toReaderEntries(entries));
+
+    const targetDb = await openDatabase('roundtrip-gaps-target');
+    await writeImportedSession(targetDb, parsed, { newId: fakeIdGenerator('copy') });
+    const [imported] = await listSessions(targetDb);
+    const [obs] = await listObservationsForSession(targetDb, imported.id);
+
+    expect(obs.traceGaps).toEqual([2]);
+  });
+
   test('a foreign LineString without lat/lon properties stands at its midpoint as a trace', () => {
     const encoderEntry = (name, text) => ({ name, data: encoder.encode(text) });
     const text = JSON.stringify({

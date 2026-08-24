@@ -1,10 +1,12 @@
 import { describe, expect, test } from 'vitest';
 import {
   ACCURACY_GATE_M,
+  GAP_THRESHOLD_MS,
   MIN_SPACING_M,
   acceptFix,
   createTraceState,
   finishTrace,
+  noteInterruption,
   pauseTrace,
   resumeTrace,
   traceStats,
@@ -15,8 +17,8 @@ const DEGREE_M = distanceM({ lat: 0, lon: 0 }, { lat: 1, lon: 0 });
 
 // A reading standing `metres` north of the origin. Trace rules are all about
 // distances, so the fixtures speak metres and convert to degrees once here.
-function fix(metres, { accuracyM = 5, fixAt = '2026-08-12T10:00:00.000Z' } = {}) {
-  return { lat: metres / DEGREE_M, lon: 0, accuracyM, fixAt };
+function fix(metres, { accuracyM = 5, fixAt = '2026-08-12T10:00:00.000Z', fixAtMs } = {}) {
+  return { lat: metres / DEGREE_M, lon: 0, accuracyM, fixAt, fixAtMs };
 }
 
 function walk(state, readings) {
@@ -103,7 +105,93 @@ describe('acceptFix', () => {
       lon: 0,
       accuracyM: 7,
       fixAt: '2026-08-12T09:30:00.000Z',
+      gapBefore: false,
     });
+  });
+});
+
+describe('gap detection', () => {
+  test('a silence in the fix stream flags the next accepted vertex as gapBefore', () => {
+    let { state } = acceptFix(createTraceState({ mode: 'path' }), fix(0, { fixAtMs: 0 }));
+    const { vertex } = acceptFix(state, fix(20, { fixAtMs: GAP_THRESHOLD_MS + 1 }));
+
+    expect(vertex.gapBefore).toBe(true);
+  });
+
+  test('steady fixes never flag, even when the vertices are minutes apart', () => {
+    // Standing still: every fix is rejected by the distance rule, but the
+    // stream itself never went silent — the eventual move is measured ground.
+    let state = acceptFix(createTraceState({ mode: 'path' }), fix(0, { fixAtMs: 0 })).state;
+    for (let i = 1; i <= 60; i++) {
+      state = acceptFix(state, fix(1, { fixAtMs: i * 1000 })).state;
+    }
+    const { vertex } = acceptFix(state, fix(20, { fixAtMs: 61_000 }));
+
+    expect(vertex.gapBefore).toBe(false);
+  });
+
+  test('a gap noticed on a rejected fix still flags the next accepted vertex', () => {
+    // The resume fix after a suspension is often cold-start junk; the gap
+    // must not be forgotten just because that first fix failed the gate.
+    let state = acceptFix(createTraceState({ mode: 'path' }), fix(0, { fixAtMs: 0 })).state;
+    state = acceptFix(
+      state,
+      fix(20, { accuracyM: ACCURACY_GATE_M + 10, fixAtMs: GAP_THRESHOLD_MS + 1 }),
+    ).state;
+    const { vertex } = acceptFix(state, fix(20, { fixAtMs: GAP_THRESHOLD_MS + 2000 }));
+
+    expect(vertex.gapBefore).toBe(true);
+  });
+
+  test('noteInterruption flags the next accepted vertex without any time gap', () => {
+    let state = acceptFix(createTraceState({ mode: 'path' }), fix(0, { fixAtMs: 0 })).state;
+    state = noteInterruption(state);
+    const { vertex } = acceptFix(state, fix(20, { fixAtMs: 1000 }));
+
+    expect(vertex.gapBefore).toBe(true);
+  });
+
+  test('resuming after a pause flags the next accepted vertex', () => {
+    // A paused stretch was walked unmeasured — inferred ground, same as a
+    // background gap (user decision 2026-08-24).
+    let state = acceptFix(createTraceState({ mode: 'path' }), fix(0, { fixAtMs: 0 })).state;
+    state = resumeTrace(pauseTrace(state));
+    const { vertex } = acceptFix(state, fix(20, { fixAtMs: 1000 }));
+
+    expect(vertex.gapBefore).toBe(true);
+  });
+
+  test('the first vertex never carries a gap — there is no preceding segment', () => {
+    const state = noteInterruption(createTraceState({ mode: 'path' }));
+    const { vertex } = acceptFix(state, fix(0, { fixAtMs: GAP_THRESHOLD_MS * 2 }));
+
+    expect(vertex.gapBefore).toBe(false);
+  });
+
+  test('the flag clears once claimed — the vertex after a gap vertex is clean', () => {
+    let state = acceptFix(createTraceState({ mode: 'path' }), fix(0, { fixAtMs: 0 })).state;
+    state = acceptFix(state, fix(20, { fixAtMs: GAP_THRESHOLD_MS + 1 })).state;
+    const { vertex } = acceptFix(state, fix(40, { fixAtMs: GAP_THRESHOLD_MS + 2000 }));
+
+    expect(vertex.gapBefore).toBe(false);
+  });
+
+  test('a rejected fix with nothing new returns the same state reference', () => {
+    // The appender re-offers the same fix when its effect re-runs; a fresh
+    // state object each time would make that effect loop forever.
+    const { state } = acceptFix(createTraceState({ mode: 'path' }), fix(0, { fixAtMs: 0 }));
+    const rejected = acceptFix(state, fix(1, { fixAtMs: 0 }));
+
+    expect(rejected.vertex).toBeNull();
+    expect(rejected.state).toBe(state);
+  });
+
+  test('readings without fixAtMs never trip the time rule', () => {
+    // Older fixtures and fakes omit it; absence of a clock is not a gap.
+    let { state } = acceptFix(createTraceState({ mode: 'path' }), fix(0));
+    const { vertex } = acceptFix(state, fix(20));
+
+    expect(vertex.gapBefore).toBe(false);
   });
 });
 
@@ -120,6 +208,17 @@ describe('createTraceState', () => {
     // The next accepted vertex continues the persisted sequence.
     const { vertex } = acceptFix(state, fix(50, { accuracyM: 2 }));
     expect(vertex.seq).toBe(2);
+  });
+
+  test('persisted gap flags survive the rebuild into finishTrace', () => {
+    const persisted = [
+      { seq: 0, lat: 0, lon: 0, accuracyM: 3, fixAt: 'a', gapBefore: false },
+      { seq: 1, lat: fix(20).lat, lon: 0, accuracyM: 3, fixAt: 'b', gapBefore: true },
+      { seq: 2, lat: fix(40).lat, lon: 0, accuracyM: 3, fixAt: 'c', gapBefore: false },
+    ];
+    const state = createTraceState({ mode: 'path', vertices: persisted });
+
+    expect(finishTrace(state).gaps).toEqual([1]);
   });
 });
 
@@ -160,6 +259,15 @@ describe('finishTrace — path', () => {
     expect(finished.fixAt).toBe('2026-08-12T09:00:00.000Z');
     expect(finished.lengthM).toBeCloseTo(30, 3);
     expect(finished.warnings).toEqual([]);
+    expect(finished.gaps).toEqual([]);
+  });
+
+  test('reports the vertices whose preceding segment was inferred', () => {
+    let state = acceptFix(createTraceState({ mode: 'path' }), fix(0, { fixAtMs: 0 })).state;
+    state = acceptFix(state, fix(20, { fixAtMs: GAP_THRESHOLD_MS + 1 })).state;
+    state = acceptFix(state, fix(40, { fixAtMs: GAP_THRESHOLD_MS + 2000 })).state;
+
+    expect(finishTrace(state).gaps).toEqual([1]);
   });
 
   test('cannot finish with fewer than two vertices', () => {

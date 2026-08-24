@@ -68,6 +68,12 @@ function observationToFeature(obs, session, appVersion, gridRef, audioFilename) 
       // Walked length of a trace, null on every point row — emitted always,
       // for the same column-set reason as the feature link above.
       trace_length_m: traceLengthM(geometry),
+      // Segments the app inferred rather than measured (index i = the
+      // segment from coordinate i-1 to i spans a fix-stream gap). Unlike
+      // trace_length_m this does NOT restate the geometry, so it must ride
+      // the export and be read back on import. `?? null` — the feature-link
+      // precedent; adding it changed every export's bytes once (2026-08-24).
+      trace_gaps: obs.traceGaps ?? null,
       // The revisit pairing: the reference station this observation revisits
       // and that station's photo filename inside the reference zip. Emitted
       // on every row (`?? null`, the feature-link precedent) — which changed

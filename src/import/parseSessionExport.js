@@ -111,6 +111,10 @@ export function observationFrom(feature, index, sessionId) {
       // walked line, and createObservation rightly rejects 'gps' + geometry.
       positionSource: props.position_source ?? (traced ? 'trace' : 'gps'),
       geometry: traced ? geometry : null,
+      // Which segments the exporter inferred rather than measured. Unlike
+      // os_grid_ref/trace_length_m below, this does NOT restate the
+      // geometry, so it must be read back, not re-derived.
+      traceGaps: traced ? (props.trace_gaps ?? null) : null,
       // The revisit pairing key — a copy must keep saying which reference
       // station each observation revisited, or the longitudinal join breaks
       // on first re-import. `?? null` for every export from before the

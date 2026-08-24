@@ -80,6 +80,7 @@ describe('sessionToFeatureCollection', () => {
           os_grid_ref: null,
           position_source: 'gps',
           trace_length_m: null,
+          trace_gaps: null,
           ref_obs_id: null,
           ref_photo: null,
           session_name: 'Ashton Keynes',
@@ -402,6 +403,26 @@ describe('traced observations', () => {
     expect(fc.features[0].properties.trace_length_m).toBeGreaterThan(300);
   });
 
+  test('inferred segments export as trace_gaps, null on an uninterrupted walk', () => {
+    const line3 = {
+      type: 'LineString',
+      coordinates: [
+        [-0.14, 51.5],
+        [-0.14, 51.501],
+        [-0.14, 51.502],
+      ],
+    };
+    const walked = sessionToFeatureCollection(session, [traceObs(LINE)], { appVersion: '0.1.0' });
+    const gapped = sessionToFeatureCollection(
+      session,
+      [{ ...traceObs(line3), traceGaps: [2] }],
+      { appVersion: '0.1.0' },
+    );
+
+    expect(walked.features[0].properties.trace_gaps).toBeNull();
+    expect(gapped.features[0].properties.trace_gaps).toEqual([2]);
+  });
+
   test('point observations carry trace_length_m null, keeping the column set stable', () => {
     const obs = createObservation({
       id: 'obs-1',
@@ -528,7 +549,7 @@ describe('revisit exports', () => {
     expect('survey_revisit' in fc).toBe(false);
   });
 
-  test('fence: this pass changes an ordinary export by exactly the two pairing columns', () => {
+  test('fence: the exact property column set — adding a key here changes every export’s bytes', () => {
     const obs = createObservation({
       id: 'obs-1',
       sessionId: 'sess-1',
@@ -564,6 +585,7 @@ describe('revisit exports', () => {
         'os_grid_ref',
         'position_source',
         'trace_length_m',
+        'trace_gaps',
         'ref_obs_id',
         'ref_photo',
         'session_name',

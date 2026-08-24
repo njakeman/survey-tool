@@ -50,6 +50,17 @@ describe('traceDraftStore', () => {
     expect(vertices[0]).toMatchObject({ draftId: 'draft-1', lat: 0, accuracyM: 5 });
   });
 
+  test('a gap flag on a vertex survives the round trip — recovery must keep it', async () => {
+    // The appender spreads the whole vertex into the record; a field
+    // allowlist here would silently drop gapBefore and a recovered draft
+    // would draw its suspension gap as measured ground.
+    await appendTraceVertex(db, 'draft-1', { ...vertex(0), gapBefore: false });
+    await appendTraceVertex(db, 'draft-1', { ...vertex(1), gapBefore: true });
+
+    const vertices = await listTraceVertices(db, 'draft-1');
+    expect(vertices.map((v) => v.gapBefore)).toEqual([false, true]);
+  });
+
   test("one draft's vertices never leak into another's", async () => {
     await appendTraceVertex(db, 'draft-1', vertex(0));
     await appendTraceVertex(db, 'draft-2', vertex(0));

@@ -34,6 +34,7 @@ describe('createObservation', () => {
       featureLabel: null,
       positionSource: 'gps',
       geometry: null,
+      traceGaps: null,
       audioDurationMs: null,
       changedAt: null,
       referenceObservationId: null,
@@ -320,6 +321,61 @@ describe('createObservation', () => {
       });
 
       expect(obs.geometry.coordinates[0]).toEqual(bowTie);
+    });
+  });
+
+  describe('trace gaps', () => {
+    // A three-segment path: valid gap indices are 1 and 2 (segment i-1 → i).
+    const LINE3 = {
+      type: 'LineString',
+      coordinates: [
+        [-0.14, 51.5],
+        [-0.141, 51.501],
+        [-0.142, 51.502],
+      ],
+    };
+    const traced = (overrides = {}) =>
+      createObservation({ ...baseFields, positionSource: 'trace', geometry: LINE3, ...overrides });
+
+    test('carries the inferred-segment indices of a walk the platform interrupted', () => {
+      expect(traced({ traceGaps: [1] }).traceGaps).toEqual([1]);
+    });
+
+    test('defaults to null, and an empty array normalises to null', () => {
+      expect(traced().traceGaps).toBeNull();
+      expect(traced({ traceGaps: [] }).traceGaps).toBeNull();
+    });
+
+    test('rejects gaps without a geometry — segment indices into nothing', () => {
+      expect(() => createObservation({ ...baseFields, traceGaps: [1] })).toThrow(/traceGaps/);
+    });
+
+    test('rejects a non-array, a non-integer, and an unordered list', () => {
+      expect(() => traced({ traceGaps: 1 })).toThrow(/traceGaps/);
+      expect(() => traced({ traceGaps: [1.5] })).toThrow(/traceGaps/);
+      expect(() => traced({ traceGaps: [2, 1] })).toThrow(/traceGaps/);
+      expect(() => traced({ traceGaps: [1, 1] })).toThrow(/traceGaps/);
+    });
+
+    test('rejects indices outside the segment range', () => {
+      // 0 has no preceding segment; a LineString of 3 coords has segments 1..2.
+      expect(() => traced({ traceGaps: [0] })).toThrow(/traceGaps/);
+      expect(() => traced({ traceGaps: [3] })).toThrow(/traceGaps/);
+    });
+
+    test('a polygon ring’s synthetic closing segment is not flaggable', () => {
+      const ring = [
+        [-0.14, 51.5],
+        [-0.141, 51.5],
+        [-0.141, 51.501],
+        [-0.14, 51.5],
+      ];
+      const boundary = (traceGaps) =>
+        traced({ geometry: { type: 'Polygon', coordinates: [ring] }, traceGaps });
+
+      // Vertices are ring[0..2]; segments 1 and 2 are walkable, 3 is closure.
+      expect(boundary([1, 2]).traceGaps).toEqual([1, 2]);
+      expect(() => boundary([3])).toThrow(/traceGaps/);
     });
   });
 

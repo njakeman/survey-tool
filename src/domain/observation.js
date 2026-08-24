@@ -111,6 +111,12 @@ export function createObservation({
   // point — a path's distance-midpoint, a boundary's centroid — and
   // gpsAccuracyM the worst vertex accuracy of the walk.
   geometry = null,
+  // Segments of a traced geometry the app inferred rather than measured:
+  // each entry i means the segment from coordinate i-1 to i spans a gap in
+  // the fix stream (the platform suspended the page, a pause, a recovered
+  // draft). Not derivable from the coordinates, so unlike trace_length_m it
+  // must survive export and import. Null when the whole walk was measured.
+  traceGaps = null,
   // The voice note's length, measured at record time — the one thing that
   // decides whether you play it now or later, so a list row can say 0:12
   // without loading the blob.
@@ -161,6 +167,33 @@ export function createObservation({
   }
   if (geometry) validateGeometry(geometry);
 
+  const normalisedGaps = Array.isArray(traceGaps) && traceGaps.length === 0 ? null : traceGaps;
+  if (normalisedGaps !== null && normalisedGaps !== undefined) {
+    if (!geometry) {
+      throw new Error('createObservation: traceGaps require a geometry to index into');
+    }
+    if (!Array.isArray(normalisedGaps)) {
+      throw new Error(`createObservation: traceGaps must be an array or null (got ${traceGaps})`);
+    }
+    // Valid segment indices: 1..n-1 over the walked vertices. A LineString
+    // of n coordinates has segments 1..n-1; a Polygon ring's last coordinate
+    // repeats the first, and that synthetic closing segment is never
+    // flaggable — the walk ended before it existed.
+    const segmentCount =
+      geometry.type === 'Polygon'
+        ? geometry.coordinates[0].length - 2
+        : geometry.coordinates.length - 1;
+    let previous = 0;
+    for (const seq of normalisedGaps) {
+      if (!Number.isInteger(seq) || seq < 1 || seq > segmentCount || seq <= previous) {
+        throw new Error(
+          `createObservation: traceGaps must be strictly increasing integers in 1..${segmentCount} (got ${normalisedGaps})`,
+        );
+      }
+      previous = seq;
+    }
+  }
+
   if (audioDurationMs !== null && (!Number.isFinite(audioDurationMs) || audioDurationMs < 0)) {
     throw new Error(
       `createObservation: audioDurationMs must be a non-negative number or null (got ${audioDurationMs})`,
@@ -210,6 +243,7 @@ export function createObservation({
     featureLabel: linked ? featureLabel : null,
     positionSource,
     geometry,
+    traceGaps: normalisedGaps ?? null,
     audioDurationMs,
     changedAt,
     referenceObservationId,

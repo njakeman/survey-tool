@@ -189,6 +189,9 @@ export function createCaptureService({ db, newId, nowIso }) {
       featureLabel: feature?.featureId ? (feature.title ?? null) : null,
       positionSource: trace ? 'trace' : pickedPoint ? 'map' : 'gps',
       geometry: trace ? trace.geometry : null,
+      // Which segments of the walk were inferred rather than measured —
+      // finishTrace's gaps ride into the record and on into the export.
+      traceGaps: trace ? (trace.gaps ?? null) : null,
       // Measured by the recorder at stop — the one thing that lets a list
       // row say 0:12 without loading the blob.
       audioDurationMs: audio?.durationMs ?? null,
