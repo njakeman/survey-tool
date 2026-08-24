@@ -193,11 +193,141 @@ describe('observationShapesCollection', () => {
 
     expect(fc.features).toHaveLength(1);
     expect(fc.features[0].geometry).toEqual(LINE);
-    expect(fc.features[0].properties).toEqual({ obs_id: 'obs-2', exported: false, changed: false });
+    expect(fc.features[0].properties).toEqual({
+      obs_id: 'obs-2',
+      exported: false,
+      changed: false,
+      part: 'walked',
+    });
   });
 
   test('is an empty collection for no observations', () => {
     expect(observationShapesCollection(null).features).toEqual([]);
+  });
+
+  describe('inferred segments', () => {
+    const LINE4 = {
+      type: 'LineString',
+      coordinates: [
+        [0, 0],
+        [0, 1],
+        [0, 2],
+        [0, 3],
+      ],
+    };
+
+    test('a gapped path splits into walked runs and inferred segments', () => {
+      const fc = observationShapesCollection([
+        { id: 'obs-1', geometry: LINE4, traceGaps: [2], exported: false },
+      ]);
+
+      const walked = fc.features.find((f) => f.properties.part === 'walked');
+      const inferred = fc.features.find((f) => f.properties.part === 'inferred');
+      expect(fc.features).toHaveLength(2);
+      expect(walked.geometry).toEqual({
+        type: 'MultiLineString',
+        coordinates: [
+          [
+            [0, 0],
+            [0, 1],
+          ],
+          [
+            [0, 2],
+            [0, 3],
+          ],
+        ],
+      });
+      expect(inferred.geometry).toEqual({
+        type: 'MultiLineString',
+        coordinates: [
+          [
+            [0, 1],
+            [0, 2],
+          ],
+        ],
+      });
+      // Both halves carry the export decoration — the walked line still
+      // splits solid-versus-dashed like any other trace.
+      expect(inferred.properties).toEqual({ obs_id: 'obs-1', exported: false, changed: false, part: 'inferred' });
+    });
+
+    test('adjacent gap segments merge into one inferred run', () => {
+      const fc = observationShapesCollection([
+        { id: 'obs-1', geometry: LINE4, traceGaps: [2, 3], exported: false },
+      ]);
+
+      const inferred = fc.features.find((f) => f.properties.part === 'inferred');
+      expect(inferred.geometry.coordinates).toEqual([
+        [
+          [0, 1],
+          [0, 2],
+          [0, 3],
+        ],
+      ]);
+    });
+
+    test('a gapped boundary keeps its full-ring fill, and its closure stays walked', () => {
+      const ring = [
+        [0, 0],
+        [1, 0],
+        [1, 1],
+        [0, 1],
+        [0, 0],
+      ];
+      const fc = observationShapesCollection([
+        {
+          id: 'obs-1',
+          geometry: { type: 'Polygon', coordinates: [ring] },
+          traceGaps: [2],
+          exported: true,
+        },
+      ]);
+
+      // The fill must not lose the polygon when the outline splits.
+      const fill = fc.features.find((f) => f.properties.part === 'fill');
+      expect(fill.geometry.type).toBe('Polygon');
+      expect(fill.geometry.coordinates).toEqual([ring]);
+
+      const walked = fc.features.find((f) => f.properties.part === 'walked');
+      // Segments 1, 3 and the synthetic closure 4 were walked; 2 was not.
+      expect(walked.geometry).toEqual({
+        type: 'MultiLineString',
+        coordinates: [
+          [
+            [0, 0],
+            [1, 0],
+          ],
+          [
+            [1, 1],
+            [0, 1],
+            [0, 0],
+          ],
+        ],
+      });
+      const inferred = fc.features.find((f) => f.properties.part === 'inferred');
+      expect(inferred.geometry.coordinates).toEqual([
+        [
+          [1, 0],
+          [1, 1],
+        ],
+      ]);
+    });
+
+    test('an ungapped polygon stays one feature, filled and outlined from the same ring', () => {
+      const ring = [
+        [0, 0],
+        [1, 0],
+        [1, 1],
+        [0, 0],
+      ];
+      const fc = observationShapesCollection([
+        { id: 'obs-1', geometry: { type: 'Polygon', coordinates: [ring] } },
+      ]);
+
+      expect(fc.features).toHaveLength(1);
+      expect(fc.features[0].geometry.type).toBe('Polygon');
+      expect(fc.features[0].properties.part).toBe('walked');
+    });
   });
 });
 
@@ -208,20 +338,39 @@ describe('traceShapeLayers', () => {
     const lines = layers.filter((l) => l.type === 'line' && !l.id.endsWith('-casing'));
 
     expect(fill.filter).toEqual(['==', ['geometry-type'], 'Polygon']);
-    expect(lines).toHaveLength(2);
+    expect(lines).toHaveLength(3);
 
     // Solid-versus-dashed is the line-scale analogue of the markers
     // filled-versus-hollow: it must survive greyscale. Two layers rather
     // than a data-driven dasharray, which MapLibre does not support.
     // Solid only while the export is still good — an edited-since-export
-    // trace goes dashed again, like its marker goes hollow.
+    // trace goes dashed again, like its marker goes hollow. Both draw only
+    // the walked parts: the inferred parts have their own dotted layer.
     const solidFilter = ['all', ['get', 'exported'], ['!', ['get', 'changed']]];
+    const walkedPart = ['==', ['get', 'part'], 'walked'];
     const exported = lines.find((l) => l.id === 'trace-line-exported');
     const pending = lines.find((l) => l.id === 'trace-line-pending');
-    expect(exported.filter).toEqual(solidFilter);
-    expect(pending.filter).toEqual(['!', solidFilter]);
+    expect(exported.filter).toEqual(['all', solidFilter, walkedPart]);
+    expect(pending.filter).toEqual(['all', ['!', solidFilter], walkedPart]);
     expect(exported.paint['line-dasharray']).toBeUndefined();
     expect(pending.paint['line-dasharray']).toBeDefined();
+  });
+
+  test('inferred segments draw dotted in the same ink, one layer for both export states', () => {
+    // Dotted = "the app inferred this stretch, it was not walked under a
+    // live fix". Dash already means unexported, so the dot rhythm must read
+    // clearly shorter than the [2,2] pending dash. Export-ness stays
+    // readable from the rest of the line and the marker fill.
+    const layers = traceShapeLayers();
+    const inferred = layers.find((l) => l.id === 'trace-line-inferred');
+    const pending = layers.find((l) => l.id === 'trace-line-pending');
+
+    expect(inferred.filter).toEqual(['==', ['get', 'part'], 'inferred']);
+    expect(inferred.paint['line-color']).toBe(pending.paint['line-color']);
+    expect(inferred.paint['line-width']).toBe(pending.paint['line-width']);
+    expect(inferred.paint['line-dasharray'][0]).toBeLessThan(
+      pending.paint['line-dasharray'][0] / 2,
+    );
   });
 
   test('every layer draws from the one observation-shapes source', () => {
@@ -255,6 +404,7 @@ describe('traceShapeLayers', () => {
 
     expect(ids.indexOf('trace-line-exported-casing')).toBe(ids.indexOf('trace-line-exported') - 1);
     expect(ids.indexOf('trace-line-pending-casing')).toBe(ids.indexOf('trace-line-pending') - 1);
+    expect(ids.indexOf('trace-line-inferred-casing')).toBe(ids.indexOf('trace-line-inferred') - 1);
 
     for (const casing of layers.filter((l) => l.id.endsWith('-casing'))) {
       const line = layers.find((l) => l.id === casing.id.replace('-casing', ''));
@@ -262,8 +412,24 @@ describe('traceShapeLayers', () => {
       expect(casing.filter).toEqual(line.filter);
       expect(casing.paint['line-color']).toBe(traceCasingColor());
       expect(casing.paint['line-width']).toBeGreaterThan(line.paint['line-width']);
+      if (line.id === 'trace-line-inferred') continue; // asserted below
       expect(casing.paint['line-dasharray']).toBeUndefined();
     }
+  });
+
+  test('the inferred casing is dotted in step with its line, never solid beneath the dots', () => {
+    // A solid 5px casing under a dotted 3px line would read as a solid line
+    // with dots on top — the one place the solid-casing rule must bend.
+    // Dasharray units are multiples of line-width, so the casing's values
+    // scale by width ratio to land the same dots on the ground.
+    const layers = traceShapeLayers();
+    const line = layers.find((l) => l.id === 'trace-line-inferred');
+    const casing = layers.find((l) => l.id === 'trace-line-inferred-casing');
+
+    const ratio = line.paint['line-width'] / casing.paint['line-width'];
+    expect(casing.paint['line-dasharray']).toEqual(
+      line.paint['line-dasharray'].map((v) => v * ratio),
+    );
   });
 });
 
@@ -282,7 +448,7 @@ describe('active trace', () => {
     expect(activeTraceData(null).features).toEqual([]);
   });
 
-  test('two or more vertices draw as one LineString', () => {
+  test('two or more vertices draw as one walked LineString', () => {
     const fc = activeTraceData([
       [0, 0],
       [0, 0.001],
@@ -290,6 +456,39 @@ describe('active trace', () => {
 
     expect(fc.features).toHaveLength(1);
     expect(fc.features[0].geometry.type).toBe('LineString');
+    expect(fc.features[0].properties.part).toBe('walked');
+  });
+
+  test('gap segments split out of the live line as an inferred feature', () => {
+    const fc = activeTraceData(
+      [
+        [0, 0],
+        [0, 1],
+        [0, 2],
+      ],
+      [2],
+    );
+
+    const walked = fc.features.find((f) => f.properties.part === 'walked');
+    const inferred = fc.features.find((f) => f.properties.part === 'inferred');
+    expect(walked.geometry).toEqual({
+      type: 'MultiLineString',
+      coordinates: [
+        [
+          [0, 0],
+          [0, 1],
+        ],
+      ],
+    });
+    expect(inferred.geometry).toEqual({
+      type: 'MultiLineString',
+      coordinates: [
+        [
+          [0, 1],
+          [0, 2],
+        ],
+      ],
+    });
   });
 
   test('the live line is accent-coloured and dashed - provisional, like the picked point', () => {
@@ -297,6 +496,7 @@ describe('active trace', () => {
     const line = layers.find((l) => l.id === 'active-trace-line');
 
     expect(line.source).toBe(ACTIVE_TRACE_SOURCE_ID);
+    expect(line.filter).toEqual(['==', ['get', 'part'], 'walked']);
     expect(line.paint['line-color']).toBe('#c2611f');
     expect(line.paint['line-dasharray']).toBeDefined();
   });
@@ -304,11 +504,35 @@ describe('active trace', () => {
   test('the live line rides its own casing, like the saved ones', () => {
     const ids = activeTraceLayers().map((l) => l.id);
 
-    expect(ids).toEqual(['active-trace-line-casing', 'active-trace-line']);
+    expect(ids).toEqual([
+      'active-trace-line-casing',
+      'active-trace-line',
+      'active-trace-inferred-casing',
+      'active-trace-inferred',
+    ]);
 
     const casing = activeTraceLayers().find((l) => l.id === 'active-trace-line-casing');
     expect(casing.paint['line-color']).toBe(traceCasingColor());
     expect(casing.paint['line-dasharray']).toBeUndefined();
+  });
+
+  test('the live gap stretch draws dotted accent, its casing in step', () => {
+    // Same grammar as the saved shapes: dots mean inferred. The dot rhythm
+    // must read against the [1.5,1.5] dash of the live walked line.
+    const layers = activeTraceLayers();
+    const line = layers.find((l) => l.id === 'active-trace-inferred');
+    const casing = layers.find((l) => l.id === 'active-trace-inferred-casing');
+    const walkedLine = layers.find((l) => l.id === 'active-trace-line');
+
+    expect(line.filter).toEqual(['==', ['get', 'part'], 'inferred']);
+    expect(line.paint['line-color']).toBe(walkedLine.paint['line-color']);
+    expect(line.paint['line-dasharray'][0]).toBeLessThan(
+      walkedLine.paint['line-dasharray'][0] / 2,
+    );
+    const ratio = line.paint['line-width'] / casing.paint['line-width'];
+    expect(casing.paint['line-dasharray']).toEqual(
+      line.paint['line-dasharray'].map((v) => v * ratio),
+    );
   });
 });
 

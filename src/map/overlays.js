@@ -131,21 +131,72 @@ export function observationsFeatureCollection(observations) {
 // appears in both (its shape here, its marker dot above).
 export const OBSERVATION_SHAPES_SOURCE_ID = 'observation-shapes';
 
+// Split one traced coordinate run into walked and inferred sub-runs. `gaps`
+// holds segment indices (i = the segment from coords[i-1] to coords[i] was
+// inferred — a background gap, a pause, a recovered draft). Adjacent gap
+// segments merge into one run. A polygon ring's synthetic closing segment
+// never appears in `gaps` (observation.js validates that), so the closure
+// always lands in a walked run.
+function splitTraceRuns(coords, gaps) {
+  const gapSet = new Set(gaps);
+  const walked = [];
+  const inferred = [];
+  let current = null;
+  let currentInferred = null;
+  for (let i = 1; i < coords.length; i += 1) {
+    const isGap = gapSet.has(i);
+    if (current && currentInferred === isGap) {
+      current.push(coords[i]);
+    } else {
+      current = [coords[i - 1], coords[i]];
+      currentInferred = isGap;
+      (isGap ? inferred : walked).push(current);
+    }
+  }
+  return { walked, inferred };
+}
+
 export function observationShapesCollection(observations) {
-  return {
-    type: 'FeatureCollection',
-    features: (observations ?? [])
-      .filter((observation) => observation.geometry)
-      .map((observation) => ({
+  const features = [];
+  for (const observation of observations ?? []) {
+    const geometry = observation.geometry;
+    if (!geometry) continue;
+    const properties = (part) => ({
+      obs_id: observation.id,
+      exported: Boolean(observation.exported),
+      changed: Boolean(observation.changed),
+      part,
+    });
+    const gaps = observation.traceGaps ?? null;
+    if (!gaps || gaps.length === 0) {
+      features.push({ type: 'Feature', geometry, properties: properties('walked') });
+      continue;
+    }
+    // A gapped walk splits: the walked runs and the inferred runs are
+    // separate features because line-dasharray is not data-drivable. A
+    // polygon additionally keeps its full ring as a fill-only feature — the
+    // fill layer filters by geometry type and a MultiLineString would lose
+    // the wash.
+    const ring = geometry.type === 'Polygon';
+    if (ring) features.push({ type: 'Feature', geometry, properties: properties('fill') });
+    const coords = ring ? geometry.coordinates[0] : geometry.coordinates;
+    const runs = splitTraceRuns(coords, gaps);
+    if (runs.walked.length) {
+      features.push({
         type: 'Feature',
-        geometry: observation.geometry,
-        properties: {
-          obs_id: observation.id,
-          exported: Boolean(observation.exported),
-          changed: Boolean(observation.changed),
-        },
-      })),
-  };
+        geometry: { type: 'MultiLineString', coordinates: runs.walked },
+        properties: properties('walked'),
+      });
+    }
+    if (runs.inferred.length) {
+      features.push({
+        type: 'Feature',
+        geometry: { type: 'MultiLineString', coordinates: runs.inferred },
+        properties: properties('inferred'),
+      });
+    }
+  }
+  return { type: 'FeatureCollection', features };
 }
 
 // The casing under every trace line: 5px of solid pale (or, at night,
@@ -171,6 +222,21 @@ function casingLayer(line) {
   };
 }
 
+// The dotted casing under a dotted line: a solid casing there would read as
+// a solid line with dots on top — the one place the solid-casing rule bends.
+// Dasharray units are multiples of line-width, so the casing's values scale
+// by the width ratio to land its dots exactly under the line's.
+function dottedCasingLayer(line) {
+  const casing = casingLayer(line);
+  const ratio = line.paint['line-width'] / casing.paint['line-width'];
+  casing.paint['line-dasharray'] = line.paint['line-dasharray'].map((v) => v * ratio);
+  return casing;
+}
+
+// Dots against the [2,2] pending dash: at width 3 this is ~1.2px marks with
+// ~4.8px air — unmistakably a different rhythm from a dash, in any palette.
+const INFERRED_DASH = [0.4, 1.6];
+
 // Solid versus dashed is the line-scale analogue of the markers'
 // filled-versus-hollow: exported-or-not must survive greyscale, so it is
 // never carried by hue. Two line layers split by filter rather than one
@@ -182,21 +248,33 @@ function casingLayer(line) {
 // own casing.
 export function traceShapeLayers() {
   const source = OBSERVATION_SHAPES_SOURCE_ID;
+  const walkedPart = ['==', ['get', 'part'], 'walked'];
   const exported = {
     id: 'trace-line-exported',
     type: 'line',
     source,
     // Solid only while the export is still good — an edited-since-export
-    // trace goes dashed again, the line-scale analogue of hollow.
-    filter: SAFELY_EXPORTED,
+    // trace goes dashed again, the line-scale analogue of hollow. Walked
+    // parts only: the stretches the app inferred draw dotted below.
+    filter: ['all', SAFELY_EXPORTED, walkedPart],
     paint: { 'line-color': MARKER_INK, 'line-width': 3 },
   };
   const pending = {
     id: 'trace-line-pending',
     type: 'line',
     source,
-    filter: ['!', SAFELY_EXPORTED],
+    filter: ['all', ['!', SAFELY_EXPORTED], walkedPart],
     paint: { 'line-color': MARKER_INK, 'line-width': 3, 'line-dasharray': [2, 2] },
+  };
+  // One dotted layer for both export states: dotted means "inferred, not
+  // walked" (a background gap, a pause), and export-ness stays readable
+  // from the rest of the line and the marker fill. Dash was taken.
+  const inferred = {
+    id: 'trace-line-inferred',
+    type: 'line',
+    source,
+    filter: ['==', ['get', 'part'], 'inferred'],
+    paint: { 'line-color': MARKER_INK, 'line-width': 3, 'line-dasharray': INFERRED_DASH },
   };
   return [
     {
@@ -204,7 +282,8 @@ export function traceShapeLayers() {
       type: 'fill',
       source,
       // Faint either way — the fill says "this area", the outline carries
-      // the exported distinction.
+      // the exported distinction. Geometry-type keeps it to the full rings:
+      // a gapped boundary's outline runs are MultiLineStrings.
       filter: ['==', ['geometry-type'], 'Polygon'],
       paint: { 'fill-color': MARKER_INK, 'fill-opacity': 0.12 },
     },
@@ -212,6 +291,8 @@ export function traceShapeLayers() {
     exported,
     casingLayer(pending),
     pending,
+    dottedCasingLayer(inferred),
+    inferred,
   ];
 }
 
@@ -327,16 +408,42 @@ export function stationDiamondImage(variant) {
 // visual language of the picked point, against the ink of saved shapes.
 export const ACTIVE_TRACE_SOURCE_ID = 'active-trace';
 
-export function activeTraceData(coordinates) {
+export function activeTraceData(coordinates, gaps = null) {
   // Always a FeatureCollection, empty below two vertices — a source set
   // unconditionally, like the highlight, and a dot is not a line.
   const enough = Array.isArray(coordinates) && coordinates.length >= 2;
-  return {
-    type: 'FeatureCollection',
-    features: enough
-      ? [{ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates } }]
-      : [],
-  };
+  if (!enough) return { type: 'FeatureCollection', features: [] };
+  if (!gaps || gaps.length === 0) {
+    return {
+      type: 'FeatureCollection',
+      features: [
+        {
+          type: 'Feature',
+          properties: { part: 'walked' },
+          geometry: { type: 'LineString', coordinates },
+        },
+      ],
+    };
+  }
+  // Same split as the saved shapes: the stretch the app was suspended for
+  // draws dotted mid-walk too, so the surveyor sees the gap before Save.
+  const runs = splitTraceRuns(coordinates, gaps);
+  const features = [];
+  if (runs.walked.length) {
+    features.push({
+      type: 'Feature',
+      properties: { part: 'walked' },
+      geometry: { type: 'MultiLineString', coordinates: runs.walked },
+    });
+  }
+  if (runs.inferred.length) {
+    features.push({
+      type: 'Feature',
+      properties: { part: 'inferred' },
+      geometry: { type: 'MultiLineString', coordinates: runs.inferred },
+    });
+  }
+  return { type: 'FeatureCollection', features };
 }
 
 export function activeTraceLayers() {
@@ -344,7 +451,17 @@ export function activeTraceLayers() {
     id: 'active-trace-line',
     type: 'line',
     source: ACTIVE_TRACE_SOURCE_ID,
+    filter: ['==', ['get', 'part'], 'walked'],
     paint: { 'line-color': '#c2611f', 'line-width': 3, 'line-dasharray': [1.5, 1.5] },
   };
-  return [casingLayer(line), line];
+  // The live walk's inferred stretch: dotted accent, same grammar as the
+  // saved shapes' dotted ink.
+  const inferred = {
+    id: 'active-trace-inferred',
+    type: 'line',
+    source: ACTIVE_TRACE_SOURCE_ID,
+    filter: ['==', ['get', 'part'], 'inferred'],
+    paint: { 'line-color': '#c2611f', 'line-width': 3, 'line-dasharray': INFERRED_DASH },
+  };
+  return [casingLayer(line), line, dottedCasingLayer(inferred), inferred];
 }

@@ -50,6 +50,14 @@ export default defineConfig({
             enabled: true,
             provider: playwright(),
             instances: [{ browser: 'chromium' }, { browser: 'webkit' }],
+            // Vitest's default browser-mode port (63315) can land inside a
+            // Windows Hyper-V/WinNAT excluded port range (they move between
+            // reboots), which fails the whole tier with `listen EACCES`
+            // before a single test runs. Pin a port above the ephemeral
+            // ranges observed reserved; strictPort stays off so a genuine
+            // collision falls through to the next free port rather than
+            // dying.
+            api: { port: 63700 },
           },
         },
       },

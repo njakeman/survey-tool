@@ -545,14 +545,18 @@ export async function createMapAdapter({
       ?.setData(stationsCollection(state?.stations, state?.currentId ?? null));
   }
 
-  // The walk in progress, as a bare coordinates array (or null). Rendered
-  // only from two vertices — a dot is not a line (overlays.js).
-  function setActiveTrace(coordinates) {
+  // The walk in progress: { coordinates, gaps } (or a bare coordinates
+  // array, or null). Rendered only from two vertices — a dot is not a line
+  // (overlays.js); `gaps` are the segment indices the app inferred rather
+  // than measured, drawn dotted mid-walk.
+  function setActiveTrace(trace) {
     if (!styleLoaded) {
-      pendingActiveTrace = coordinates;
+      pendingActiveTrace = trace;
       return;
     }
-    map.getSource(ACTIVE_TRACE_SOURCE_ID)?.setData(activeTraceData(coordinates));
+    const coordinates = Array.isArray(trace) ? trace : (trace?.coordinates ?? null);
+    const gaps = Array.isArray(trace) ? null : (trace?.gaps ?? null);
+    map.getSource(ACTIVE_TRACE_SOURCE_ID)?.setData(activeTraceData(coordinates, gaps));
   }
 
   // Night mode reaches the canvas as one flipped colour: the CSS filter dims
@@ -567,7 +571,9 @@ export async function createMapAdapter({
     for (const id of [
       'trace-line-exported-casing',
       'trace-line-pending-casing',
+      'trace-line-inferred-casing',
       'active-trace-line-casing',
+      'active-trace-inferred-casing',
     ]) {
       map.setPaintProperty(id, 'line-color', traceCasingColor(Boolean(night)));
     }

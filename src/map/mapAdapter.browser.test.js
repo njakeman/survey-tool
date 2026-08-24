@@ -811,8 +811,12 @@ describe('trace layers against real MapLibre', () => {
       'trace-line-exported',
       'trace-line-pending-casing',
       'trace-line-pending',
+      'trace-line-inferred-casing',
+      'trace-line-inferred',
       'active-trace-line-casing',
       'active-trace-line',
+      'active-trace-inferred-casing',
+      'active-trace-inferred',
     ]) {
       expect(order.indexOf(id)).toBeGreaterThan(order.indexOf('feature-highlight-line'));
       expect(order.indexOf(id)).toBeLessThan(order.indexOf('position-accuracy'));
@@ -820,9 +824,37 @@ describe('trace layers against real MapLibre', () => {
 
     // Each casing directly beneath its own line — anything between them
     // would draw inside the casing's halo.
-    for (const line of ['trace-line-exported', 'trace-line-pending', 'active-trace-line']) {
+    for (const line of [
+      'trace-line-exported',
+      'trace-line-pending',
+      'trace-line-inferred',
+      'active-trace-line',
+      'active-trace-inferred',
+    ]) {
       expect(order.indexOf(`${line}-casing`)).toBe(order.indexOf(line) - 1);
     }
+  });
+
+  test('a gapped trace splits into walked and inferred features in the shapes source', async () => {
+    const adapter = await createAdapter();
+    await adapter.ready;
+
+    adapter.setObservations([
+      {
+        ...TRACED,
+        geometry: {
+          type: 'LineString',
+          coordinates: [
+            [-0.5, 51.5],
+            [-0.45, 51.55],
+            [-0.4, 51.6],
+          ],
+        },
+        traceGaps: [2],
+      },
+    ]);
+
+    expect(await adapter.getSourceFeatureCount('observation-shapes')).toBe(2);
   });
 
   test('setObservations feeds the markers and the shapes from one call', async () => {
@@ -849,6 +881,22 @@ describe('trace layers against real MapLibre', () => {
 
     adapter.setActiveTrace(null);
     expect(await adapter.getSourceFeatureCount('active-trace')).toBe(0);
+  });
+
+  test('a live trace with gaps feeds walked and inferred features', async () => {
+    const adapter = await createAdapter();
+    await adapter.ready;
+
+    adapter.setActiveTrace({
+      coordinates: [
+        [-0.5, 51.5],
+        [-0.45, 51.55],
+        [-0.4, 51.6],
+      ],
+      gaps: [2],
+    });
+
+    expect(await adapter.getSourceFeatureCount('active-trace')).toBe(2);
   });
 });
 
