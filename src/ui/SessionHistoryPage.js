@@ -461,7 +461,12 @@ export function SessionHistoryPage({
       <input
         ref=${fileInputRef}
         type="file"
-        accept=".zip,.geojson,.json,application/zip,application/geo+json,application/json"
+        ${
+          '' /* application/octet-stream for Android document providers that
+             report zips as bare binary and grey them out; a bad pick still
+             fails with a named reason in parseSessionExport. */
+        }
+        accept=".zip,.geojson,.json,application/zip,application/geo+json,application/json,application/octet-stream"
         class="visually-hidden"
         aria-hidden="true"
         tabindex="-1"

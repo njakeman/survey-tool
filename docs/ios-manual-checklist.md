@@ -377,7 +377,9 @@ force-quit recovery path.
 - [ ] **Force-quit mid-trace, relaunch:** the "Unfinished trace found" strip appears; Resume
       continues **paused** with the walked points intact; walk on after resuming and the line
       carries on from where it stopped
-- [ ] Pause, walk ~50 m, Resume, walk on: the line bridges the gap with one straight segment
+- [ ] Pause, walk ~50 m, Resume, walk on: the line bridges the gap — **dotted** since 2026-08-24
+      (a paused stretch is inferred ground, not measured), with no "app was in the background"
+      notice (a deliberate pause explains itself)
 - [ ] Boundary: walk a rough rectangle, Finish — it closes and saves; walk a deliberate
       figure-eight — the "crosses itself" warning shows and Save still works
 - [ ] Finish a boundary after only two points: refused with the keep-walking message, still
@@ -388,10 +390,18 @@ force-quit recovery path.
       observations and the `trace_length_m` column is populated on the traced row, null elsewhere
 - [ ] Save an ordinary point observation mid-trace: it saves normally and the walk carries on
       unaffected
-- [ ] Lock the screen for 2 minutes mid-walk, unlock: iOS suspends the watch, so expect a
-      straight segment across the gap — note how long the watch takes to come back
+- [ ] **The screen no longer auto-locks while a trace records** (wake lock, 2026-08-24) — on
+      iOS 18.4+ installed to the home screen; earlier iOS ignores the request silently and the
+      dotted record below is the fallback. Pause the trace and confirm normal auto-lock returns.
+- [ ] Lock the screen manually (side button — the wake lock cannot and should not prevent that)
+      for 2 minutes mid-walk, unlock: the missed stretch draws **dotted**, the one-line "Trace
+      paused — the app was in the background. That stretch is drawn dotted." notice appears once
+      and dismisses, and the saved observation's export carries `trace_gaps` naming the stretch
+      — note how long the watch takes to come back
+- [ ] Switch to another app mid-walk and return: same dotted stretch + notice as the lock case
 - [ ] Battery/thermals over a ~30 min continuous trace (extends the existing watch item — the
-      trace adds only small writes, so expect no measurable difference; verify that)
+      trace adds only small writes, but the wake lock now keeps the screen on for the duration,
+      which is a real battery cost; measure it rather than assuming)
 - [ ] A pre-trace export (any old zip) still imports unchanged
 
 ## Second design pass — trace polish, night mode, locator, icon

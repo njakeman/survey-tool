@@ -1,10 +1,17 @@
 # Manual Android checklist
 
-**Nothing on this page has been run.** It was written from a code audit (2026-08-17) with no
-Android device available; every item is a prediction, not a result. iOS is the design target and
-the sign-off gate — this file is what turns Android from "un-blocked" into "verified", once a
-device exists. Fill in results the same way `docs/ios-manual-checklist.md` does: tick the box and
-add the specific finding in bold, don't just check it off silent.
+**Nothing on this page has been run.** It was written from a code audit (2026-08-17, extended
+2026-08-24 for revisit mode and the trace-gap work) with no Android device available; every item
+is a prediction, not a result. iOS is the design target and the sign-off gate — this file is what
+turns Android from "un-blocked" into "verified", once a device exists. Fill in results the same
+way `docs/ios-manual-checklist.md` does: tick the box and add the specific finding in bold, don't
+just check it off silent.
+
+**Test against `https://` only** — the LAN preview is `https://<LAN-IP>:4173/` and the deployed
+site is HTTPS, but if anything ever serves this app over plain HTTP, revisit mode dies at the
+reference load (`crypto.subtle` is secure-context-only, so hashing the picked zip throws) while
+the rest of the app appears to work. A revisit failure on an HTTP origin is the test setup, not a
+bug.
 
 Playwright's `mobile-chrome` project (`playwright.config.js`, added alongside this file) proves
 wiring at a mobile viewport with touch, on the engine Android Chrome ships — it is not a real
@@ -65,9 +72,16 @@ real debugging time before the cause was found.
 ## Trace mode
 
 - [ ] Walk a short path trace, finish, save — the traced observation survives a reload
-- [ ] Lock the screen mid-trace: the gap comes back as one straight segment on resume, same as
-      the documented iOS behaviour (Android's background-suspend behaviour for `watchPosition`
-      differs from iOS's, so this is worth confirming rather than assuming it matches)
+- [ ] **The screen stays awake while a trace records** (the wake lock, 2026-08-24 — Android
+      Chrome has supported it since 84). Pause the trace and confirm the screen is allowed to
+      lock again on its normal timeout.
+- [ ] Background the app mid-trace (home button or app switch — Chromium stops geolocation
+      callbacks whenever the page is not foregrounded), walk a stretch, return: the missed
+      stretch draws **dotted** on the map, the one-line "Trace paused — the app was in the
+      background" notice appears once and dismisses, and the saved observation exports with
+      `trace_gaps` naming the stretch
+- [ ] Pause → walk → Resume: the paused stretch also draws dotted, but **no** background notice
+      appears — a deliberate pause explains itself
 
 ## Export / share
 
@@ -76,9 +90,11 @@ implementation differ from iOS's in ways the audit could not verify by reading s
 
 - [ ] **Dismissing the share sheet must not flip the Exported badge.** Android's share sheet does
       not reliably reject with `AbortError` the way iOS's does; `share.js`'s `cancelled: true`
-      branch may never fire on Android. If dismissing the sheet stamps `lastExportedAt` anyway,
-      that is a data-honesty defect (CLAUDE.md: "a dismissed share sheet stamps nothing" is
-      non-negotiable) and needs a real fix, not a shrug.
+      branch may never fire on Android. Note (2026-08-24): since `7d06c6b`, any share rejection
+      that is _not_ an `AbortError` now falls through to the `<a download>` fallback rather than
+      surfacing as a failure — so a dismissal Android reports as a generic error will land the
+      zip in Downloads (and stamp the badge, honestly, because the bytes did leave the app). The
+      defect to watch for is a dismissal that stamps **without** producing a file anywhere.
 - [ ] Completing a share (or falling back to download) does flip the badge to Exported
 - [ ] If `canShare({ files })` refuses the export zip and the app falls back to `<a
 download>` — confirm the badge still stamps correctly on that path too. (On Android this
@@ -88,9 +104,39 @@ download>` — confirm the badge still stamps correctly on that path too. (On An
 ## Import
 
 - [ ] Import a session `.zip` exported from this same install. Some Android file providers report
-      a zip as `application/octet-stream` rather than `application/zip` — check whether
-      `SessionHistoryPage.js`'s file-input `accept` list greys the file out; if so this needs a
-      fix (broaden the `accept` list or drop MIME filtering in favour of extension only)
+      a zip as `application/octet-stream` rather than `application/zip` — both file inputs
+      (`SessionHistoryPage.js` import and `RevisitSetup.js` reference pick) now include
+      `application/octet-stream` in their `accept` lists for exactly this (2026-08-24); confirm
+      the zip is actually pickable from Files/Drive/Downloads providers
+
+## Revisit mode (2026-08-24, mirrors the iOS checklist's section)
+
+- [ ] Start screen → "Revisit a survey" → "Load reference export" opens the system file picker
+      from the **installed** app; picking a previous export shows its name, station/photo counts
+      and date; picking a non-export file fails with a named reason (not a spinner, not silence)
+- [ ] With a fix, the Nearest stations list shows believable distances and compass points
+- [ ] "Start revisit session" opens capture with the station block: plan diagram, bearing arrow,
+      distance, and the dated reference note. No compass permission prompt exists on Android —
+      confirm the bearing arrow tracks device rotation regardless (it rides
+      `deviceorientationabsolute`)
+- [ ] Walk toward the station: the distance falls and the arrow tracks; the current target does
+      not jump between stations on GPS jitter
+- [ ] "Frame the photo": the reference photo renders at size; "Take photo" opens the camera
+      (`capture="environment"`); returning lands back on capture with the photo attached and the
+      pairing strip armed. Android kills background activities under memory pressure much like
+      iOS — verify state survives the camera round trip on a low-end device if one is available
+- [ ] The framing screen clears the status bar and gesture bar (Android's translucent status bar
+      in standalone mode is the analogue of the iOS notch item; same `env(safe-area-inset-*)`
+      CSS, differently honoured)
+- [ ] Save marks the station DONE (filled diamond on map and list); Undo reverts it to to-do
+- [ ] Skip shows the dismissible line with Undo; "Can't reach it" confirms in place and takes an
+      optional reason; the end-of-session summary shows all four outcomes
+- [ ] Night mode: station diamonds legible on the dimmed canvas; plan diagram follows the night
+      palette; framing scrim unchanged
+- [ ] A ~40-photo reference held across a full session: no crash, framing stays responsive,
+      force-quit and relaunch reopens with guidance intact (the zip re-reads from IndexedDB)
+- [ ] Export the revisit and re-import it elsewhere: it arrives as an ordinary closed session,
+      observations carry `ref_obs_id`, and history names the referenced survey
 
 ## Layout
 

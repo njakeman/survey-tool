@@ -413,11 +413,9 @@ describe('traced observations', () => {
       ],
     };
     const walked = sessionToFeatureCollection(session, [traceObs(LINE)], { appVersion: '0.1.0' });
-    const gapped = sessionToFeatureCollection(
-      session,
-      [{ ...traceObs(line3), traceGaps: [2] }],
-      { appVersion: '0.1.0' },
-    );
+    const gapped = sessionToFeatureCollection(session, [{ ...traceObs(line3), traceGaps: [2] }], {
+      appVersion: '0.1.0',
+    });
 
     expect(walked.features[0].properties.trace_gaps).toBeNull();
     expect(gapped.features[0].properties.trace_gaps).toEqual([2]);

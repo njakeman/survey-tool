@@ -367,18 +367,32 @@ transparent`, and `user-select: none` on buttons/photo-control labels (not the c
 - [x] **`mobile-chrome` e2e coverage.** `playwright.config.js` gained a `devices['Pixel 7']`
       project. It shares `browserName: 'chromium'` with the desktop project, so every spec
       already gated on that runs at mobile viewport with touch automatically — no guard changes
-      needed, and all 15 tests passed unmodified.
+      needed. Everything added since rides the same rule: the revisit-mode e2e
+      (`e2e/revisit.spec.js`) runs on the mobile-chrome project with no Android-specific work.
 - [ ] **A device pass.** `docs/android-manual-checklist.md` — install from Chrome's menu (the
       maskable icon should render uncropped), compass shows a heading after Start with no
       permission prompt, share-sheet export flips the Exported badge, the app launches offline
-      from the icon, a screen-lock mid-trace comes back as one straight segment, voice notes
-      record and play back, plus several items (share-sheet cancellation, the `canShare` fallback
-      path, the sticky history header's safe-area) that could only be identified, not verified,
-      by reading source. **Nothing on it has been run yet** — no Android device was available for
-      this pass.
+      from the icon, voice notes record and play back, plus several items (share-sheet
+      cancellation, the `canShare` fallback path, the sticky history header's safe-area) that
+      could only be identified, not verified, by reading source. **Nothing on it has been run
+      yet** — no Android device was available for this pass.
 - [ ] **A known cosmetic difference to accept.** Android reports no compass accuracy figure, so
       the locator deliberately draws its widest, faintest beam — the designed treatment for an
       unknown uncertainty, not a bug.
+
+Landed since that pass, checklist updated but still unrun on a device (2026-08-24):
+
+- **Revisit mode** works on web-standard paths throughout — the reference zip picker
+  (`accept` now includes `application/octet-stream`, because Android document providers commonly
+  report a zip as bare binary and grey it out), the native camera via
+  `<input capture="environment">`, `crypto.subtle` hashing (secure context only — test over
+  HTTPS), and `DecompressionStream('deflate-raw')` (Chrome 111+). The checklist gained a Revisit
+  section mirroring the iOS one.
+- **Background GPS during traces**: Chromium deliberately stops geolocation callbacks whenever
+  the page is not foregrounded, so a backgrounded trace loses its fix stream on Android exactly
+  as on iOS. The app now records the missed stretch honestly (dotted on the map, `trace_gaps` in
+  the export, a one-line notice on return) and holds a **screen wake lock** while a trace
+  records (Chrome 84+) so the screen never auto-locks mid-walk.
 
 Deliberately out of scope: a custom `beforeinstallprompt` install affordance (Chrome's own
 "Install app" menu entry covers it) and `screen.orientation.lock()` (unnecessary — Android already

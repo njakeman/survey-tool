@@ -248,7 +248,12 @@ describe('observationShapesCollection', () => {
       });
       // Both halves carry the export decoration — the walked line still
       // splits solid-versus-dashed like any other trace.
-      expect(inferred.properties).toEqual({ obs_id: 'obs-1', exported: false, changed: false, part: 'inferred' });
+      expect(inferred.properties).toEqual({
+        obs_id: 'obs-1',
+        exported: false,
+        changed: false,
+        part: 'inferred',
+      });
     });
 
     test('adjacent gap segments merge into one inferred run', () => {
@@ -526,9 +531,7 @@ describe('active trace', () => {
 
     expect(line.filter).toEqual(['==', ['get', 'part'], 'inferred']);
     expect(line.paint['line-color']).toBe(walkedLine.paint['line-color']);
-    expect(line.paint['line-dasharray'][0]).toBeLessThan(
-      walkedLine.paint['line-dasharray'][0] / 2,
-    );
+    expect(line.paint['line-dasharray'][0]).toBeLessThan(walkedLine.paint['line-dasharray'][0] / 2);
     const ratio = line.paint['line-width'] / casing.paint['line-width'];
     expect(casing.paint['line-dasharray']).toEqual(
       line.paint['line-dasharray'].map((v) => v * ratio),

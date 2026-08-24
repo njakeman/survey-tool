@@ -71,18 +71,33 @@ do not reopen them:
 - **Export/import**: the feature carries the walked geometry in place of the Point;
   `trace_length_m` is derived at export on every feature (`?? null`, the feature-link precedent —
   old exports still import, guarded by tests). Import passes non-Point geometry back through
-  `createObservation` and defaults a bare non-Point feature to `'trace'`.
+  `createObservation` and defaults a bare non-Point feature to `'trace'`. `trace_gaps`
+  (2026-08-24) rides the same on-every-feature rule but is **read back on import, never
+  re-derived** — unlike `trace_length_m` it does not restate the geometry.
 - **Map**: saved shapes render from `overlays.js`'s `observation-shapes` source (solid vs
-  **dashed** line = exported vs not, the line-scale filled-vs-hollow; layers sit above the
+  **dashed** line = exported vs not, the line-scale filled-vs-hollow; **dotted = inferred** —
+  see the gap bullet below — via a walked/inferred feature split, because `line-dasharray` is
+  not data-drivable; layers sit above the
   highlight, below `position-accuracy` — asserted in the browser tier), the live walk as a dashed
   accent line via `setActiveTrace`, keyed per accepted vertex, not per GPS tick.
 - **UI**: Trace button in the capture actions row → path/boundary chooser; `ui/TraceStrip.js` is
   the persistent readout (pause/resume, two-step discard); point capture stays live mid-trace;
   End session is refused while a trace is recording or pending; "Mark a distant point" is
   withheld while a trace is pending (both arm the same Save).
-- iOS suspends `watchPosition` when a standalone PWA is backgrounded/screen-locked — the gap
-  comes back as a straight segment, indistinguishable from a pause. Deliberately not coded
-  around (no wake-lock); it is a checklist item.
+- **Background gaps are recorded honestly, not coded around** (2026-08-24, superseding the
+  earlier no-wake-lock note — user decision after the design handoff's investigation). No web
+  API delivers geolocation to a backgrounded PWA on either OS (iOS suspends the page; Chromium
+  deliberately stops callbacks when not foregrounded), so: the reducer flags a vertex
+  `gapBefore` when the fix stream went silent >15 s (`GAP_THRESHOLD_MS`), when CapturePage saw
+  `visibilitychange`→hidden (`noteInterruption`), or on resume-after-pause/recovery — the flag
+  rides the draft-store spread, `finishTrace().gaps` → `traceGaps` on the observation
+  (validated) → `trace_gaps` in the export. Those segments draw **dotted** (dash was taken:
+  dashed = unexported), live and saved, with rhythm-matched dotted casings — the one bend in the
+  solid-casing rule. A dismissible `role="status"` notice appears once per background gap
+  ("…That stretch is drawn dotted."), never for a deliberate Pause. `sensors/wakeLock.js` holds
+  a screen wake lock only while a trace actually records (feature-detected; iOS 16.4+, working
+  in installed PWAs from 18.4; every refusal swallowed) so the screen no longer auto-locks
+  mid-walk — an optimisation, never a requirement.
 
 **Revisit mode** (2026-08-21, design pass t8): re-photograph a previous export's stations so a
 longitudinal record builds up. A revisit is a **session type** chosen at start (`createSession`

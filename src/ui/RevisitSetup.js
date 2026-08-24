@@ -22,7 +22,13 @@ function FilePick({ label, onPickFile, busy }) {
     ${busy ? 'Reading…' : label}
     <input
       type="file"
-      accept=".zip,application/zip"
+      ${
+        '' /* application/octet-stream included for Android document
+           providers that report zips as bare binary and would otherwise
+           grey the file out; loadReferenceFile still names its reason on
+           anything that is not a survey export. */
+      }
+      accept=".zip,application/zip,application/octet-stream"
       class="visually-hidden"
       disabled=${busy}
       onChange=${(event) => {

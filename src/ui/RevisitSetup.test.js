@@ -36,7 +36,9 @@ describe('RevisitSetup', () => {
 
     expect(screen.getByText(/load reference export/i)).toBeInTheDocument();
     const input = document.querySelector('input[type="file"]');
-    expect(input).toHaveAttribute('accept', '.zip,application/zip');
+    // octet-stream included: Android document providers commonly report a
+    // zip as bare binary and would grey it out without it (2026-08-24).
+    expect(input).toHaveAttribute('accept', '.zip,application/zip,application/octet-stream');
   });
 
   test('picking a file hands it over', () => {

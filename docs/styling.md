@@ -267,6 +267,24 @@ binding on later changes.
 - **Trace-line casings** (`src/map/overlays.js`): 5px solid pale under every trace line, flipped
   near-black in night via the adapter's `setNightMode`. Solid under the dashed lines
   deliberately. Casing-directly-beneath-line is asserted in the browser tier; don't reorder.
+  **One exception (2026-08-24): the inferred layers' casings are dotted in step with their
+  lines** — a solid casing under a dotted line would read as a solid line with dots on top,
+  erasing the very distinction the dots carry. Dasharray units are line-width multiples, so the
+  casing's values are the line's scaled by the width ratio; asserted in the node tier.
+- **Inferred trace segments draw dotted** (2026-08-24, from the design handoff's background-gap
+  decision). The stretch of a walk the app did not measure — the platform suspended the page, a
+  deliberate Pause, a force-quit recovered later — draws as fine dots (`[0.4, 1.6]` at width 3)
+  in the same ink and width as the rest of the line, on both the saved shapes and the live
+  accent walk. The handoff said "dashed"; **dash was already taken** (dashed = not exported at
+  line scale, and the live walk is a dashed accent), so the grammar is now three-valued and
+  survives greyscale: solid = exported, dashed = unexported, dotted = inferred. One dotted layer
+  serves both export states — export-ness stays readable from the rest of the line and the
+  marker fill. On return from the background the capture page shows a one-line
+  `role="status"` notice (`.trace-gap-notice`, the skip-notice component): "Trace paused — the
+  app was in the background. That stretch is drawn dotted." — dismissible, once per gap, never
+  for a deliberate Pause. A screen **wake lock** (`src/sensors/wakeLock.js`) holds while a trace
+  actually records, so the commonest cause of the gap — the screen auto-locking — mostly stops
+  happening; it is an optimisation, never a requirement, and every refusal is swallowed.
 - **Night mode** is a third mode, not a darker dark: `<html data-mode="night">`
   (`src/app/displayMode.js`, persisted in settings, Auto|Night switch in the capture footer)
   drives a one-hue token block, the map's grayscale+red-multiply filter, and the theme-color
@@ -424,7 +442,9 @@ observation, `?? null`.
   installed PWA, so `@media (orientation: landscape) and (max-height: 500px)` caps
   `.capture-map` at 180px and the readings, note and Save stay on the fold. The manifest's
   `orientation: portrait` was already present; `screen.orientation.lock()` was skipped — it
-  benefits only Android, which is not a target.
+  benefits only Android, which already honours the manifest's portrait lock without it. (When
+  this was written Android was not yet a target; it is now — 2026-08-17 — and the conclusion
+  holds for the opposite reason.)
 - **The attachment strip** (§7a): a saved row's three stacked orange links became one line —
   the photo as a 44px `--surface` chip (`.attachment-chip`), the voice note as a chip reading
   its stored duration (`0:12`) or `Voice note` for legacy records, and **Edit note staying a
