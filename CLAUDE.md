@@ -129,8 +129,15 @@ The settled decisions:
 - **A missing reference degrades, never blocks**: the session still captures with one honest
   line; history names the referenced survey from `session.reference`, which outlives the bytes.
 - Map stations are runtime-generated diamond images (`overlays.js`) above traces, below
-  `position-accuracy` (asserted in the browser tier); the plan diagram is token-coloured DOM
-  SVG, deliberately not on the canvas so night mode is free.
+  `position-accuracy` (asserted in the browser tier).
+- **The station arrow rotates live** (2026-08-24, the design's superseding `8b` revision):
+  screen-relative to the effective device heading — the compass reading first, then
+  course-over-ground from consecutive fixes (`sensors/course.js`, derived from lat/lon deltas
+  gated on real movement, NEVER from the GPS's own `coords.heading`, which `position.js`
+  still drops) — through the locator's `accumulateRotation` unwrap so the CSS transition never
+  spins the long way. No heading source at all → the arrow stands at **true bearing** and the
+  caption drops ` · live`; it is never pinned. The 86px **plan diagram was dropped** by that
+  same revision (static, duplicated the map panel) — do not rebuild it.
 - Deferred, by decision: reference traces drawn lighter on the map; history-as-reference-source;
   any overlay framing.
 
@@ -297,7 +304,8 @@ standalone, matchMedia })`, browser globals injected same as `app/standalone.js`
   solid-vs-dashed rather than colour-coded, and it all lives here rather than in `mapAdapter.js`
   so those distinctions are node-testable; deliberately _not_ reusing `domain/geojson.js`, whose
   bytes the export depends on), `locator.js` (the live-fix station mark: beam maths and SVG,
-  pure — the adapter owns the DOM marker it feeds), `followMode.js`,
+  pure — the adapter owns the DOM marker it feeds; also exports `accumulateRotation`, the
+  cumulative 359→1 unwrap shared by the beam and the station arrow), `followMode.js`,
   `viewport.js`, `basemapSelection.js` (which region is active, and which merely _suggested_),
   `pmtilesSource.js` (an `ArrayBuffer`-backed pmtiles `Source`), `glyphs.js`, `manifest.js`
   (Node-only, for the generator script). `src/ui/CaptureMap.js` receives an injected `createMap`

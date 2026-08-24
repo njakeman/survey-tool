@@ -122,4 +122,50 @@ describe('StationBlock', () => {
 
     expect(screen.getByText(/waiting for gps fix/i)).toBeInTheDocument();
   });
+
+  describe('the live arrow (design 8b revision, 2026-08-24)', () => {
+    const position = { lat: 51.5, lon: -0.14, accuracyM: 6 };
+    const props = {
+      station,
+      stationCount: 12,
+      position,
+      referenceStartedAt: '2025-04-12T09:00:00.000Z',
+      onChange: vi.fn(),
+      onFrame: vi.fn(),
+      onSkip: vi.fn(),
+      onNoAccess: vi.fn(),
+    };
+    const arrow = () => document.querySelector('.station-block-arrow');
+
+    test('the plan diagram is gone — superseded, the map panel already shows the field', () => {
+      renderBlock();
+
+      expect(document.querySelector('.plan-diagram')).toBeNull();
+    });
+
+    test('with a heading, the arrow rotates screen-relative and the caption says live', () => {
+      // Station due north (bearing 000); device facing east (090): on a
+      // screen whose up is where the device points, north is 270° clockwise.
+      render(html`<${StationBlock} ...${props} guidanceHeadingDeg=${90} />`);
+
+      expect(arrow().style.transform).toBe('rotate(270deg)');
+      expect(screen.getByText(/bearing 000° · ±6 m fix · live/)).toBeInTheDocument();
+    });
+
+    test('without any heading source, the arrow shows true bearing and never claims live', () => {
+      render(html`<${StationBlock} ...${props} />`);
+
+      expect(arrow().style.transform).toBe('rotate(0deg)');
+      expect(screen.getByText(/bearing 000° · ±6 m fix/)).toBeInTheDocument();
+      expect(screen.queryByText(/· live/)).toBeNull();
+    });
+
+    test('rotation accumulates across the wrap — 350° to 10° turns forward, never spins back', () => {
+      const { rerender } = render(html`<${StationBlock} ...${props} guidanceHeadingDeg=${10} />`);
+      expect(arrow().style.transform).toBe('rotate(350deg)');
+
+      rerender(html`<${StationBlock} ...${props} guidanceHeadingDeg=${350} />`);
+      expect(arrow().style.transform).toBe('rotate(370deg)');
+    });
+  });
 });

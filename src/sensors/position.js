@@ -2,7 +2,10 @@
 // watch lifecycle safety. GPS course/speed (coords.heading/coords.speed)
 // are deliberately never exposed — that's course-over-ground, easily
 // confused with compass bearing, and null when stationary; dropping it here
-// makes that confusion structurally impossible downstream.
+// makes that confusion structurally impossible downstream. (sensors/course.js
+// derives a course from CONSECUTIVE readings' lat/lon instead, gated on real
+// movement — that is compatible with this rule, not an exception to it: the
+// raw per-fix field stays dropped.)
 
 export const DEFAULT_POSITION_OPTIONS = { enableHighAccuracy: true, maximumAge: 0 };
 

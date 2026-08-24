@@ -85,6 +85,10 @@
   --type-save: 20px;
   --type-heading-xl: 25px;
   --type-readout: 27px;
+  /* The station arrow's distance — the walking instruction, read at arm's
+     length while moving (design 8b revision; mock 38px × the block's own
+     ×0.83 mock-to-token factor). Used only by .station-block-distance. */
+  --type-guidance: 32px;
 
   /* Colour. Paper, ink and accent are literals, which is why this sheet has
      a prefers-color-scheme block (below) for the first time — everything
@@ -984,14 +988,9 @@ button {
   border-radius: var(--radius);
 }
 
-.station-block-guidance {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-}
-
+/* The guidance flex row that seated the 86px plan diagram went with the
+   diagram (superseded, 2026-08-24) — the where-block stands alone now. */
 .station-block-where {
-  flex: 1;
   min-width: 0;
 }
 
@@ -1014,15 +1013,19 @@ button {
   font-variant-numeric: tabular-nums;
 }
 
+/* Rotates live with the device (or stands at true bearing without a
+   heading source); the cumulative angle from accumulateRotation keeps this
+   transition turning the short way across the 359→1 wrap. */
 .station-block-arrow {
   flex: none;
-  width: 2.1rem;
-  height: 2.1rem;
+  width: 3rem;
+  height: 3rem;
   stroke: var(--accent);
+  transition: transform 200ms linear;
 }
 
 .station-block-distance {
-  font-size: var(--type-heading-xl);
+  font-size: var(--type-guidance);
   font-weight: 700;
   letter-spacing: -0.02em;
 }
@@ -1193,51 +1196,6 @@ button {
   margin: 0;
   font-size: var(--type-meta);
   color: var(--text-secondary);
-}
-
-/* ---- Plan diagram ------------------------------------------------------ */
-
-.plan-diagram {
-  flex: none;
-  background: var(--paper);
-  border: 1px solid var(--rule-faint);
-  border-radius: var(--radius);
-}
-
-.plan-diagram-ring {
-  fill: none;
-  stroke: var(--rule);
-  stroke-dasharray: 2 3;
-}
-
-.plan-diagram-you {
-  fill: var(--accent);
-}
-
-.plan-diagram-tick {
-  stroke: var(--accent);
-  stroke-width: 1.5;
-  opacity: 0.7;
-}
-
-.plan-diagram-station.plan-diagram-done {
-  fill: var(--ink);
-}
-
-.plan-diagram-station.plan-diagram-todo {
-  fill: none;
-  stroke: var(--ink);
-  stroke-width: 1.5;
-}
-
-.plan-diagram-station.plan-diagram-current {
-  fill: var(--accent);
-}
-
-.plan-diagram-caption {
-  font-family: var(--font-label);
-  font-size: 8px; /* inside an 86px viewBox — a caption, not interface text */
-  fill: var(--text-muted);
 }
 
 /* ---- Readings ---------------------------------------------------------- */

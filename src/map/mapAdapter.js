@@ -34,7 +34,7 @@ import {
   highlightSourceData,
 } from './featureLayerStyle.js';
 import { describeTappedFeature } from './featureQuery.js';
-import { LOCATOR_SVG, beamPath, locatorView } from './locator.js';
+import { LOCATOR_SVG, accumulateRotation, beamPath, locatorView } from './locator.js';
 import {
   fitViewport,
   initialZoomFromHeader,
@@ -476,12 +476,7 @@ export async function createMapAdapter({
     beam.style.display = '';
     beam.style.opacity = String(view.beam.opacity);
     path.setAttribute('d', beamPath(view.beam.arcDeg));
-    if (locatorRotation === null) {
-      locatorRotation = view.beam.rotationDeg;
-    } else {
-      const delta = ((((view.beam.rotationDeg - locatorRotation) % 360) + 540) % 360) - 180;
-      locatorRotation += delta;
-    }
+    locatorRotation = accumulateRotation(locatorRotation, view.beam.rotationDeg);
     beam.style.transform = `rotate(${locatorRotation}deg)`;
   }
 

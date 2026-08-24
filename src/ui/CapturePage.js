@@ -16,6 +16,7 @@ import { StationBlock } from './StationBlock.js';
 import { StationList } from './StationList.js';
 import { FramingScreen } from './FramingScreen.js';
 import { formatLatLon } from '../sensors/format.js';
+import { courseFromFixes } from '../sensors/course.js';
 import { chooseActive } from '../map/basemapSelection.js';
 import {
   countUnexported,
@@ -159,6 +160,27 @@ export function CapturePage({
     requestPermission: sensors.requestHeadingPermission,
     watch: sensors.watchHeading,
   });
+
+  // Course-over-ground from consecutive fixes — the station arrow's third
+  // heading source, behind the compass (design 8b revision). The anchor
+  // advances only when a course is accepted (movement past the noise floor),
+  // so standing still keeps the last honest course rather than jittering.
+  const courseAnchorRef = useRef(null);
+  const [courseDeg, setCourseDeg] = useState(null);
+  useEffect(() => {
+    if (!position) return;
+    if (!courseAnchorRef.current) {
+      courseAnchorRef.current = position;
+      return;
+    }
+    const course = courseFromFixes(courseAnchorRef.current, position);
+    if (course != null) {
+      courseAnchorRef.current = position;
+      setCourseDeg(course);
+    }
+  }, [position]);
+  // Compass always outranks course when it is actually reporting.
+  const guidanceHeadingDeg = heading?.headingDeg ?? courseDeg ?? null;
 
   // Single source of truth for both the "N saved" count and the
   // observations table — one fetch, not a count kept in sync by hand.
@@ -1002,9 +1024,8 @@ export function CapturePage({
           ? html`<${StationBlock}
               station=${currentStation}
               stationCount=${derivedStations.length}
-              stations=${derivedStations}
-              currentId=${currentStationId}
               position=${position}
+              guidanceHeadingDeg=${guidanceHeadingDeg}
               referenceStartedAt=${session?.reference?.startedAt}
               busy=${saveState === 'saving'}
               onChange=${() => setChoosingStation(true)}

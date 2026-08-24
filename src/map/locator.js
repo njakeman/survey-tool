@@ -35,6 +35,16 @@ function round1(value) {
   return Math.round(value * 10) / 10;
 }
 
+// Cumulative rotation for CSS-transitioned compass elements: 359°→1° must
+// turn 2° forward, not spin 358° the long way round, so the returned angle
+// accumulates past 360 instead of wrapping. Shared by the locator beam
+// (mapAdapter) and the station guidance arrow (StationBlock).
+export function accumulateRotation(previous, targetDeg) {
+  if (previous === null || previous === undefined) return targetDeg;
+  const delta = ((((targetDeg - previous) % 360) + 540) % 360) - 180;
+  return previous + delta;
+}
+
 // A wedge of `arcDeg` centred due north, rotated into place by the caller
 // via a CSS transform — rotation must not rebuild the path.
 export function beamPath(arcDeg) {

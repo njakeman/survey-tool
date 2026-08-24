@@ -1,5 +1,40 @@
 import { describe, expect, test } from 'vitest';
-import { BEAM_MIN_DEG, BEAM_MAX_DEG, LOCATOR_SVG, beamPath, locatorView } from './locator.js';
+import {
+  BEAM_MIN_DEG,
+  BEAM_MAX_DEG,
+  LOCATOR_SVG,
+  accumulateRotation,
+  beamPath,
+  locatorView,
+} from './locator.js';
+
+describe('accumulateRotation', () => {
+  test('the first reading is taken as-is', () => {
+    expect(accumulateRotation(null, 90)).toBe(90);
+  });
+
+  test('359° to 1° turns 2° forward, not 358° back', () => {
+    expect(accumulateRotation(359, 1)).toBe(361);
+  });
+
+  test('1° to 359° turns 2° back, not 358° forward', () => {
+    expect(accumulateRotation(1, 359)).toBe(-1);
+  });
+
+  test('keeps accumulating across full turns', () => {
+    // Three quarter-turns past a wrap: the cumulative angle keeps growing so
+    // a CSS transition never spins the long way round.
+    let angle = accumulateRotation(null, 350);
+    angle = accumulateRotation(angle, 80);
+    expect(angle).toBe(440);
+    angle = accumulateRotation(angle, 170);
+    expect(angle).toBe(530);
+  });
+
+  test('a same-heading tick is a no-op', () => {
+    expect(accumulateRotation(720, 0)).toBe(720);
+  });
+});
 
 describe('locatorView', () => {
   test('no compass means no beam at all — the honest representation of not knowing', () => {

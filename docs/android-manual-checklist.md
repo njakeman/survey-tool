@@ -115,10 +115,12 @@ download>` — confirm the badge still stamps correctly on that path too. (On An
       from the **installed** app; picking a previous export shows its name, station/photo counts
       and date; picking a non-export file fails with a named reason (not a spinner, not silence)
 - [ ] With a fix, the Nearest stations list shows believable distances and compass points
-- [ ] "Start revisit session" opens capture with the station block: plan diagram, bearing arrow,
-      distance, and the dated reference note. No compass permission prompt exists on Android —
-      confirm the bearing arrow tracks device rotation regardless (it rides
-      `deviceorientationabsolute`)
+- [ ] "Start revisit session" opens capture with the station block: bearing arrow, distance,
+      and the dated reference note (no plan diagram — dropped 2026-08-24 as superseded). No
+      compass permission prompt exists on Android — confirm the arrow **tracks device rotation
+      live while standing still** (it rides `deviceorientationabsolute`; caption ends `· live`)
+- [ ] On a device with no usable compass: the arrow holds true bearing without `live`, then
+      starts tracking from course-over-ground after walking a few metres — never pinned
 - [ ] Walk toward the station: the distance falls and the arrow tracks; the current target does
       not jump between stations on GPS jitter
 - [ ] "Frame the photo": the reference photo renders at size; "Take photo" opens the camera
@@ -131,8 +133,8 @@ download>` — confirm the badge still stamps correctly on that path too. (On An
 - [ ] Save marks the station DONE (filled diamond on map and list); Undo reverts it to to-do
 - [ ] Skip shows the dismissible line with Undo; "Can't reach it" confirms in place and takes an
       optional reason; the end-of-session summary shows all four outcomes
-- [ ] Night mode: station diamonds legible on the dimmed canvas; plan diagram follows the night
-      palette; framing scrim unchanged
+- [ ] Night mode: station diamonds legible on the dimmed canvas; station block follows the
+      night palette; framing scrim unchanged
 - [ ] A ~40-photo reference held across a full session: no crash, framing stays responsive,
       force-quit and relaunch reopens with guidance intact (the zip re-reads from IndexedDB)
 - [ ] Export the revisit and re-import it elsewhere: it arrives as an ordinary closed session,

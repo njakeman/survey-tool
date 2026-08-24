@@ -1893,6 +1893,68 @@ describe('CapturePage — revisit', () => {
     expect(screen.getByText(/West stile, west boundary/)).toBeInTheDocument();
   });
 
+  test('a compass reading rotates the station arrow live', async () => {
+    const service = revisitService();
+    const { sensors, pushPosition, pushHeading } = createFakeSensors();
+    renderPage({ service, sensors });
+    pushPosition(POSITION);
+    await screen.findByText('Station 1 of 2');
+
+    // The station is due north (bearing 000), so before any heading the
+    // arrow stands at true bearing…
+    const arrow = () => document.querySelector('.station-block-arrow');
+    expect(arrow().style.transform).toBe('rotate(0deg)');
+    expect(screen.queryByText(/· live/)).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /enable compass/i }));
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: /enable compass/i })).toBeNull(),
+    );
+    pushHeading({ headingDeg: 90, headingAccuracyDeg: 5, source: 'webkit-compass' });
+
+    // …and with the device facing east, north is 90° anticlockwise — the
+    // short way round from 0, so the cumulative angle goes negative.
+    await waitFor(() => expect(arrow().style.transform).toBe('rotate(-90deg)'));
+    expect(screen.getByText(/· live/)).toBeInTheDocument();
+  });
+
+  test('with no compass, walking arms the course fallback and the arrow goes live', async () => {
+    const service = revisitService();
+    const { sensors, pushPosition } = createFakeSensors();
+    renderPage({ service, sensors });
+    pushPosition(POSITION);
+    await screen.findByText('Station 1 of 2');
+    expect(screen.queryByText(/· live/)).toBeNull();
+
+    // ~20 m due east of POSITION — past the course gate's noise floor.
+    pushPosition({ ...POSITION, lon: -0.14 + 20 / (111_320 * Math.cos((51.5 * Math.PI) / 180)) });
+
+    await screen.findByText(/· live/);
+  });
+
+  test('the compass outranks the course once both exist', async () => {
+    const service = revisitService();
+    const { sensors, pushPosition, pushHeading } = createFakeSensors();
+    renderPage({ service, sensors });
+    pushPosition(POSITION);
+    await screen.findByText('Station 1 of 2');
+    pushPosition({ ...POSITION, lon: -0.14 + 20 / (111_320 * Math.cos((51.5 * Math.PI) / 180)) });
+    await screen.findByText(/· live/);
+    const arrow = () => document.querySelector('.station-block-arrow');
+    const courseDriven = arrow().style.transform;
+
+    fireEvent.click(screen.getByRole('button', { name: /enable compass/i }));
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: /enable compass/i })).toBeNull(),
+    );
+    // Same position, so the course cannot have changed — only a compass
+    // reading taking over can move the arrow.
+    pushHeading({ headingDeg: 0, headingAccuracyDeg: 5, source: 'webkit-compass' });
+
+    await waitFor(() => expect(arrow().style.transform).not.toBe(courseDriven));
+    expect(screen.getByText(/· live/)).toBeInTheDocument();
+  });
+
   test('the header wears the Revisit chip and the progress count', async () => {
     const service = revisitService();
     const { sensors } = createFakeSensors();

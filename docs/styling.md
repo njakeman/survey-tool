@@ -602,18 +602,25 @@ colour tokens** (nothing to keep in lockstep across the two dark blocks):
   `badge-exported`, to-do/skipped stay dashed like `badge-not-exported`, current takes the accent
   border. Rows are wrapped in a button only when tappable (the Change chooser); Review renders
   them static.
-- **Station block** (`.station-block*`): the mock's 30px distance renders at `--type-heading-xl`
-  (25px) and its 9.5/10/12.5px labels at `--type-badge`/`--type-label`/`--type-fine` — the mock's
-  numbers map to tokens, never copied literally (the brand-lockup precedent). The bearing arrow
-  is inline SVG rotated by the bearing directly — the map never rotates, so north-up needs no
-  compass. The **no-access confirm replaces the action rows in place** (the house idiom) and its
+- **Station block** (`.station-block*`, revised 2026-08-24 per the design's superseding `8b`):
+  the arrow + distance are the whole walking instruction, and **the arrow rotates live** —
+  screen-relative to the device heading (compass reading first, course-over-ground from
+  consecutive fixes behind it, `sensors/course.js`), through the locator beam's own cumulative
+  unwrap (`accumulateRotation`, `map/locator.js`) so the 200ms transform transition turns 2°
+  across the 359→1 wrap, never the long way round. With **no** heading source the arrow stands
+  at true bearing and the caption drops its ` · live` suffix — deliberately the opposite
+  degradation from the locator beam (the beam's _width is_ the compass's uncertainty, so no
+  compass = no beam; the arrow is an _instruction_, and an instruction must never vanish — it
+  falls back to a labelled bearing instead). Sizes map to tokens by the block's own ×0.83
+  mock-to-token factor (the brand-lockup precedent): mock 58px arrow → 3rem, mock 38px distance
+  → `--type-guidance` (32px, a new token used only here), mock 19px cardinal → `--type-control`.
+  The **no-access confirm replaces the action rows in place** (the house idiom) and its
   commit is **accent, not danger**: it records a claim about the world — moves a record toward
   saved — and destroys nothing; the danger register stays at exactly its two destructive
   confirms.
-- **Plan diagram** (`.plan-diagram*`, 86px viewBox): DOM SVG in the page flow, coloured by
-  tokens, so every scheme including night arrives free — the reason it is not drawn on the map
-  canvas. Rings dashed at half/full radius, adaptive scale with an 8px corner caption (inside an
-  86px viewBox — a caption, not interface text, the one sub-token size).
+- **Plan diagram — dropped** (2026-08-24). The 86px orientation schematic beside the arrow was
+  superseded by the design's own revision: static, and it duplicated the map panel directly
+  above it. Module, tests and `.plan-diagram*` CSS deleted. Don't rebuild it.
 - **Map**: station diamonds are runtime-rasterised symbol images (overlays.js — filled ink done,
   hollow to-do, accent + ring current; skipped/no-access draw hollow like to-do, the words live
   in the list), pale-cased like the trace lines, inserted above traces and below

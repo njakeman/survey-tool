@@ -639,8 +639,14 @@ export zip in the Files app.
       fails with a named reason, not a dead tap
 - [ ] With a fix, Nearest stations lists real distances and compass points before starting
 - [ ] Start revisit session: the compass prompt still appears (the pick did not consume the
-      gesture); the station block aims at the nearest station with the plan diagram, arrow,
-      distance and the dated reference note
+      gesture); the station block aims at the nearest station with the arrow, distance and the
+      dated reference note (no plan diagram — dropped 2026-08-24 as superseded)
+- [ ] **Stand still and rotate the phone**: the arrow tracks the rotation live (compass-driven,
+      caption ends `· live`), turning the short way across north, never spinning the long way
+- [ ] **Deny compass** (decline the prompt, or Settings → Safari → Motion & Orientation off):
+      the arrow holds at true bearing with the `bearing 038°` caption and no `live`; after
+      walking a few metres it starts tracking again from course-over-ground — it is never
+      pinned at a stale angle
 - [ ] Walk toward the station: the distance falls, the arrow tracks, and the current target does
       NOT jump to a different station on GPS jitter
 - [ ] Frame the photo: the reference photo renders at size from the stored zip; Take photo opens
@@ -653,8 +659,8 @@ export zip in the Files app.
       to a hollow to-do
 - [ ] Skip shows the dismissible line with Undo; Can't reach it asks first, takes a reason, and
       the summary at End shows all four outcomes
-- [ ] Night mode: the station diamonds stay legible on the dimmed canvas; the plan diagram and
-      station block follow the night palette; the framing screen's scrim is unchanged
+- [ ] Night mode: the station diamonds stay legible on the dimmed canvas; the station block
+      follows the night palette; the framing screen's scrim is unchanged
 - [ ] A ~40-photo reference held across a full session: no crash, framing stays responsive, and
       a force-quit mid-session reopens with guidance intact (the zip is re-read from IndexedDB)
 - [ ] Export the revisit; re-import the export elsewhere: it arrives as an ordinary session
