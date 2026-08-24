@@ -1,5 +1,5 @@
 import { html } from 'htm/preact';
-import { useEffect, useMemo, useState } from 'preact/hooks';
+import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { usePosition } from './hooks/usePosition.js';
 import { useHeading } from './hooks/useHeading.js';
 import { SessionBar } from './SessionBar.js';
@@ -36,6 +36,7 @@ import {
   acceptFix,
   createTraceState,
   finishTrace,
+  noteInterruption,
   pauseTrace,
   resumeTrace,
   traceStats,
@@ -124,6 +125,11 @@ export function CapturePage({
   // Offered, never auto-resumed: recording again is a decision.
   const [recoveredDraft, setRecoveredDraft] = useState(null);
   const [confirmingRecoveredDiscard, setConfirmingRecoveredDiscard] = useState(false);
+  // "Trace paused — the app was in the background." Shown once per gap on
+  // return to the foreground, dismissed by its own tap; cleared with the
+  // walk it describes. The ref remembers the hide until the matching show.
+  const [gapNotice, setGapNotice] = useState(false);
+  const hiddenDuringTraceRef = useRef(false);
 
   // Revisit mode. The reference is re-opened from IndexedDB whenever a
   // revisit session is the open one (mount, start, reopen, force-quit
@@ -225,8 +231,14 @@ export function CapturePage({
   useEffect(() => {
     if (!traceSession || !position) return;
     const { state, vertex } = acceptFix(traceSession.state, position);
+    // A rejected fix can still advance the recorder (the fix-stream clock
+    // behind gap detection) — store any changed state, not just accepted
+    // vertices. acceptFix returns the same object when nothing changed, so
+    // this effect re-running on its own update cannot loop.
+    if (state !== traceSession.state) {
+      setTraceSession((current) => (current ? { ...current, state } : current));
+    }
     if (!vertex) return;
-    setTraceSession((current) => (current ? { ...current, state } : current));
     service.appendTraceVertex(traceSession.draft.id, vertex).catch(() => {
       // A failed append is a failed crash-safety guarantee — say so where
       // the surveyor is looking.
@@ -237,6 +249,41 @@ export function CapturePage({
     // service is stable; traceSession covers the state the appender reads.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [position, traceSession]);
+
+  // The page hiding mid-walk is the moment the platform stops the fix
+  // stream (no background geolocation in a PWA): tell the recorder, and on
+  // return say what happened — once per gap, not per fix. The 15 s clock in
+  // the reducer is the backstop for suspensions this event never reports.
+  useEffect(() => {
+    if (!traceSession) return undefined;
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        hiddenDuringTraceRef.current = !traceSession.state.paused;
+        setTraceSession((current) =>
+          current && !current.state.paused
+            ? { ...current, state: noteInterruption(current.state) }
+            : current,
+        );
+      } else if (document.visibilityState === 'visible' && hiddenDuringTraceRef.current) {
+        hiddenDuringTraceRef.current = false;
+        setGapNotice(true);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+  }, [traceSession]);
+
+  // The screen auto-locking is the most common way the fix stream dies
+  // mid-walk. Held only while actually recording — a pause or a finished
+  // walk waiting on Save has nothing to lose to the lock screen.
+  const traceRecording = Boolean(traceSession) && !traceSession.state.paused;
+  useEffect(() => {
+    if (!traceRecording) return undefined;
+    sensors.wakeLock?.hold();
+    return () => sensors.wakeLock?.release();
+    // sensors is a stable bundle from main.js.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [traceRecording]);
 
   async function handleStart(name, loadedReference = null) {
     enableCompass(); // synchronous, before any await — iOS gesture rule
@@ -280,6 +327,7 @@ export function CapturePage({
     try {
       const draft = await service.startTraceDraft({ mode });
       setTraceSession({ draft, state: createTraceState({ mode }), error: null });
+      setGapNotice(false); // a fresh walk owes nothing to the last one's gap
     } catch (error) {
       setSaveError(error.message || 'Could not start the trace');
     }
@@ -332,6 +380,7 @@ export function CapturePage({
     const draftId = traceSession?.draft.id ?? pendingTrace?.draftId;
     setTraceSession(null);
     setPendingTrace(null);
+    setGapNotice(false);
     if (!draftId) return;
     try {
       await service.discardTraceDraft(draftId);
@@ -409,6 +458,9 @@ export function CapturePage({
               representative: pendingTrace.representative,
               gpsAccuracyM: pendingTrace.gpsAccuracyM,
               fixAt: pendingTrace.fixAt,
+              // The stretches the app inferred rather than measured — into
+              // the record, the map and the export.
+              gaps: pendingTrace.gaps ?? null,
             }
           : null,
         // The revisit pairing: armed by the current station unless the
@@ -428,6 +480,7 @@ export function CapturePage({
       setAudioError(null);
       // The draft died inside the save transaction; the strip follows it.
       setPendingTrace(null);
+      setGapNotice(false);
       // Cleared with the note and photo: the link belongs to the observation
       // just saved, and leaving it armed would silently attach the next one
       // to a feature the surveyor has walked away from.
@@ -738,11 +791,22 @@ export function CapturePage({
   // shape while pending — it must not vanish between Finish and Save.
   const activeTraceCoords = useMemo(() => {
     if (pendingTrace) {
-      return pendingTrace.geometry.type === 'Polygon'
-        ? pendingTrace.geometry.coordinates[0]
-        : pendingTrace.geometry.coordinates;
+      return {
+        coordinates:
+          pendingTrace.geometry.type === 'Polygon'
+            ? pendingTrace.geometry.coordinates[0]
+            : pendingTrace.geometry.coordinates,
+        gaps: pendingTrace.gaps ?? null,
+      };
     }
-    if (traceSession) return traceSession.state.vertices.map((v) => [v.lon, v.lat]);
+    if (traceSession) {
+      return {
+        coordinates: traceSession.state.vertices.map((v) => [v.lon, v.lat]),
+        // The inferred stretch draws dotted mid-walk too — the surveyor
+        // sees what the suspension cost before deciding to Save.
+        gaps: traceSession.state.vertices.filter((v) => v.gapBefore).map((v) => v.seq),
+      };
+    }
     return null;
   }, [pendingTrace, traceSession]);
 
@@ -1053,6 +1117,22 @@ export function CapturePage({
                   </span>
                 </button>`;
               })}
+              ${
+                // On return from the background, once per gap (design
+                // handoff: the trace UI must say so rather than silently
+                // drawing a straight line). Dotted, not the handoff's
+                // "dashed" — dash already means unexported on this map.
+                gapNotice && (traceSession || pendingTrace)
+                  ? html`<p class="trace-gap-notice" role="status">
+                      <span>
+                        Trace paused — the app was in the background. That stretch is drawn dotted.
+                      </span>
+                      <button type="button" class="link" onClick=${() => setGapNotice(false)}>
+                        Dismiss
+                      </button>
+                    </p>`
+                  : null
+              }
             </div>`
           : null
       }

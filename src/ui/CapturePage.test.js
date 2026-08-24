@@ -1,4 +1,4 @@
-import { describe, expect, test, vi } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/preact';
 import { html } from 'htm/preact';
 import { CapturePage } from './CapturePage.js';
@@ -87,6 +87,7 @@ function createFakeSensors() {
   let headingHandlers = null;
   const positionStop = vi.fn();
   const headingStop = vi.fn();
+  const wakeLock = { hold: vi.fn(), release: vi.fn() };
   return {
     sensors: {
       watchPosition: (handlers) => {
@@ -98,11 +99,13 @@ function createFakeSensors() {
         return headingStop;
       },
       requestHeadingPermission: vi.fn().mockResolvedValue('granted'),
+      wakeLock,
     },
     pushPosition: (reading) => act(() => positionHandlers?.onReading(reading)),
     pushHeading: (reading) => act(() => headingHandlers?.onReading(reading)),
     positionStop,
     headingStop,
+    wakeLock,
   };
 }
 
@@ -1691,6 +1694,120 @@ describe('CapturePage - trace modes', () => {
     expect(panel).not.toBeNull();
     expect(panel.querySelector('.trace-strip-dot')).toBeNull();
     expect(screen.getByRole('button', { name: 'Resume' }).className).toContain('button-primary');
+  });
+});
+
+describe('CapturePage - trace gaps and wake lock', () => {
+  // fixAtMs 20s after POSITION's — past the 15s gap threshold, so the
+  // recorder marks the stretch inferred.
+  const GAP_FIX = { ...POSITION, lat: 51.5002, fixAt: 'x2', fixAtMs: 20_000 };
+  const NEAR_FIX = { ...POSITION, lat: 51.5002, fixAt: 'x2', fixAtMs: 2 };
+
+  async function startPathTrace({ service, sensors, pushPosition }) {
+    render(html`<${CapturePage} service=${service} sensors=${sensors} downscale=${vi.fn()} />`);
+    await screen.findByText('Ashton Keynes');
+    pushPosition(POSITION);
+    fireEvent.click(screen.getByRole('button', { name: /^Path/ }));
+    await screen.findByText(/Tracing path/);
+    // The strip renders before Preact flushes effects (they ride rAF); the
+    // first vertex's append proves the effect pass — including the
+    // visibility subscription and wake-lock hold — has actually run.
+    await waitFor(() => expect(service.appendTraceVertex).toHaveBeenCalled());
+  }
+
+  function setVisibility(state) {
+    Object.defineProperty(document, 'visibilityState', { value: state, configurable: true });
+    fireEvent(document, new Event('visibilitychange'));
+  }
+
+  afterEach(() => {
+    Object.defineProperty(document, 'visibilityState', {
+      value: 'visible',
+      configurable: true,
+    });
+  });
+
+  test('a silence in the fix stream rides into Save as the trace’s gaps', async () => {
+    const service = createFakeService({ openSession: OPEN_SESSION });
+    const fakes = createFakeSensors();
+    await startPathTrace({ service, ...fakes });
+
+    fakes.pushPosition(GAP_FIX);
+    await waitFor(() => expect(service.appendTraceVertex).toHaveBeenCalledTimes(2));
+    // The gap flag is on the persisted vertex too — recovery depends on it.
+    expect(service.appendTraceVertex.mock.calls[1][1].gapBefore).toBe(true);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Finish' }));
+    await screen.findByText(/save to keep it/i);
+    fireEvent.click(screen.getByRole('button', { name: /save observation/i }));
+
+    await waitFor(() => expect(service.saveObservation).toHaveBeenCalled());
+    expect(service.saveObservation.mock.calls[0][0].trace.gaps).toEqual([1]);
+  });
+
+  test('returning from the background shows the one-line notice, dismissible', async () => {
+    const service = createFakeService({ openSession: OPEN_SESSION });
+    const fakes = createFakeSensors();
+    await startPathTrace({ service, ...fakes });
+
+    setVisibility('hidden');
+    setVisibility('visible');
+
+    const notice = await screen.findByText(
+      'Trace paused — the app was in the background. That stretch is drawn dotted.',
+    );
+    expect(notice.closest('[role="status"]')).not.toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+    expect(screen.queryByText(/app was in the background/i)).toBeNull();
+  });
+
+  test('a deliberate pause flags the stretch but earns no notice', async () => {
+    const service = createFakeService({ openSession: OPEN_SESSION });
+    const fakes = createFakeSensors();
+    await startPathTrace({ service, ...fakes });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Resume' }));
+    fakes.pushPosition(NEAR_FIX);
+    await waitFor(() => expect(service.appendTraceVertex).toHaveBeenCalledTimes(2));
+
+    expect(screen.queryByText(/app was in the background/i)).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Finish' }));
+    await screen.findByText(/save to keep it/i);
+    fireEvent.click(screen.getByRole('button', { name: /save observation/i }));
+    await waitFor(() => expect(service.saveObservation).toHaveBeenCalled());
+    expect(service.saveObservation.mock.calls[0][0].trace.gaps).toEqual([1]);
+  });
+
+  test('the screen is held awake while recording, and only while recording', async () => {
+    const service = createFakeService({ openSession: OPEN_SESSION });
+    const fakes = createFakeSensors();
+    await startPathTrace({ service, ...fakes });
+
+    await waitFor(() => expect(fakes.wakeLock.hold).toHaveBeenCalledTimes(1));
+    expect(fakes.wakeLock.release).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pause' }));
+    await waitFor(() => expect(fakes.wakeLock.release).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Resume' }));
+    await waitFor(() => expect(fakes.wakeLock.hold).toHaveBeenCalledTimes(2));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Discard' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Discard trace' }));
+    await waitFor(() => expect(fakes.wakeLock.release).toHaveBeenCalledTimes(2));
+  });
+
+  test('a sensors bundle without wakeLock records traces exactly as before', async () => {
+    const service = createFakeService({ openSession: OPEN_SESSION });
+    const fakes = createFakeSensors();
+    delete fakes.sensors.wakeLock;
+    await startPathTrace({ service, ...fakes });
+
+    fakes.pushPosition(NEAR_FIX);
+    await waitFor(() => expect(service.appendTraceVertex).toHaveBeenCalledTimes(2));
   });
 });
 

@@ -1111,13 +1111,13 @@ button {
 /* The three one-line revisit notices share the session-note register. */
 .revisit-missing,
 .revisit-complete,
-.revisit-skip-notice {
+/* One-line after-the-fact notices with their own dismiss/undo link: the
+   revisit skip line, and the trace's "the app was in the background". */
+.revisit-skip-notice,
+.trace-gap-notice {
   margin: 0;
   font-size: var(--type-meta);
   color: var(--text-secondary);
-}
-
-.revisit-skip-notice {
   display: flex;
   align-items: center;
   gap: var(--space-2);

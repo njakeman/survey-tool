@@ -9,6 +9,7 @@ import { createCaptureService } from './app/captureService.js';
 import { newId, nowIso } from './domain/id.js';
 import { watchPosition } from './sensors/position.js';
 import { watchHeading, requestHeadingPermission } from './sensors/heading.js';
+import { createWakeLockHolder } from './sensors/wakeLock.js';
 import { downscaleImageBlob } from './photo/encode.js';
 import { startRecording } from './audio/record.js';
 import { buildSessionExport } from './export/buildSessionExport.js';
@@ -77,6 +78,11 @@ async function main() {
     watchPosition: (handlers) => watchPosition(navigator.geolocation, handlers),
     watchHeading: (handlers) => watchHeading(window, handlers),
     requestHeadingPermission: () => requestHeadingPermission(window.DeviceOrientationEvent),
+    // Held while a trace records: the screen auto-locking is the most common
+    // way the fix stream dies mid-walk. navigator.wakeLock is undefined on
+    // iOS < 16.4 (and rejects inside installed PWAs before 18.4) — the
+    // holder no-ops and swallows, so this degrades exactly like the compass.
+    wakeLock: createWakeLockHolder({ wakeLock: navigator.wakeLock, documentRef: document }),
   };
 
   const downscale = (file) => downscaleImageBlob(file);
