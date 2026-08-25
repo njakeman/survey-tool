@@ -7,6 +7,7 @@ import { listSessions } from '../storage/sessionStore.js';
 import { listObservationsForSession } from '../storage/observationStore.js';
 import { getPhoto } from '../storage/photoStore.js';
 import { getAudio } from '../storage/audioStore.js';
+import { addObservationPhoto } from '../storage/photoWrite.js';
 import { parseSessionExport } from './parseSessionExport.js';
 import { writeImportedSession, importSessionExport } from './importSession.js';
 
@@ -46,14 +47,25 @@ async function seedSession(dbName, { withPhoto = true, endSession = true } = {})
     nowIso: () => FIXED_NOW,
   });
   await service.startSession('Hedgerow survey');
-  await service.saveObservation({
+  const gatePost = await service.saveObservation({
     reading: { lat: 51.5, lon: -0.14, accuracyM: 8.2, fixAt: '2026-08-06T09:59:20.000Z' },
     heading: { headingDeg: 271.5, headingAccuracyDeg: 15 },
     note: 'gate post',
-    photo: withPhoto
-      ? { blob: new Blob([new Uint8Array([1, 2, 3, 4])], { type: 'image/jpeg' }) }
-      : null,
+    photo: null,
   });
+  if (withPhoto) {
+    // captureService.saveObservation doesn't attach photos yet (that's
+    // Task 10); attach directly through the storage layer's own add-photo
+    // primitive so this fixture carries a real photos[] entry regardless.
+    await addObservationPhoto(db, {
+      observationId: gatePost.id,
+      photo: {
+        id: 'orig-photo-1',
+        blob: new Blob([new Uint8Array([1, 2, 3, 4])], { type: 'image/jpeg' }),
+      },
+      changedAt: null,
+    });
+  }
   await service.saveObservation({
     reading: { lat: 51.6, lon: -0.15, accuracyM: 4.1, fixAt: '2026-08-06T10:10:00.000Z' },
     heading: null,
@@ -105,10 +117,16 @@ describe('export → import round trip', () => {
     const importedObs = await listObservationsForSession(targetDb, imported.id);
     expect(importedObs).toHaveLength(2);
     const strip = (obs) => {
-      const fields = { ...obs, hasPhoto: Boolean(obs.photoId), hasAudio: Boolean(obs.audioId) };
+      const fields = {
+        ...obs,
+        hasPhoto: obs.photos.length > 0,
+        hasAudio: Boolean(obs.audioId),
+      };
       delete fields.id;
       delete fields.sessionId;
-      delete fields.photoId;
+      // Photo ids are freshly minted per photo on import — compared by
+      // content, not by id, below.
+      delete fields.photos;
       delete fields.audioId;
       return fields;
     };
@@ -119,10 +137,13 @@ describe('export → import round trip', () => {
       expect(sourceStripped).toContainEqual(obs);
     }
 
-    // The photo bytes travelled, stored under the new observation's id.
-    const withPhoto = importedObs.find((obs) => obs.photoId);
-    expect(withPhoto.photoId).toBe(withPhoto.id);
-    const photo = await getPhoto(targetDb, withPhoto.photoId);
+    // The photo bytes travelled, stored under a freshly minted photo id —
+    // never the observation's own id, since one observation can hold many.
+    const withPhoto = importedObs.find((obs) => obs.photos.length > 0);
+    expect(withPhoto.photos).toHaveLength(1);
+    expect(withPhoto.photos[0].id).not.toBe(withPhoto.id);
+    expect(withPhoto.photos[0].id).not.toBe('orig-photo-1');
+    const photo = await getPhoto(targetDb, withPhoto.photos[0].id);
     expect([...new Uint8Array(await photo.blob.arrayBuffer())]).toEqual([1, 2, 3, 4]);
 
     // The voice note travelled too — bytes and contentType, under the new
@@ -182,6 +203,66 @@ describe('export → import round trip', () => {
     expect(sessions).toHaveLength(2);
     expect(sessions[0].id).not.toBe(sessions[1].id);
   });
+
+  test('mints a fresh id per photo and keeps order and pairing', async () => {
+    const text = JSON.stringify({
+      type: 'FeatureCollection',
+      survey_session: { id: 's', name: 'Two photos', started_at: FIXED_NOW, ended_at: FIXED_NOW },
+      features: [
+        {
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [-0.14, 51.5] },
+          properties: {
+            obs_id: 'obs-1',
+            recorded_at: FIXED_NOW,
+            fix_at: FIXED_NOW,
+            lat: 51.5,
+            lon: -0.14,
+            gps_accuracy_m: 5,
+            photo: 'p1.jpg',
+            photos: [
+              { photo: 'p1.jpg', ref_photo: 'r.jpg' },
+              { photo: 'p2.jpg', ref_photo: null },
+            ],
+            ref_obs_id: 'ref-1',
+          },
+        },
+      ],
+    });
+    const parsed = parseSessionExport([
+      { name: 'session.geojson', data: encoder.encode(text) },
+      { name: 'photos/p1.jpg', data: new Uint8Array([1]) },
+      { name: 'photos/p2.jpg', data: new Uint8Array([2]) },
+    ]);
+
+    const targetDb = await openDatabase('mint-per-photo');
+    const { photoCount } = await writeImportedSession(targetDb, parsed, {
+      newId: fakeIdGenerator('mint'),
+    });
+
+    const [session] = await listSessions(targetDb);
+    const [obs] = await listObservationsForSession(targetDb, session.id);
+
+    expect(photoCount).toBe(2);
+    expect(obs.photos).toHaveLength(2);
+    // Fresh ids, never the source zip's filenames and never each other.
+    expect(obs.photos.map((p) => p.id)).not.toContain('p1');
+    expect(obs.photos.map((p) => p.id)).not.toContain('p2');
+    expect(obs.photos[0].id).not.toBe(obs.photos[1].id);
+    // Never the observation's own id either — one observation, many photos.
+    expect(obs.photos[0].id).not.toBe(obs.id);
+    expect(obs.photos[1].id).not.toBe(obs.id);
+    // Order and per-photo pairing survive the remint.
+    expect(obs.photos[0].referencePhoto).toBe('r.jpg');
+    expect(obs.photos[1].referencePhoto).toBeNull();
+
+    const [firstPhoto, secondPhoto] = await Promise.all([
+      getPhoto(targetDb, obs.photos[0].id),
+      getPhoto(targetDb, obs.photos[1].id),
+    ]);
+    expect([...new Uint8Array(await firstPhoto.blob.arrayBuffer())]).toEqual([1]);
+    expect([...new Uint8Array(await secondPhoto.blob.arrayBuffer())]).toEqual([2]);
+  });
 });
 
 describe('parseSessionExport rejections and tolerance', () => {
@@ -223,7 +304,7 @@ describe('parseSessionExport rejections and tolerance', () => {
     );
   });
 
-  test('nulls a photo claim the zip cannot back with bytes', () => {
+  test('drops (does not null) a photo claim the zip cannot back with bytes', () => {
     const text = JSON.stringify({
       type: 'FeatureCollection',
       survey_session: { id: 's', name: 'S', started_at: FIXED_NOW, ended_at: FIXED_NOW },
@@ -246,7 +327,7 @@ describe('parseSessionExport rejections and tolerance', () => {
 
     const parsed = parseSessionExport([entry('session.geojson', text)]);
 
-    expect(parsed.observations[0].photoId).toBe(null);
+    expect(parsed.observations[0].photos).toEqual([]);
     expect(parsed.photos).toHaveLength(0);
   });
 
@@ -534,6 +615,7 @@ describe('traced observations through the round trip', () => {
             lat: 51.5,
             lon: -0.14,
             gps_accuracy_m: 5,
+            photo: 'obs-1.jpg',
             ref_obs_id: 'ref-4',
             ref_photo: 'ref-4.jpg',
           },
@@ -554,12 +636,15 @@ describe('traced observations through the round trip', () => {
       ],
     });
 
-    const parsed = parseSessionExport([encoderEntry('session.geojson', text)]);
+    const parsed = parseSessionExport([
+      encoderEntry('session.geojson', text),
+      { name: 'photos/obs-1.jpg', data: new Uint8Array([1, 2, 3]) },
+    ]);
 
     expect(parsed.observations[0].referenceObservationId).toBe('ref-4');
-    expect(parsed.observations[0].referencePhoto).toBe('ref-4.jpg');
+    expect(parsed.observations[0].photos).toEqual([{ id: 'obs-1', referencePhoto: 'ref-4.jpg' }]);
     expect(parsed.observations[1].referenceObservationId).toBeNull();
-    expect(parsed.observations[1].referencePhoto).toBeNull();
+    expect(parsed.observations[1].photos).toEqual([]);
   });
 
   test('a revisit export imports as a plain closed survey copy, pairing keys intact', async () => {
@@ -590,6 +675,7 @@ describe('traced observations through the round trip', () => {
             lat: 51.5,
             lon: -0.14,
             gps_accuracy_m: 5,
+            photo: 'obs-1.jpg',
             ref_obs_id: 'ref-4',
             ref_photo: 'ref-4.jpg',
           },
@@ -597,7 +683,10 @@ describe('traced observations through the round trip', () => {
       ],
     });
 
-    const parsed = parseSessionExport([encoderEntry('session.geojson', text)]);
+    const parsed = parseSessionExport([
+      encoderEntry('session.geojson', text),
+      { name: 'photos/obs-1.jpg', data: new Uint8Array([1, 2, 3]) },
+    ]);
     const db = await openDatabase('import-revisit-copy');
     await writeImportedSession(db, parsed, { newId: fakeIdGenerator('copy') });
 
@@ -606,6 +695,7 @@ describe('traced observations through the round trip', () => {
     expect(imported.sessionType ?? 'survey').toBe('survey');
     const observations = await listObservationsForSession(db, imported.id);
     expect(observations[0].referenceObservationId).toBe('ref-4');
-    expect(observations[0].referencePhoto).toBe('ref-4.jpg');
+    expect(observations[0].photos).toHaveLength(1);
+    expect(observations[0].photos[0].referencePhoto).toBe('ref-4.jpg');
   });
 });

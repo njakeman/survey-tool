@@ -16,6 +16,23 @@ import { polygonCentroid } from '../geo/centroid.js';
 
 const decoder = new TextDecoder();
 
+// '<photoId>.jpg' → the id. photos[] since 2026-08-25; earlier exports
+// carried one `photo` (and `ref_photo`) instead. Either way the bytes are
+// joined below, in parseSessionExport, and any entry with no matching file
+// in the zip is dropped rather than trusted — the mirror of export's
+// "never claim a file the zip doesn't contain".
+const stripJpg = (name) => name.replace(/\.jpg$/i, '');
+function photosFrom(props) {
+  if (Array.isArray(props.photos)) {
+    return props.photos
+      .filter((entry) => typeof entry?.photo === 'string' && entry.photo)
+      .map((entry) => ({ id: stripJpg(entry.photo), referencePhoto: entry.ref_photo ?? null }));
+  }
+  return props.photo
+    ? [{ id: stripJpg(props.photo), referencePhoto: props.ref_photo ?? null }]
+    : [];
+}
+
 // Exported for parseReferenceExport.js, which shares this file's whole
 // validation path — the reference parse must never fork what "a valid
 // feature" means, or a zip that imports could fail to load as a reference.
@@ -97,10 +114,11 @@ export function observationFrom(feature, index, sessionId) {
       headingDeg: props.heading_deg ?? null,
       headingAccuracyDeg: props.heading_accuracy_deg ?? null,
       note: props.note ?? '',
-      // '<photoId>.jpg' → the id; the bytes are joined below, and a claim
-      // with no matching file in the zip is nulled rather than trusted —
-      // the mirror of export's "never claim a file the zip doesn't contain".
-      photoId: props.photo ? props.photo.replace(/\.jpg$/i, '') : null,
+      // photos[] since 2026-08-25; earlier exports carried one `photo` (and
+      // `ref_photo`). The bytes are joined below, and any entry with no
+      // matching file in the zip is dropped rather than trusted — the
+      // mirror of export's "never claim a file the zip doesn't contain".
+      photos: photosFrom(props),
       audioId: props.audio ? props.audio.replace(/\.(webm|m4a)$/i, '') : null,
       audioDurationMs: props.audio_duration_ms ?? null,
       featureLayerId: props.feature_layer ?? null,
@@ -118,9 +136,10 @@ export function observationFrom(feature, index, sessionId) {
       // The revisit pairing key — a copy must keep saying which reference
       // station each observation revisited, or the longitudinal join breaks
       // on first re-import. `?? null` for every export from before the
-      // fields existed.
+      // field existed. Each photo's own referencePhoto rides in photos[]
+      // above — createObservation validates the both-halves rule against
+      // this field.
       referenceObservationId: props.ref_obs_id ?? null,
-      referencePhoto: props.ref_photo ?? null,
       // os_grid_ref is ignored: derived from lat/lon at export time, it
       // would only ever be re-derived, never stored. trace_length_m too —
       // both restate the geometry.
@@ -163,20 +182,21 @@ export function parseSessionExport(entries) {
       ]),
   );
 
-  // Null any claim the zip cannot back with bytes, and keep only the bytes
-  // some observation actually references.
+  // Drop (never null) any photo claim the zip cannot back with bytes, and
+  // null an audio claim the same way; keep only the bytes some observation
+  // actually references.
   const linked = observations.map((obs) => ({
     ...obs,
-    photoId: obs.photoId && !photoBytes.has(obs.photoId) ? null : obs.photoId,
+    photos: obs.photos.filter((entry) => photoBytes.has(entry.id)),
     audioId: obs.audioId && !audioBytes.has(obs.audioId) ? null : obs.audioId,
   }));
-  const photos = linked
-    .filter((obs) => obs.photoId)
-    .map((obs) => ({
-      photoId: obs.photoId,
-      data: photoBytes.get(obs.photoId),
+  const photos = linked.flatMap((obs) =>
+    obs.photos.map((entry) => ({
+      photoId: entry.id,
+      data: photoBytes.get(entry.id),
       contentType: 'image/jpeg',
-    }));
+    })),
+  );
   const audio = linked
     .filter((obs) => obs.audioId)
     .map((obs) => ({ audioId: obs.audioId, ...audioBytes.get(obs.audioId) }));

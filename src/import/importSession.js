@@ -36,12 +36,14 @@ function mintRecords(parsed, newId) {
   const audio = [];
   const observations = parsed.observations.map((obs) => {
     const id = newId();
-    if (obs.photoId) {
-      const source = parsed.photos.find((photo) => photo.photoId === obs.photoId);
-      // Keeps the media-id-is-the-observation-id convention the rest of the
-      // app writes with.
-      photos.push({ id, data: source.data, contentType: source.contentType });
-    }
+    // Every photo gets its own freshly minted id — never the observation's,
+    // since one observation can hold many.
+    const photoEntries = (obs.photos ?? []).map((entry) => {
+      const source = parsed.photos.find((photo) => photo.photoId === entry.id);
+      const photoId = newId();
+      photos.push({ id: photoId, data: source.data, contentType: source.contentType });
+      return { ...entry, id: photoId };
+    });
     if (obs.audioId) {
       const source = parsed.audio.find((record) => record.audioId === obs.audioId);
       audio.push({ id, data: source.data, contentType: source.contentType });
@@ -50,7 +52,7 @@ function mintRecords(parsed, newId) {
       ...obs,
       id,
       sessionId,
-      photoId: obs.photoId ? id : null,
+      photos: photoEntries,
       audioId: obs.audioId ? id : null,
     };
   });
