@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { readZip } from '../src/import/zipReader.js';
 
 // A real (tiny) PNG: the capture pipeline decodes and re-encodes the photo
 // through a real Canvas, so the fixture must actually be an image.
@@ -86,19 +87,14 @@ test.describe('capture flow', () => {
       mimeType: 'image/png',
       buffer: PHOTO,
     });
-    await expect(page.getByRole('button', { name: 'Remove photo' })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Remove photo/ })).toBeVisible();
 
     await page.getByRole('button', { name: 'Save observation' }).click();
     await expect(page.getByText('1 saved')).toBeVisible();
 
-    // Tap-to-load in the open session's list (the attachment strip's chip),
-    // scoped to the row: the compose field's file input is also a button
-    // named "Photo" to ARIA. exact: "Add photo" is a near-miss.
-    await page
-      .locator('li.observations-row')
-      .getByRole('button', { name: 'Photo', exact: true })
-      .click();
-    const thumb = page.locator('img.observations-photo-thumb');
+    // The thumb appears in the row's attachment strip on its own — no chip
+    // to tap through, since the strip owns the photo now.
+    const thumb = page.locator('li.observations-row img.observations-photo-thumb');
     await expect(thumb).toBeVisible();
     const firstUrl = await thumb.getAttribute('src');
     expect(firstUrl).toMatch(/^blob:/);
@@ -108,8 +104,11 @@ test.describe('capture flow', () => {
 
     // Retake (design pass 4 §7e): the picked file runs the real downscale
     // pipeline, the record repoints, and the open view swaps the image.
+    // Scoped to Retake's own input — the lightbox also carries an Add
+    // input (a lone photo is still under the cap) and an unscoped
+    // `.photo-lightbox input[capture="environment"]` would match both.
     await page
-      .locator('.photo-lightbox input[capture="environment"]')
+      .locator('.photo-lightbox-retake input[capture="environment"]')
       .setInputFiles({ name: 'retake.png', mimeType: 'image/png', buffer: PHOTO });
     await expect
       .poll(async () => page.locator('.photo-lightbox-image').getAttribute('src'))
@@ -127,10 +126,6 @@ test.describe('capture flow', () => {
     await page.getByRole('button', { name: 'Confirm end session' }).click();
     await page.getByRole('button', { name: 'Session history' }).click();
     await page.getByRole('button', { name: /Photo Session/ }).click();
-    await page
-      .locator('li.observations-row')
-      .getByRole('button', { name: 'Photo', exact: true })
-      .click();
     await expect(page.locator('img.observations-photo-thumb')).toBeVisible();
     // Read-only there: the full view offers no Retake or Delete.
     await page.locator('img.observations-photo-thumb').click();
@@ -156,14 +151,10 @@ test.describe('capture flow', () => {
       mimeType: 'image/png',
       buffer: PHOTO,
     });
-    await expect(page.getByRole('button', { name: 'Remove photo' })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Remove photo/ })).toBeVisible();
     await page.getByRole('button', { name: 'Save observation' }).click();
     await expect(page.getByText('1 saved')).toBeVisible();
 
-    await page
-      .locator('li.observations-row')
-      .getByRole('button', { name: 'Photo', exact: true })
-      .click();
     await page.locator('img.observations-photo-thumb').click();
     await expect(page.getByRole('dialog', { name: /photo/i })).toBeVisible();
 
@@ -183,5 +174,168 @@ test.describe('capture flow', () => {
       buffer: PHOTO,
     });
     await expect(row.locator('img.observations-photo-thumb')).toBeVisible();
+  });
+
+  test('several photos per observation, end to end', async ({ page, context }) => {
+    await context.grantPermissions(['geolocation']);
+    await context.setGeolocation({ latitude: 51.5, longitude: -0.14, accuracy: 10 });
+
+    await page.goto('/');
+    await page.getByLabel(/session name/i).fill('Multi Photo Session');
+    await page.getByRole('button', { name: 'Start session' }).click();
+    await expect(page.getByRole('button', { name: 'Save observation' })).toBeEnabled({
+      timeout: 15_000,
+    });
+
+    // Two shots into the compose strip before Save — scoped to the compose
+    // field, since a row's own file input can also match this selector once
+    // a photo exists elsewhere on the page.
+    const composeInput = page.locator('.photo-field input[capture="environment"]');
+    await composeInput.setInputFiles({
+      name: 'first.png',
+      mimeType: 'image/png',
+      buffer: PHOTO,
+    });
+    await expect(page.getByRole('button', { name: 'Remove photo 1 of 1' })).toBeVisible();
+    await composeInput.setInputFiles({
+      name: 'second.png',
+      mimeType: 'image/png',
+      buffer: PHOTO,
+    });
+    await expect(page.getByRole('button', { name: 'Remove photo 2 of 2' })).toBeVisible();
+
+    await page.screenshot({
+      path: '.superpowers/sdd/i-have-looked-at-cozy-sunbeam/shot-compose-two-thumbs.png',
+    });
+
+    await page.getByRole('button', { name: 'Save observation' }).click();
+    await expect(page.getByText('1 saved')).toBeVisible();
+
+    // Two thumbs land in the row's saved strip on their own — no chip.
+    const row = page.locator('li.observations-row').first();
+    await expect(row.locator('img.observations-photo-thumb')).toHaveCount(2);
+
+    await page.screenshot({
+      path: '.superpowers/sdd/i-have-looked-at-cozy-sunbeam/shot-row-strip.png',
+    });
+
+    // Open the first thumb — the pager shows 1 of 2, Previous disabled.
+    await row.locator('img.observations-photo-thumb').first().click();
+    const dialog = page.getByRole('dialog', { name: /photo/i });
+    await expect(dialog).toBeVisible();
+    await expect(page.locator('.photo-lightbox-caption')).toContainText('1 of 2');
+    await expect(page.getByRole('button', { name: 'Previous photo' })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Next photo' })).toBeEnabled();
+
+    await page.screenshot({
+      path: '.superpowers/sdd/i-have-looked-at-cozy-sunbeam/shot-lightbox-1of2.png',
+    });
+
+    await page.getByRole('button', { name: 'Next photo' }).click();
+    await expect(page.locator('.photo-lightbox-caption')).toContainText('2 of 2');
+    await expect(page.getByRole('button', { name: 'Next photo' })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Previous photo' })).toBeEnabled();
+
+    await page.screenshot({
+      path: '.superpowers/sdd/i-have-looked-at-cozy-sunbeam/shot-lightbox-2of2.png',
+    });
+
+    // Retake the second photo — the record repoints and the open view swaps
+    // the image (poll the src, as the single-photo test does).
+    const secondUrl = await page.locator('.photo-lightbox-image').getAttribute('src');
+    await page
+      .locator('.photo-lightbox-retake input[capture="environment"]')
+      .setInputFiles({ name: 'retake-2.png', mimeType: 'image/png', buffer: PHOTO });
+    await expect
+      .poll(async () => page.locator('.photo-lightbox-image').getAttribute('src'))
+      .not.toBe(secondUrl);
+
+    // Delete the (retaken) second photo — two-step — leaving one, and the
+    // caption drops " of " with nothing to page between.
+    await page.getByRole('button', { name: 'Delete', exact: true }).click();
+    await page.getByRole('button', { name: 'Delete photo' }).click();
+    await expect(dialog).toBeVisible();
+    await expect(page.locator('.photo-lightbox-caption')).not.toContainText('of');
+    await expect(page.getByRole('button', { name: 'Next photo' })).toHaveCount(0);
+
+    // Add a photo from inside the open view — back to 2 of 2, landing on the
+    // one just added.
+    await page
+      .locator('.photo-lightbox-add input[capture="environment"]')
+      .setInputFiles({ name: 'added.png', mimeType: 'image/png', buffer: PHOTO });
+    await expect(page.locator('.photo-lightbox-caption')).toContainText('2 of 2');
+
+    await page.getByRole('button', { name: 'Close', exact: true }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+
+    // End the session, export from history, and check the zip carries
+    // exactly two photo entries.
+    await page.getByRole('button', { name: 'End session' }).click();
+    await page.getByRole('button', { name: 'Confirm end session' }).click();
+    await page.getByRole('button', { name: 'Session history' }).click();
+    await page.getByRole('button', { name: /Multi Photo Session/ }).click();
+
+    const downloadPromise = page.waitForEvent('download');
+    await page.getByRole('button', { name: /^export$/i }).click();
+    const download = await downloadPromise;
+    const bytes = readFileSync(await download.path());
+    const entries = await readZip(
+      bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+    );
+    const photoEntries = entries.filter(
+      (entry) => entry.name.startsWith('photos/') && entry.name.endsWith('.jpg'),
+    );
+    expect(photoEntries).toHaveLength(2);
+  });
+
+  test.describe('phone-shaped viewport', () => {
+    test.use({ viewport: { width: 390, height: 844 } });
+
+    test('several photos, screenshots at a phone-shaped viewport', async ({ page, context }) => {
+      await context.grantPermissions(['geolocation']);
+      await context.setGeolocation({ latitude: 51.5, longitude: -0.14, accuracy: 10 });
+
+      await page.goto('/');
+      await page.getByLabel(/session name/i).fill('Phone Viewport Photo Session');
+      await page.getByRole('button', { name: 'Start session' }).click();
+      await expect(page.getByRole('button', { name: 'Save observation' })).toBeEnabled({
+        timeout: 15_000,
+      });
+
+      const composeInput = page.locator('.photo-field input[capture="environment"]');
+      await composeInput.setInputFiles({
+        name: 'first.png',
+        mimeType: 'image/png',
+        buffer: PHOTO,
+      });
+      await composeInput.setInputFiles({
+        name: 'second.png',
+        mimeType: 'image/png',
+        buffer: PHOTO,
+      });
+      await expect(page.getByRole('button', { name: 'Remove photo 2 of 2' })).toBeVisible();
+      await page.screenshot({
+        path: '.superpowers/sdd/i-have-looked-at-cozy-sunbeam/shot-compose-two-thumbs-phone.png',
+      });
+
+      await page.getByRole('button', { name: 'Save observation' }).click();
+      await expect(page.getByText('1 saved')).toBeVisible();
+      const row = page.locator('li.observations-row').first();
+      await expect(row.locator('img.observations-photo-thumb')).toHaveCount(2);
+      await page.screenshot({
+        path: '.superpowers/sdd/i-have-looked-at-cozy-sunbeam/shot-row-strip-phone.png',
+      });
+
+      await row.locator('img.observations-photo-thumb').first().click();
+      await expect(page.getByRole('dialog', { name: /photo/i })).toBeVisible();
+      await page.screenshot({
+        path: '.superpowers/sdd/i-have-looked-at-cozy-sunbeam/shot-lightbox-1of2-phone.png',
+      });
+      await page.getByRole('button', { name: 'Next photo' }).click();
+      await expect(page.locator('.photo-lightbox-caption')).toContainText('2 of 2');
+      await page.screenshot({
+        path: '.superpowers/sdd/i-have-looked-at-cozy-sunbeam/shot-lightbox-2of2-phone.png',
+      });
+    });
   });
 });
