@@ -13,8 +13,7 @@ const station = {
   lon: -0.14,
   headingDeg: 38,
   gpsAccuracyM: 4.1,
-  photoFilename: 'ref-2.jpg',
-  photoEntryName: 'photos/ref-2.jpg',
+  photos: [{ filename: 'ref-2.jpg', entryName: 'photos/ref-2.jpg' }],
 };
 
 function renderScreen(overrides = {}) {
@@ -65,7 +64,7 @@ describe('FramingScreen', () => {
 
   test('a station with no reference photo says so and asks nothing of the zip', () => {
     const { readPhoto } = renderScreen({
-      station: { ...station, photoFilename: null, photoEntryName: null },
+      station: { ...station, photos: [] },
     });
 
     expect(screen.getByText(/no reference photo for this station/i)).toBeInTheDocument();

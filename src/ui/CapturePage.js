@@ -89,6 +89,10 @@ export function CapturePage({
 
   const [note, setNote] = useState('');
   const [photo, setPhoto] = useState(null);
+  // The station photo this framed shot is paired against, set by
+  // handleFramedPhoto and cleared everywhere the compose photo itself is —
+  // the pairing belongs to the photo being composed, not to the station.
+  const [framedRef, setFramedRef] = useState(null);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [photoError, setPhotoError] = useState(null);
 
@@ -455,6 +459,7 @@ export function CapturePage({
 
   function handlePhotoClear() {
     setPhoto(null);
+    setFramedRef(null);
     setPhotoError(null);
   }
 
@@ -467,7 +472,7 @@ export function CapturePage({
         reading: position,
         heading,
         note,
-        photo,
+        photos: photo ? [{ blob: photo.blob, referencePhoto: framedRef }] : [],
         audio,
         feature: linkedFeature,
         pickedPoint,
@@ -490,14 +495,12 @@ export function CapturePage({
         // case this is exactly an ordinary observation.
         station:
           revisit && currentStation && !recordNew
-            ? {
-                referenceObservationId: currentStation.id,
-                referencePhoto: currentStation.photoFilename ?? null,
-              }
+            ? { referenceObservationId: currentStation.id }
             : null,
       });
       setNote('');
       setPhoto(null);
+      setFramedRef(null);
       setAudio(null);
       setAudioError(null);
       // The draft died inside the save transaction; the strip follows it.
@@ -656,6 +659,7 @@ export function CapturePage({
   // with the station still armed for Save.
   async function handleFramedPhoto(file) {
     setFraming(false);
+    setFramedRef(currentStation?.photos?.[0]?.filename ?? null);
     await handlePhotoSelect(file);
   }
 
@@ -763,11 +767,21 @@ export function CapturePage({
   // exists. History passes neither callback — that absence is the read-only
   // rule, exactly as with onEditNote.
   const setRowPhoto = async (id, file) => {
-    await service.setPhoto(id, await downscale(file));
+    const observation = observations.find((obs) => obs.id === id);
+    const existing = observation?.photos?.[0] ?? null;
+    const downscaled = await downscale(file);
+    if (existing) {
+      await service.replacePhoto(id, existing.id, downscaled);
+    } else {
+      await service.addPhoto(id, downscaled);
+    }
     await refreshSession();
   };
   const deleteRowPhoto = async (id) => {
-    await service.deletePhoto(id);
+    const observation = observations.find((obs) => obs.id === id);
+    const existing = observation?.photos?.[0] ?? null;
+    if (!existing) return;
+    await service.deletePhoto(id, existing.id);
     await refreshSession();
   };
   const observationsList = useMemo(

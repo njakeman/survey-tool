@@ -31,7 +31,7 @@ const OBS = {
   gpsAccuracyM: 8,
   headingDeg: null,
   note: '',
-  photoId: null,
+  photos: [],
 };
 
 const CLOSED_REVISIT = {
@@ -321,7 +321,9 @@ describe('SessionHistoryPage — detail', () => {
   test('a saved photo can be viewed from the read-only detail — photos are reads', async () => {
     const service = createFakeService({
       sessions: [CLOSED_A],
-      observationsBySession: { 'sess-a': [{ ...OBS, photoId: 'obs-1' }] },
+      observationsBySession: {
+        'sess-a': [{ ...OBS, photos: [{ id: 'obs-1', referencePhoto: null }] }],
+      },
     });
     service.getPhoto = vi
       .fn()

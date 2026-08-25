@@ -12,7 +12,7 @@ const OBS_NO_PHOTO = {
   gpsAccuracyM: 8.2,
   headingDeg: 247,
   note: 'gate post, leaning quite badly to the north-east side',
-  photoId: null,
+  photos: [],
 };
 
 const OBS_WITH_PHOTO = {
@@ -24,7 +24,7 @@ const OBS_WITH_PHOTO = {
   gpsAccuracyM: 40,
   headingDeg: null,
   note: '',
-  photoId: 'obs-2',
+  photos: [{ id: 'obs-2', referencePhoto: null }],
 };
 
 describe('ObservationsList', () => {
@@ -124,7 +124,7 @@ describe('ObservationsList — grid references', () => {
     gpsAccuracyM: 8,
     headingDeg: null,
     note: '',
-    photoId: null,
+    photos: [],
   };
 
   test('shows the grid reference on its own line, not buried in the metadata', () => {
@@ -166,7 +166,7 @@ describe('ObservationsList — how the position was obtained', () => {
     gpsAccuracyM: 12,
     headingDeg: null,
     note: '',
-    photoId: null,
+    photos: [],
   };
 
   test('says when a point was marked on the map rather than measured', () => {
@@ -200,7 +200,7 @@ describe('ObservationsList - traced observations', () => {
     gpsAccuracyM: 12,
     headingDeg: null,
     note: 'north hedgerow',
-    photoId: null,
+    photos: [],
     positionSource: 'trace',
     geometry: {
       type: 'LineString',
@@ -410,7 +410,7 @@ describe('ObservationsList — voice-note lifecycle', () => {
     gpsAccuracyM: 8,
     headingDeg: null,
     note: '',
-    photoId: null,
+    photos: [],
     audioId: 'obs-3',
   };
 
@@ -553,7 +553,7 @@ describe('ObservationsList — retake, delete and add photo (design pass 4 §7e)
     // The parent refresh delivers the repointed record.
     rerender(
       html`<${ObservationsList}
-        observations=${[{ ...OBS_NO_PHOTO, photoId: 'photo-9' }]}
+        observations=${[{ ...OBS_NO_PHOTO, photos: [{ id: 'photo-9', referencePhoto: null }] }]}
         loadPhoto=${loadPhoto}
         onSetPhoto=${onSetPhoto}
       />`,
@@ -612,7 +612,7 @@ describe('ObservationsList — retake, delete and add photo (design pass 4 §7e)
     });
   });
 
-  test('a repointed photoId (a retake) refetches and revokes the stale URL', async () => {
+  test('a repointed photos[0].id (a retake) refetches and revokes the stale URL', async () => {
     const loadPhoto = vi
       .fn()
       .mockResolvedValueOnce(photoRecord)
@@ -626,7 +626,9 @@ describe('ObservationsList — retake, delete and add photo (design pass 4 §7e)
 
     rerender(
       html`<${ObservationsList}
-        observations=${[{ ...OBS_WITH_PHOTO, photoId: 'photo-2' }]}
+        observations=${[
+          { ...OBS_WITH_PHOTO, photos: [{ id: 'photo-2', referencePhoto: null }] },
+        ]}
         loadPhoto=${loadPhoto}
       />`,
     );
@@ -653,7 +655,7 @@ describe('ObservationsList — the voice chip (design pass 4 §7a/7b)', () => {
     gpsAccuracyM: 8,
     headingDeg: null,
     note: '',
-    photoId: null,
+    photos: [],
     audioId: 'obs-3',
   };
 

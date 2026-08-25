@@ -39,8 +39,11 @@ export function FramingScreen({
   onClose,
   busy = false,
 }) {
+  // Read here once — the UI stays single-photo until Steps 2–4 land the
+  // multi-photo strip; this is just where 0-or-1 photo is unpacked.
+  const entryName = station.photos?.[0]?.entryName ?? null;
   const [photoUrl, setPhotoUrl] = useState(null);
-  const [photoState, setPhotoState] = useState(station.photoEntryName ? 'loading' : 'none');
+  const [photoState, setPhotoState] = useState(entryName ? 'loading' : 'none');
 
   // One lazy read of one entry, straight out of the stored zip. Revoke via
   // a ref read at unmount, not a [url]-keyed effect — a pending effect's
@@ -49,14 +52,14 @@ export function FramingScreen({
   useEffect(() => () => urlRef.current && URL.revokeObjectURL(urlRef.current), []);
   useEffect(() => {
     let cancelled = false;
-    if (!station.photoEntryName) {
+    if (!entryName) {
       setPhotoState('none');
       return undefined;
     }
     setPhotoState('loading');
     (async () => {
       try {
-        const bytes = await readPhoto(station.photoEntryName);
+        const bytes = await readPhoto(entryName);
         if (cancelled) return;
         const url = URL.createObjectURL(new Blob([bytes], { type: 'image/jpeg' }));
         if (urlRef.current) URL.revokeObjectURL(urlRef.current);
@@ -71,7 +74,7 @@ export function FramingScreen({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [station.photoEntryName]);
+  }, [entryName]);
 
   const walk = walkLine(position, station);
   const caption = captionFor(station);

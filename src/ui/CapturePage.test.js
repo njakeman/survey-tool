@@ -301,7 +301,7 @@ describe('CapturePage — session gating (design pass 3 §5a/5b)', () => {
           lon: -0.14,
           gpsAccuracyM: 8,
           note: '',
-          photoId: null,
+          photos: [],
           recordedAt: '2026-08-09T00:00:00.000Z',
         },
       ],
@@ -317,8 +317,8 @@ describe('CapturePage — session gating (design pass 3 §5a/5b)', () => {
     // Field request: a long live session is read newest-first; the choice is
     // a persisted preference, so the page only reports it upward.
     const observations = [
-      { id: 'obs-1', lat: 51.5, lon: -0.14, gpsAccuracyM: 8, note: 'first gate', photoId: null },
-      { id: 'obs-2', lat: 51.6, lon: -0.15, gpsAccuracyM: 8, note: 'second stile', photoId: null },
+      { id: 'obs-1', lat: 51.5, lon: -0.14, gpsAccuracyM: 8, note: 'first gate', photos: [] },
+      { id: 'obs-2', lat: 51.6, lon: -0.15, gpsAccuracyM: 8, note: 'second stile', photos: [] },
     ];
     const service = createFakeService({ openSession: OPEN_SESSION, observations });
     const onSetObservationOrder = vi.fn();
@@ -431,7 +431,7 @@ describe('CapturePage — saving an observation', () => {
         reading: POSITION,
         heading: HEADING,
         note: 'gate post',
-        photo: null,
+        photos: [],
         audio: null,
         // All explicitly null rather than omitted, and asserted as part of
         // the exact object: an observation with no source feature, no
@@ -467,7 +467,7 @@ describe('CapturePage — saving an observation', () => {
       gpsAccuracyM: POSITION.accuracyM,
       headingDeg: null,
       note: 'gate post',
-      photoId: null,
+      photos: [],
     };
     const { service } = await renderReady();
     service.saveObservation.mockResolvedValue(savedObservation);
@@ -641,7 +641,7 @@ describe('CapturePage — undo lifecycle', () => {
       lon: -0.14,
       gpsAccuracyM: 8,
       note: 'gate post',
-      photoId: 'obs-1',
+      photos: [{ id: 'obs-1', referencePhoto: null }],
     };
     const service = createFakeService({ openSession: OPEN_SESSION, observations: [observation] });
     service.getPhoto = vi
@@ -668,13 +668,13 @@ describe('CapturePage — undo lifecycle', () => {
       lon: -0.14,
       gpsAccuracyM: 8,
       note: 'gate post',
-      photoId: 'obs-1',
+      photos: [{ id: 'obs-1', referencePhoto: null }],
     };
     const service = createFakeService({ openSession: OPEN_SESSION, observations: [observation] });
     service.getPhoto = vi
       .fn()
       .mockResolvedValue({ id: 'obs-1', contentType: 'image/jpeg', blob: new Blob(['x']) });
-    service.setPhoto = vi.fn().mockResolvedValue(undefined);
+    service.replacePhoto = vi.fn().mockResolvedValue(undefined);
     const encoded = { blob: new Blob(['downscaled'], { type: 'image/jpeg' }) };
     const downscale = vi.fn().mockResolvedValue(encoded);
     const { sensors } = createFakeSensors();
@@ -692,8 +692,8 @@ describe('CapturePage — undo lifecycle', () => {
     });
 
     await waitFor(() => expect(downscale).toHaveBeenCalledWith(file));
-    await waitFor(() => expect(service.setPhoto).toHaveBeenCalledWith('obs-1', encoded));
-    // The refresh is what repoints the row at the new photoId.
+    await waitFor(() => expect(service.replacePhoto).toHaveBeenCalledWith('obs-1', 'obs-1', encoded));
+    // The refresh is what repoints the row at the new photo id.
     await waitFor(() => expect(service.listObservations.mock.calls.length).toBeGreaterThan(1));
   });
 
@@ -1964,19 +1964,37 @@ describe('CapturePage — revisit', () => {
     expect(screen.getByText('0 of 2 stations')).toBeInTheDocument();
   });
 
-  test('Save carries the current station pairing, photo filename included', async () => {
+  test('Save carries the current station pairing; a framed photo carries the reference filename', async () => {
+    // Photo pairing rides photos[0].referencePhoto now (per-photo), not the
+    // station object, which carries only the id the observation is paired
+    // against.
     const service = revisitService();
     const { sensors, pushPosition } = createFakeSensors();
-    renderPage({ service, sensors });
+    const downscale = vi
+      .fn()
+      .mockResolvedValue({ blob: new Blob(['x'], { type: 'image/jpeg' }) });
+    renderPage({ service, sensors, downscale });
     pushPosition(POSITION);
     await screen.findByText('Station 1 of 2');
+
+    fireEvent.click(screen.getByRole('button', { name: /frame the photo/i }));
+    await screen.findByRole('dialog', { name: /frame the photo/i });
+    const file = new File([new Uint8Array([1])], 'photo.jpg', { type: 'image/jpeg' });
+    fireEvent.change(document.querySelector('.framing-screen input[type="file"]'), {
+      target: { files: [file] },
+    });
+    await waitFor(() => expect(downscale).toHaveBeenCalledWith(file));
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: /frame the photo/i })).toBeNull(),
+    );
 
     fireEvent.click(screen.getByRole('button', { name: /save observation/i }));
 
     await waitFor(() =>
       expect(service.saveObservation).toHaveBeenCalledWith(
         expect.objectContaining({
-          station: { referenceObservationId: 'ref-1', referencePhoto: 'ref-1.jpg' },
+          photos: [expect.objectContaining({ referencePhoto: 'ref-1.jpg' })],
+          station: { referenceObservationId: 'ref-1' },
         }),
       ),
     );

@@ -99,7 +99,7 @@ describe('App', () => {
         lon: -0.14,
         gpsAccuracyM: 8,
         note: '',
-        photoId: null,
+        photos: [],
       },
     ]);
     renderApp({ service, createMap, activeRegionId: 'south' });

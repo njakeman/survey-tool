@@ -124,7 +124,7 @@ describe('ObservationsList', () => {
     gpsAccuracyM: 8,
     headingDeg: null,
     note: 'a note that runs on well past the forty character preview limit used here',
-    photoId: 'obs-1',
+    photos: [{ id: 'obs-1', referencePhoto: null }],
   };
 
   // These three assertions were written against the six-column table. The

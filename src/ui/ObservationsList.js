@@ -92,7 +92,7 @@ function SavedVoiceNote({ audioId, durationMs, loadAudio }) {
 // app for a living. State stays here — there is still no router, and the
 // overlay still dies with its row.
 function SavedPhoto({ observation, gridReference, loadPhoto, onSetPhoto, onDeletePhoto }) {
-  const photoId = observation.photoId;
+  const photoId = observation.photos?.[0]?.id ?? null;
   const [url, setUrl] = useState(null);
   const [state, setState] = useState('idle'); // idle | loading | thumb | full | error
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -408,7 +408,7 @@ function ObservationRow({
   // deliberately not addable here — recording one somewhere else, minutes
   // later, describes the wrong place.
   const hasStrip = Boolean(
-    obs.photoId || obs.audioId || onEditNote || (onSetPhoto && !obs.photoId),
+    obs.photos?.length || obs.audioId || onEditNote || (onSetPhoto && !obs.photos?.length),
   );
 
   return html`
@@ -450,7 +450,7 @@ function ObservationRow({
                 // SavedPhoto owns the empty slot too (it renders Add photo
                 // when photoId is null), so it never unmounts across an add
                 // and the fresh thumbnail appears without another tap.
-                obs.photoId || onSetPhoto
+                obs.photos?.length || onSetPhoto
                   ? html`<${SavedPhoto}
                       observation=${obs}
                       gridReference=${gridReference}
