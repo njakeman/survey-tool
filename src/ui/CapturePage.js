@@ -469,13 +469,18 @@ export function CapturePage({
     setSaveState('saving');
     setSaveError(null);
     try {
+      // The pairing is armed by the station and nothing else: one predicate
+      // decides both halves, because a photo naming a reference filename
+      // while the observation names no station is half a pairing, and the
+      // domain refuses it outright.
+      const paired = Boolean(revisit && currentStation && !recordNew);
       // Re-validate the pairing against the *current* station rather than
       // trusting whatever the photo carries: a station switch after framing
       // must not ship a photo mis-paired to a station it no longer names —
       // the pairing is a claim about *this* station, not a fact recorded
       // once and carried blindly.
       const allowedReferencePhotos = new Set(
-        (currentStation?.photos ?? []).map((stationPhoto) => stationPhoto.filename),
+        (paired ? (currentStation.photos ?? []) : []).map((stationPhoto) => stationPhoto.filename),
       );
       const referencePhoto =
         photo?.referencePhoto && allowedReferencePhotos.has(photo.referencePhoto)
@@ -506,10 +511,7 @@ export function CapturePage({
         // The revisit pairing: armed by the current station unless the
         // surveyor disarmed it ("Record something new instead"), in which
         // case this is exactly an ordinary observation.
-        station:
-          revisit && currentStation && !recordNew
-            ? { referenceObservationId: currentStation.id }
-            : null,
+        station: paired ? { referenceObservationId: currentStation.id } : null,
       });
       setNote('');
       setPhoto(null);

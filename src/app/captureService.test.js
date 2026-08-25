@@ -1248,6 +1248,24 @@ describe('revisit sessions', () => {
     expect(observation.referenceObservationId).toBeNull();
   });
 
+  test('a referencePhoto with no station is refused, by name', async () => {
+    // The contract the UI has to respect: half a pairing joins to nothing,
+    // so the domain refuses it rather than storing a filename pointing at no
+    // station. Pinned here because CapturePage's own tests mock this away.
+    const service = await makeService('capture-service-revisit-half-pairing');
+    await service.startSession('2026-08-21', { reference: REFERENCE, referenceBuffer: BUFFER });
+
+    await expect(
+      service.saveObservation({
+        reading: READING,
+        heading: null,
+        note: '',
+        photos: [{ blob: new Blob(['jpeg'], { type: 'image/jpeg' }), referencePhoto: 'ref-4.jpg' }],
+        station: null,
+      }),
+    ).rejects.toThrow('photos[0].referencePhoto requires referenceObservationId');
+  });
+
   test('station claims write, list and clear against the open session', async () => {
     const service = await makeService('capture-service-revisit-claims');
     const session = await service.startSession('2026-08-21', {

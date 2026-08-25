@@ -2100,6 +2100,44 @@ describe('CapturePage — revisit', () => {
     );
   });
 
+  test('framing then disarming saves the photo unpaired, not a half pairing', async () => {
+    // The photo's referencePhoto and the observation's station must be armed
+    // by the same condition: a framed photo left carrying 'ref-1.jpg' while
+    // station went null is half a pairing, and the domain rightly refuses it.
+    const service = revisitService();
+    const { sensors, pushPosition } = createFakeSensors();
+    const downscale = vi
+      .fn()
+      .mockResolvedValue({ blob: new Blob(['x'], { type: 'image/jpeg' }) });
+    renderPage({ service, sensors, downscale });
+    pushPosition(POSITION);
+    await screen.findByText('Station 1 of 2');
+
+    fireEvent.click(screen.getByRole('button', { name: /frame the photo/i }));
+    await screen.findByRole('dialog', { name: /frame the photo/i });
+    const framed = new File([new Uint8Array([1])], 'framed.jpg', { type: 'image/jpeg' });
+    fireEvent.change(document.querySelector('.framing-screen input[type="file"]'), {
+      target: { files: [framed] },
+    });
+    await waitFor(() => expect(downscale).toHaveBeenCalledWith(framed));
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: /frame the photo/i })).toBeNull(),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /record something new instead/i }));
+    await screen.findByText(/recording a new observation/i);
+    fireEvent.click(screen.getByRole('button', { name: /save observation/i }));
+
+    await waitFor(() =>
+      expect(service.saveObservation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          photos: [expect.objectContaining({ referencePhoto: null })],
+          station: null,
+        }),
+      ),
+    );
+  });
+
   test('Skip claims the station, says so with an Undo, and moves on', async () => {
     const service = revisitService();
     const { sensors, pushPosition } = createFakeSensors();
