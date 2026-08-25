@@ -1,7 +1,18 @@
 import { describe, expect, test, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/preact';
+import { render, screen, within, fireEvent } from '@testing-library/preact';
 import { html } from 'htm/preact';
 import { PhotoField } from './PhotoField.js';
+
+function photo(key, overrides = {}) {
+  return {
+    key,
+    blob: new Blob(['bytes'], { type: 'image/jpeg' }),
+    width: 800,
+    height: 600,
+    referencePhoto: null,
+    ...overrides,
+  };
+}
 
 describe('PhotoField', () => {
   test('shows a clear "Photo" label, not the browser\'s raw "Choose File" input', () => {
@@ -29,6 +40,17 @@ describe('PhotoField', () => {
     expect(onSelect).toHaveBeenCalledWith(file);
   });
 
+  test('clears the input value after a pick, so the same file can be chosen twice', () => {
+    const onSelect = vi.fn();
+    render(html`<${PhotoField} onSelect=${onSelect} />`);
+    const input = document.querySelector('input[type="file"]');
+    const file = new File(['bytes'], 'photo.jpg', { type: 'image/jpeg' });
+
+    fireEvent.change(input, { target: { files: [file] } });
+
+    expect(input.value).toBe('');
+  });
+
   test('busy shows a processing indicator and disables the input', () => {
     render(html`<${PhotoField} busy=${true} />`);
     expect(screen.getByText(/processing/i)).toBeInTheDocument();
@@ -40,33 +62,129 @@ describe('PhotoField', () => {
     expect(screen.getByText('could not process that photo')).toBeInTheDocument();
   });
 
-  test('a photo shows a thumbnail and a Remove button that calls onClear', () => {
-    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:fake-url');
-    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
-    const onClear = vi.fn();
-    const blob = new Blob(['bytes'], { type: 'image/jpeg' });
-
-    render(html`<${PhotoField} photo=${{ blob, width: 800, height: 600 }} onClear=${onClear} />`);
-
-    expect(screen.getByRole('img')).toHaveAttribute('src', 'blob:fake-url');
-    fireEvent.click(screen.getByRole('button', { name: /remove/i }));
-    expect(onClear).toHaveBeenCalledTimes(1);
-
-    URL.createObjectURL.mockRestore();
-    URL.revokeObjectURL.mockRestore();
+  test('no input inside the strip — compose still finds the picker via input[type=file]', () => {
+    render(html`<${PhotoField} photos=${[photo('a'), photo('b')]} />`);
+    expect(document.querySelectorAll('input[type="file"]')).toHaveLength(1);
+    expect(document.querySelector('.photo-field-strip input')).toBeNull();
   });
 
-  test('revokes the object URL on unmount', () => {
-    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:fake-url');
-    const revokeSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
-    const blob = new Blob(['bytes'], { type: 'image/jpeg' });
+  describe('with one photo', () => {
+    test('shows a single thumbnail', () => {
+      vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:fake-url');
+      vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
 
-    const { unmount } = render(html`<${PhotoField} photo=${{ blob }} />`);
-    unmount();
+      render(html`<${PhotoField} photos=${[photo('a')]} />`);
 
-    expect(revokeSpy).toHaveBeenCalledWith('blob:fake-url');
+      const thumbs = screen.getAllByRole('img');
+      expect(thumbs).toHaveLength(1);
+      expect(thumbs[0]).toHaveAttribute('src', 'blob:fake-url');
+      expect(thumbs[0]).toHaveAttribute('alt', 'Photo 1 of 1');
 
-    URL.createObjectURL.mockRestore();
-    URL.revokeObjectURL.mockRestore();
+      URL.createObjectURL.mockRestore();
+      URL.revokeObjectURL.mockRestore();
+    });
+
+    test('the "Photo" label still resolves via its accessible label with a thumb present', () => {
+      vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:fake-url');
+      vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+
+      render(html`<${PhotoField} photos=${[photo('a')]} />`);
+
+      expect(screen.getByLabelText('Photo')).toHaveAttribute('type', 'file');
+
+      URL.createObjectURL.mockRestore();
+      URL.revokeObjectURL.mockRestore();
+    });
+  });
+
+  describe('with three photos', () => {
+    test('shows a thumbnail per photo, each numbered against the total', () => {
+      let n = 0;
+      vi.spyOn(URL, 'createObjectURL').mockImplementation(() => `blob:fake-url-${n++}`);
+      vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+
+      render(html`<${PhotoField} photos=${[photo('a'), photo('b'), photo('c')]} />`);
+
+      const thumbs = screen.getAllByRole('img');
+      expect(thumbs).toHaveLength(3);
+      expect(thumbs.map((img) => img.getAttribute('alt'))).toEqual([
+        'Photo 1 of 3',
+        'Photo 2 of 3',
+        'Photo 3 of 3',
+      ]);
+
+      URL.createObjectURL.mockRestore();
+      URL.revokeObjectURL.mockRestore();
+    });
+
+    test('one createObjectURL call per thumb', () => {
+      const createSpy = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:fake-url');
+      vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+
+      render(html`<${PhotoField} photos=${[photo('a'), photo('b'), photo('c')]} />`);
+
+      expect(createSpy).toHaveBeenCalledTimes(3);
+
+      URL.createObjectURL.mockRestore();
+      URL.revokeObjectURL.mockRestore();
+    });
+
+    test('each thumb revokes its own object URL on unmount', () => {
+      let n = 0;
+      vi.spyOn(URL, 'createObjectURL').mockImplementation(() => `blob:fake-url-${n++}`);
+      const revokeSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+
+      const { unmount } = render(
+        html`<${PhotoField} photos=${[photo('a'), photo('b'), photo('c')]} />`,
+      );
+      unmount();
+
+      expect(revokeSpy).toHaveBeenCalledWith('blob:fake-url-0');
+      expect(revokeSpy).toHaveBeenCalledWith('blob:fake-url-1');
+      expect(revokeSpy).toHaveBeenCalledWith('blob:fake-url-2');
+      expect(revokeSpy).toHaveBeenCalledTimes(3);
+
+      URL.createObjectURL.mockRestore();
+      URL.revokeObjectURL.mockRestore();
+    });
+
+    test("removing a thumb calls onRemove with that photo's key", () => {
+      vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:fake-url');
+      vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+      const onRemove = vi.fn();
+
+      render(
+        html`<${PhotoField} photos=${[photo('a'), photo('b'), photo('c')]} onRemove=${onRemove} />`,
+      );
+
+      const thumbs = screen.getAllByRole('listitem');
+      fireEvent.click(within(thumbs[1]).getByRole('button', { name: /remove photo 2 of 3/i }));
+
+      expect(onRemove).toHaveBeenCalledWith('b');
+      expect(onRemove).toHaveBeenCalledTimes(1);
+
+      URL.createObjectURL.mockRestore();
+      URL.revokeObjectURL.mockRestore();
+    });
+  });
+
+  describe('at the cap', () => {
+    test('disables the add control and shows the cap message', () => {
+      render(html`<${PhotoField} atCap=${true} />`);
+
+      const input = document.querySelector('input[type="file"]');
+      expect(input).toBeDisabled();
+
+      const label = document.querySelector('label.photo-field-button');
+      expect(label).toHaveAttribute('aria-disabled', 'true');
+      expect(label.className).toContain('photo-field-button-capped');
+
+      expect(screen.getByText('10 photos — the most one record holds')).toBeInTheDocument();
+    });
+
+    test('does not show the cap message below the cap', () => {
+      render(html`<${PhotoField} atCap=${false} />`);
+      expect(screen.queryByText(/most one record holds/)).not.toBeInTheDocument();
+    });
   });
 });
