@@ -14,8 +14,17 @@ import { ExportBadge } from './ExportBadge.js';
 import { TraceGlyph } from './traceGlyphs.js';
 import { VoiceTransport } from './VoiceTransport.js';
 import { BodyPortal } from './BodyPortal.js';
+import { MAX_PHOTOS } from '../photo/dimensions.js';
 
 const cameraGlyph = html`<span class="glyph-camera" aria-hidden="true"></span>`;
+
+// How far a finger must travel across the photo before it counts as a page
+// turn rather than a tap that slid. Gloves and a moving boat both wobble;
+// 40px is short enough to feel willing and long enough not to fire on a
+// steadying touch. The gesture is measured at pointerup alone — nothing
+// moves under the finger, so there is no animation to fight, and nothing for
+// reduced-motion to suppress.
+const SWIPE_MIN_PX = 40;
 
 // A saved voice note, loaded only when the surveyor asks to hear it — the
 // bytes stay in IndexedDB until the tap. The chip states the duration when
@@ -77,6 +86,22 @@ function SavedVoiceNote({ audioId, durationMs, loadAudio }) {
       ${label}
     </button>
   `;
+}
+
+// The pager arrows' chevron. Drawn rather than typed: a glyph font is one
+// more thing to precache, and "‹" renders at wildly different weights across
+// the two platforms.
+function ChevronGlyph({ direction }) {
+  return html`<svg viewBox="0 0 10 16" width="10" height="16" aria-hidden="true">
+    <polyline
+      points=${direction === 'next' ? '2,1 8,8 2,15' : '8,1 2,8 8,15'}
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    />
+  </svg>`;
 }
 
 // One slot in the strip: a 64px thumbnail once its bytes are in, a dashed
@@ -148,20 +173,31 @@ function SavedPhotoThumb({ photoId, url, state, alt, onVisible, onOpen }) {
 // from laying out inside its own <li>, and night mode adds filters to this
 // app for a living. State stays here — there is still no router, and the
 // overlay still dies with its row.
+//
+// That view is a pager: it opens on the photo tapped and walks the rest with
+// the arrows or a swipe. It is keyed by photo **id**, not by index — a
+// parent refresh can renumber photos[] under an open view (a retake repoints
+// one id, a delete removes one, an earlier photo can go), and an index would
+// silently slide the surveyor onto a different photo. The reconcile effect
+// below is the one place that decides where the view lands when the id it
+// was holding disappears.
 function SavedPhotos({ observation, gridReference, loadPhoto, onSetPhoto, onDeletePhoto }) {
   const photos = observation.photos ?? [];
   const ids = photos.map((photo) => photo.id);
   const idsKey = ids.join('|');
 
   const [urls, setUrls] = useState({});
-  const [openIndex, setOpenIndex] = useState(null); // the photo the lightbox shows
+  const [openId, setOpenId] = useState(null); // the photo the lightbox shows; null = closed
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [busy, setBusy] = useState(false); // a retake's or an add's downscale in flight
+  const [busy, setBusy] = useState(null); // null | 'retake' | 'add' — a downscale in flight
 
   const urlsRef = useRef({});
   const pendingRef = useRef(new Set()); // fetches in flight, so a re-render can't double one
   const mountedRef = useRef(true);
   const liveIdsRef = useRef(idsKey); // what photos[] holds now, for reads in flight
+  const prevIdsRef = useRef(ids); // the shape before this refresh, to place the open view
+  const pendingShowLastRef = useRef(false); // an add from the view: land on what it appends
+  const swipeRef = useRef(null); // where a pointer went down on the stage
 
   useEffect(() => {
     mountedRef.current = true;
@@ -174,11 +210,13 @@ function SavedPhotos({ observation, gridReference, loadPhoto, onSetPhoto, onDele
     };
   }, []);
 
-  // photos[] changed shape: revoke what no id points at any more. Keyed on
-  // the joined ids so a re-render with the same photos does nothing.
+  // photos[] changed shape: revoke what no id points at any more, and settle
+  // where an open view now sits. Keyed on the joined ids so a re-render with
+  // the same photos does nothing.
   useEffect(() => {
     liveIdsRef.current = idsKey;
-    const live = new Set(idsKey === '' ? [] : idsKey.split('|'));
+    const nextIds = idsKey === '' ? [] : idsKey.split('|');
+    const live = new Set(nextIds);
     const next = {};
     let dropped = false;
     for (const [id, value] of Object.entries(urlsRef.current)) {
@@ -189,9 +227,34 @@ function SavedPhotos({ observation, gridReference, loadPhoto, onSetPhoto, onDele
       if (value !== 'error') URL.revokeObjectURL(value);
       dropped = true;
     }
-    if (!dropped) return;
-    urlsRef.current = next;
-    setUrls(next);
+    if (dropped) {
+      urlsRef.current = next;
+      setUrls(next);
+    }
+
+    const prevIds = prevIdsRef.current;
+    prevIdsRef.current = nextIds;
+    // Consumed by whichever refresh arrives first: if the add failed, the
+    // next change of shape is some other edit and must not jump the view.
+    const showLast = pendingShowLastRef.current;
+    pendingShowLastRef.current = false;
+
+    setOpenId((current) => {
+      // An add appends (addObservationPhoto spreads [...photos, entry]), so
+      // the photo just taken is the last one — go and look at it. Only while
+      // the view is still open: a refresh landing after the surveyor closed
+      // it must not throw the photo back over the list they moved on to.
+      if (showLast && current != null && nextIds.length === prevIds.length + 1) {
+        return nextIds[nextIds.length - 1];
+      }
+      if (current == null || live.has(current)) return current;
+      const wasAt = prevIds.indexOf(current);
+      if (wasAt < 0 || nextIds.length === 0) return null;
+      // Same length: a retake put a fresh id in the same slot — stay on it.
+      // Shorter: the photo was deleted elsewhere, so take its neighbour, the
+      // next one where there is one, the previous where there is not.
+      return nextIds[Math.min(wasAt, nextIds.length - 1)] ?? null;
+    });
   }, [idsKey]);
 
   function remember(photoId, value) {
@@ -233,22 +296,61 @@ function SavedPhotos({ observation, gridReference, loadPhoto, onSetPhoto, onDele
 
   function close() {
     setConfirmingDelete(false);
-    setOpenIndex(null);
+    setOpenId(null);
   }
 
-  const openPhoto = openIndex == null ? null : (photos[openIndex] ?? null);
+  const openIndex = openId == null ? -1 : ids.indexOf(openId);
+  const shown = openIndex < 0 ? null : photos[openIndex];
+
+  // The shown photo and the two either side of it: the next tap or swipe
+  // must not wait on a read that could have happened while the surveyor was
+  // looking. Only those three — pre-fetching the whole strip is the memory
+  // cost the thumbs are lazy to avoid.
+  useEffect(() => {
+    if (openIndex < 0) return;
+    ensure(ids[openIndex]);
+    if (openIndex > 0) ensure(ids[openIndex - 1]);
+    if (openIndex + 1 < ids.length) ensure(ids[openIndex + 1]);
+    // Keyed on which photo is open and what photos[] holds; ensure is a fresh
+    // closure over the parent's stable reader each render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openId, idsKey]);
+
+  // Paging cancels a raised delete confirm: it was raised on the photo being
+  // looked at, and carrying it to the next one would delete the wrong photo.
+  function show(index) {
+    if (index < 0 || index >= ids.length) return;
+    setConfirmingDelete(false);
+    setOpenId(ids[index]);
+  }
+
+  function handleStagePointerDown(event) {
+    swipeRef.current = { x: event.clientX, y: event.clientY };
+  }
+
+  function handleStagePointerUp(event) {
+    const start = swipeRef.current;
+    swipeRef.current = null;
+    if (!start) return;
+    const dx = event.clientX - start.x;
+    const dy = event.clientY - start.y;
+    // Far enough, and more across than down — a vertical drag is someone
+    // scrolling or steadying themselves, not turning a page.
+    if (Math.abs(dx) < SWIPE_MIN_PX || Math.abs(dx) <= Math.abs(dy)) return;
+    show(openIndex + (dx < 0 ? 1 : -1));
+  }
 
   async function handleRetake(event) {
     const file = event.target.files?.[0];
     // Clearing the value is what lets the same file be picked twice — a
     // repeated selection otherwise fires no change event.
     event.target.value = '';
-    if (!file || !onSetPhoto || !openPhoto) return;
-    setBusy(true);
+    if (!file || !onSetPhoto || !shown) return;
+    setBusy('retake');
     try {
-      await onSetPhoto(observation.id, openPhoto.id, file);
+      await onSetPhoto(observation.id, shown.id, file);
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
@@ -261,20 +363,27 @@ function SavedPhotos({ observation, gridReference, loadPhoto, onSetPhoto, onDele
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
-    setBusy(true);
+    // Added from inside the open view: the refresh should land on the photo
+    // just taken, not leave the surveyor on the one they were looking at.
+    // The flag is set before the await, so a fast refresh can still see it.
+    if (shown) pendingShowLastRef.current = true;
+    setBusy('add');
     try {
       await onSetPhoto(observation.id, null, file);
     } finally {
-      setBusy(false);
+      setBusy(null);
     }
   }
 
   async function handleDelete() {
-    await onDeletePhoto(observation.id, openPhoto.id);
-    // The view closes; the parent refresh drops the id from photos[] and the
-    // reconcile effect revokes its URL.
+    await onDeletePhoto(observation.id, shown.id);
     setConfirmingDelete(false);
-    setOpenIndex(null);
+    // Stay in the view on the neighbour — the next photo, or the previous
+    // when the last one goes — so a run of bad photos can be cleared without
+    // reopening the view each time. Nothing left to look at closes it. The
+    // parent refresh then drops the id from photos[] and the reconcile
+    // effect revokes its URL.
+    setOpenId(ids[openIndex + 1] ?? ids[openIndex - 1] ?? null);
   }
 
   if (ids.length === 0) {
@@ -283,12 +392,12 @@ function SavedPhotos({ observation, gridReference, loadPhoto, onSetPhoto, onDele
     // passes onSetPhoto (the open session); history renders nothing.
     if (!onSetPhoto) return null;
     return html`<label class="attachment-add-photo link">
-      ${cameraGlyph} ${busy ? 'Adding…' : 'Add photo'}
+      ${cameraGlyph} ${busy === 'add' ? 'Adding…' : 'Add photo'}
       <input
         type="file"
         accept="image/*"
         capture="environment"
-        disabled=${busy}
+        disabled=${busy != null}
         onChange=${handleAdd}
       />
     </label>`;
@@ -301,8 +410,13 @@ function SavedPhotos({ observation, gridReference, loadPhoto, onSetPhoto, onDele
     </p>`;
   }
 
-  const caption = [formatTime(observation.fixAt), gridReference].filter(Boolean).join(' · ');
-  const openUrl = openPhoto ? urls[openPhoto.id] : null;
+  // One string, not three interpolations — htm drops the whitespace around a
+  // line break between expressions. " · i of n" only where there is a strip
+  // to be lost in: one of one says nothing.
+  const caption =
+    [formatTime(observation.fixAt), gridReference].filter(Boolean).join(' · ') +
+    (ids.length > 1 ? ` · ${openIndex + 1} of ${ids.length}` : '');
+  const shownUrl = shown ? urls[shown.id] : null;
 
   return html`
     <ul class="attachment-strip-photos ${ids.length > 1 ? 'attachment-strip-multi' : ''}">
@@ -320,7 +434,7 @@ function SavedPhotos({ observation, gridReference, loadPhoto, onSetPhoto, onDele
                 : `Photo for this observation (${index + 1} of ${ids.length})`
             }
             onVisible=${ensure}
-            onOpen=${() => setOpenIndex(index)}
+            onOpen=${() => setOpenId(photo.id)}
           />
         </li>`;
       })}
@@ -329,7 +443,7 @@ function SavedPhotos({ observation, gridReference, loadPhoto, onSetPhoto, onDele
       // Open on the photo, not on its bytes: a retake repoints the id under
       // the view, and closing it there would drop the surveyor back on the
       // strip mid-judgement. The image appears when the new bytes land.
-      openPhoto
+      shown
         ? html`<${BodyPortal}>
             <div
               class="photo-lightbox"
@@ -355,12 +469,57 @@ function SavedPhotos({ observation, gridReference, loadPhoto, onSetPhoto, onDele
                 </svg>
               </button>
               ${
-                openUrl && openUrl !== 'error'
-                  ? html`<img class="photo-lightbox-image" src=${openUrl} alt="" />`
-                  : html`<div
-                      class="photo-lightbox-image photo-lightbox-image-pending"
-                      aria-busy=${openUrl === 'error' ? undefined : 'true'}
-                    />`
+                // The arrows flank the stage, so the DOM order is the order a
+                // finger meets them. Only worth showing where there is
+                // somewhere to go.
+                ids.length > 1
+                  ? html`<button
+                      type="button"
+                      class="photo-lightbox-nav photo-lightbox-nav-prev"
+                      aria-label="Previous photo"
+                      disabled=${openIndex === 0}
+                      onClick=${() => show(openIndex - 1)}
+                    >
+                      <${ChevronGlyph} direction="prev" />
+                    </button>`
+                  : null
+              }
+              <div
+                class="photo-lightbox-stage"
+                onPointerDown=${handleStagePointerDown}
+                onPointerUp=${handleStagePointerUp}
+              >
+                ${
+                  // draggable="false": a long press that drifts is a swipe on
+                  // a phone and an image drag on a desktop, and the drag wins
+                  // the pointer stream.
+                  shownUrl && shownUrl !== 'error'
+                    ? html`<img
+                        class="photo-lightbox-image"
+                        src=${shownUrl}
+                        alt=""
+                        draggable="false"
+                      />`
+                    : html`<p
+                        class="photo-lightbox-loading"
+                        aria-busy=${shownUrl === 'error' ? undefined : 'true'}
+                      >
+                        ${shownUrl === 'error' ? 'Photo could not be loaded' : 'Loading…'}
+                      </p>`
+                }
+              </div>
+              ${
+                ids.length > 1
+                  ? html`<button
+                      type="button"
+                      class="photo-lightbox-nav photo-lightbox-nav-next"
+                      aria-label="Next photo"
+                      disabled=${openIndex === ids.length - 1}
+                      onClick=${() => show(openIndex + 1)}
+                    >
+                      <${ChevronGlyph} direction="next" />
+                    </button>`
+                  : null
               }
               <p class="photo-lightbox-caption">${caption}</p>
               ${
@@ -388,15 +547,35 @@ function SavedPhotos({ observation, gridReference, loadPhoto, onSetPhoto, onDele
                     : html`<div class="photo-lightbox-actions">
                         <label class="photo-lightbox-retake">
                           <span class="glyph-camera" aria-hidden="true"></span>
-                          ${busy ? 'Retaking…' : 'Retake'}
+                          ${busy === 'retake' ? 'Retaking…' : 'Retake'}
                           <input
                             type="file"
                             accept="image/*"
                             capture="environment"
-                            disabled=${busy}
+                            disabled=${busy != null}
                             onChange=${handleRetake}
                           />
                         </label>
+                        ${
+                          // Another photo of the same thing, taken from where
+                          // the surveyor is standing now, without going back
+                          // to the strip. Withheld at the cap rather than
+                          // offered and refused (CapturePage holds the same
+                          // line on the capture screen).
+                          ids.length < MAX_PHOTOS
+                            ? html`<label class="photo-lightbox-add">
+                                <span class="glyph-camera" aria-hidden="true"></span>
+                                ${busy === 'add' ? 'Adding…' : 'Add'}
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  capture="environment"
+                                  disabled=${busy != null}
+                                  onChange=${handleAdd}
+                                />
+                              </label>`
+                            : null
+                        }
                         <button
                           type="button"
                           class="photo-lightbox-link"

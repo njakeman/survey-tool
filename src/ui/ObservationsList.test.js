@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { render, screen, within, fireEvent, waitFor, act } from '@testing-library/preact';
 import { html } from 'htm/preact';
 import { ObservationsList } from './ObservationsList.js';
+import { MAX_PHOTOS } from '../photo/dimensions.js';
 
 const OBS_NO_PHOTO = {
   id: 'obs-1',
@@ -907,6 +908,411 @@ describe('ObservationsList — the saved photo strip', () => {
 
     expect(screen.getByText(/2 photos/)).toBeInTheDocument();
     expect(screen.queryByRole('img')).toBeNull();
+  });
+
+  test('a read landing after the row unmounts revokes its URL and touches no state', async () => {
+    // The unmount cleanup has already run over an empty map by the time these
+    // bytes arrive — without the mounted guard the URL would be stranded, and
+    // the write would land on a component that no longer exists.
+    useNoObserver();
+    let release;
+    const gate = new Promise((resolve) => {
+      release = resolve;
+    });
+    const loadPhoto = vi.fn(async (id) => {
+      await gate;
+      return record(id);
+    });
+    const { unmount, container } = render(
+      html`<${ObservationsList} observations=${[withPhotos(['p-1'])]} loadPhoto=${loadPhoto} />`,
+    );
+
+    await waitFor(() => expect(loadPhoto).toHaveBeenCalledWith('p-1'));
+    await act(() => {});
+    unmount();
+    await act(async () => {
+      release();
+    });
+
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith(savedUrls[0]);
+    expect(container.innerHTML).toBe('');
+  });
+
+  test('unmounting disconnects a thumb that is still watching the viewport', () => {
+    // A row scrolled off the session list must not leave observers behind on
+    // detached nodes — the list re-renders on every save.
+    useFakeObserver();
+    const loadPhoto = vi.fn(async (id) => record(id));
+    const { unmount } = render(
+      html`<${ObservationsList}
+        observations=${[withPhotos(['p-1', 'p-2'])]}
+        loadPhoto=${loadPhoto}
+      />`,
+    );
+
+    expect(observed).toHaveLength(2);
+    expect(observed.some((entry) => entry.observer.disconnected)).toBe(false);
+
+    unmount();
+
+    expect(observed.every((entry) => entry.observer.disconnected)).toBe(true);
+  });
+});
+
+describe('ObservationsList — the photo view pages through the photos', () => {
+  const savedUrls = [];
+  beforeEach(() => {
+    savedUrls.length = 0;
+    // One URL per photo id, so a test can say which photo the stage shows.
+    URL.createObjectURL = vi.fn((blob) => {
+      const url = `blob:${blob.photoId}`;
+      savedUrls.push(url);
+      return url;
+    });
+    URL.revokeObjectURL = vi.fn();
+    // The no-observer path: every thumb fetches at once, so a numbered thumb
+    // is there to tap. Paging itself is what these rows are about.
+    vi.stubGlobal('IntersectionObserver', undefined);
+  });
+  afterEach(() => {
+    delete URL.createObjectURL;
+    delete URL.revokeObjectURL;
+    vi.unstubAllGlobals();
+  });
+
+  const record = (id) => ({ id, contentType: 'image/jpeg', blob: { photoId: id } });
+  const FILE = new File(['bytes'], 'photo.jpg', { type: 'image/jpeg' });
+  const withPhotos = (ids) => ({
+    ...OBS_WITH_PHOTO,
+    photos: ids.map((id) => ({ id, referencePhoto: null })),
+  });
+
+  function renderRow(ids, props = {}) {
+    const loadPhoto = props.loadPhoto ?? vi.fn(async (id) => record(id));
+    const row = (nextIds) =>
+      html`<${ObservationsList}
+        observations=${[withPhotos(nextIds)]}
+        loadPhoto=${loadPhoto}
+        onSetPhoto=${props.onSetPhoto}
+        onDeletePhoto=${props.onDeletePhoto}
+      />`;
+    const view = render(row(ids));
+    return { ...view, loadPhoto, refresh: (nextIds) => view.rerender(row(nextIds)) };
+  }
+
+  const altFor = (ids, index) =>
+    ids.length === 1
+      ? 'Photo for this observation'
+      : `Photo for this observation (${index + 1} of ${ids.length})`;
+
+  async function openPager(ids, index, props) {
+    const view = renderRow(ids, props);
+    fireEvent.click(await screen.findByAltText(altFor(ids, index)));
+    return view;
+  }
+
+  const dialog = () => screen.getByRole('dialog', { name: /photo/i });
+  const shownSrc = () =>
+    dialog().querySelector('img.photo-lightbox-image')?.getAttribute('src') ?? null;
+  const caption = () => dialog().querySelector('.photo-lightbox-caption').textContent;
+
+  // happy-dom's own IntersectionObserver never fires; the one test here that
+  // cares which photos were fetched installs this and calls it by hand.
+  const observedHere = [];
+  class FakeObserver {
+    constructor(callback, options) {
+      this.callback = callback;
+      this.options = options;
+      this.disconnected = false;
+    }
+    observe(element) {
+      observedHere.push({
+        callback: this.callback,
+        element,
+        options: this.options,
+        observer: this,
+      });
+    }
+    unobserve() {}
+    disconnect() {
+      this.disconnected = true;
+    }
+  }
+
+  test('the caption says which photo of how many, but only when there is more than one', async () => {
+    await openPager(['p-1', 'p-2', 'p-3'], 1);
+
+    expect(caption()).toMatch(/2 of 3/);
+    expect(shownSrc()).toBe('blob:p-2');
+  });
+
+  test('a lone photo is not captioned 1 of 1', async () => {
+    await openPager(['p-1'], 0);
+
+    expect(caption()).not.toMatch(/of/i);
+    expect(screen.queryByRole('button', { name: /next photo/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /previous photo/i })).toBeNull();
+  });
+
+  test('Next and Previous walk the strip, disabled at each end', async () => {
+    await openPager(['p-1', 'p-2', 'p-3'], 0);
+
+    const next = () => screen.getByRole('button', { name: /next photo/i });
+    const prev = () => screen.getByRole('button', { name: /previous photo/i });
+    expect(prev()).toBeDisabled();
+    expect(next()).toBeEnabled();
+
+    fireEvent.click(next());
+    expect(shownSrc()).toBe('blob:p-2');
+    expect(prev()).toBeEnabled();
+
+    fireEvent.click(next());
+    expect(shownSrc()).toBe('blob:p-3');
+    expect(caption()).toMatch(/3 of 3/);
+    expect(next()).toBeDisabled();
+
+    fireEvent.click(prev());
+    expect(shownSrc()).toBe('blob:p-2');
+  });
+
+  function swipe(dx, dy) {
+    const stage = dialog().querySelector('.photo-lightbox-stage');
+    fireEvent.pointerDown(stage, { clientX: 200, clientY: 300 });
+    fireEvent.pointerUp(stage, { clientX: 200 + dx, clientY: 300 + dy });
+  }
+
+  test('swiping the stage left shows the next photo, right the previous', async () => {
+    await openPager(['p-1', 'p-2', 'p-3'], 1);
+
+    swipe(-60, 10);
+    expect(shownSrc()).toBe('blob:p-3');
+
+    swipe(80, -5);
+    expect(shownSrc()).toBe('blob:p-2');
+  });
+
+  test('a short drag or a mostly-vertical one is not a swipe', async () => {
+    await openPager(['p-1', 'p-2', 'p-3'], 1);
+
+    swipe(-20, 0); // under the 40px threshold — a tap that slid
+    expect(shownSrc()).toBe('blob:p-2');
+
+    swipe(-50, -80); // a scroll, not a page turn
+    expect(shownSrc()).toBe('blob:p-2');
+  });
+
+  test('a swipe at the last photo stays there rather than wrapping round', async () => {
+    await openPager(['p-1', 'p-2'], 1);
+
+    swipe(-90, 0);
+    expect(shownSrc()).toBe('blob:p-2');
+  });
+
+  test('opening a photo fetches its neighbours, not the whole strip', async () => {
+    // The next tap must not wait on a read: the two adjacent photos are
+    // fetched with the one being looked at, and no more.
+    vi.stubGlobal('IntersectionObserver', FakeObserver);
+    observedHere.length = 0;
+    const loadPhoto = vi.fn(async (id) => record(id));
+    render(
+      html`<${ObservationsList}
+        observations=${[withPhotos(['p-1', 'p-2', 'p-3', 'p-4', 'p-5'])]}
+        loadPhoto=${loadPhoto}
+      />`,
+    );
+    await act(async () => {
+      const entry = observedHere[2];
+      entry.callback([{ isIntersecting: true, target: entry.element }], entry.observer);
+    });
+
+    fireEvent.click(await screen.findByAltText('Photo for this observation (3 of 5)'));
+
+    await waitFor(() => expect(loadPhoto).toHaveBeenCalledWith('p-4'));
+    expect(loadPhoto.mock.calls.map(([id]) => id).sort()).toEqual(['p-2', 'p-3', 'p-4']);
+  });
+
+  test('a photo whose bytes have not landed shows a stand-in, not a blank stage', async () => {
+    let release;
+    const gate = new Promise((resolve) => {
+      release = resolve;
+    });
+    const loadPhoto = vi.fn(async (id) => {
+      if (id !== 'p-1') await gate;
+      return record(id);
+    });
+    await openPager(['p-1', 'p-2'], 0, { loadPhoto });
+
+    fireEvent.click(screen.getByRole('button', { name: /next photo/i }));
+
+    const standIn = dialog().querySelector('.photo-lightbox-loading');
+    expect(standIn).not.toBeNull();
+    expect(standIn).toHaveAttribute('aria-busy', 'true');
+    expect(dialog().querySelector('img.photo-lightbox-image')).toBeNull();
+
+    await act(async () => {
+      release();
+    });
+    await waitFor(() => expect(shownSrc()).toBe('blob:p-2'));
+  });
+
+  test('a photo that cannot be read says so in the stage rather than showing an empty box', async () => {
+    const loadPhoto = vi.fn(async (id) => (id === 'p-2' ? undefined : record(id)));
+    await openPager(['p-1', 'p-2'], 0, { loadPhoto });
+
+    fireEvent.click(screen.getByRole('button', { name: /next photo/i }));
+
+    await waitFor(() =>
+      expect(within(dialog()).getByText(/photo could not be loaded/i)).toBeInTheDocument(),
+    );
+    expect(within(dialog()).getByText(/photo could not be loaded/i)).not.toHaveAttribute(
+      'aria-busy',
+    );
+  });
+
+  test('Retake rewrites the photo being looked at and the view stays on that slot', async () => {
+    const onSetPhoto = vi.fn().mockResolvedValue(undefined);
+    const { refresh } = await openPager(['p-1', 'p-2', 'p-3'], 1, {
+      onSetPhoto,
+      onDeletePhoto: vi.fn(),
+    });
+
+    fireEvent.change(dialog().querySelector('label.photo-lightbox-retake input'), {
+      target: { files: [FILE] },
+    });
+    await waitFor(() => expect(onSetPhoto).toHaveBeenCalledWith('obs-2', 'p-2', FILE));
+
+    refresh(['p-1', 'photo-x', 'p-3']);
+
+    expect(caption()).toMatch(/2 of 3/);
+    await waitFor(() => expect(shownSrc()).toBe('blob:photo-x'));
+  });
+
+  test('Delete moves the view to the next photo rather than dropping to the strip', async () => {
+    const onDeletePhoto = vi.fn().mockResolvedValue(undefined);
+    const { refresh } = await openPager(['p-1', 'p-2', 'p-3'], 1, {
+      onSetPhoto: vi.fn(),
+      onDeletePhoto,
+    });
+
+    fireEvent.click(within(dialog()).getByRole('button', { name: /^delete$/i }));
+    fireEvent.click(within(dialog()).getByRole('button', { name: /delete photo/i }));
+    await waitFor(() => expect(onDeletePhoto).toHaveBeenCalledWith('obs-2', 'p-2'));
+
+    refresh(['p-1', 'p-3']);
+
+    expect(shownSrc()).toBe('blob:p-3');
+    expect(caption()).toMatch(/2 of 2/);
+    // The confirm belongs to the photo it was raised on, not to the view.
+    expect(within(dialog()).queryByRole('button', { name: /delete photo/i })).toBeNull();
+  });
+
+  test('deleting the last photo falls back to the one before it', async () => {
+    const onDeletePhoto = vi.fn().mockResolvedValue(undefined);
+    const { refresh } = await openPager(['p-1', 'p-2'], 1, {
+      onSetPhoto: vi.fn(),
+      onDeletePhoto,
+    });
+
+    fireEvent.click(within(dialog()).getByRole('button', { name: /^delete$/i }));
+    fireEvent.click(within(dialog()).getByRole('button', { name: /delete photo/i }));
+    await waitFor(() => expect(onDeletePhoto).toHaveBeenCalledWith('obs-2', 'p-2'));
+
+    refresh(['p-1']);
+
+    expect(shownSrc()).toBe('blob:p-1');
+    expect(caption()).not.toMatch(/of/i);
+  });
+
+  test('deleting the only photo closes the view and the row offers Add photo again', async () => {
+    const onDeletePhoto = vi.fn().mockResolvedValue(undefined);
+    const { refresh } = await openPager(['p-1'], 0, { onSetPhoto: vi.fn(), onDeletePhoto });
+
+    fireEvent.click(within(dialog()).getByRole('button', { name: /^delete$/i }));
+    fireEvent.click(within(dialog()).getByRole('button', { name: /delete photo/i }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    refresh([]);
+
+    expect(screen.getByText(/add photo/i)).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  test('Add in the photo view lands on the photo just taken', async () => {
+    const onSetPhoto = vi.fn().mockResolvedValue(undefined);
+    const { refresh } = await openPager(['p-1', 'p-2'], 0, { onSetPhoto, onDeletePhoto: vi.fn() });
+
+    fireEvent.change(dialog().querySelector('label.photo-lightbox-add input'), {
+      target: { files: [FILE] },
+    });
+    await waitFor(() => expect(onSetPhoto).toHaveBeenCalledWith('obs-2', null, FILE));
+
+    refresh(['p-1', 'p-2', 'photo-new']);
+
+    expect(caption()).toMatch(/3 of 3/);
+    await waitFor(() => expect(shownSrc()).toBe('blob:photo-new'));
+  });
+
+  test('closing the view while an added photo is still landing does not reopen it', async () => {
+    // The refresh arrives after the view has gone: it must not throw a
+    // full-screen photo back over the session list the surveyor moved on to.
+    let resolveSet;
+    const onSetPhoto = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          resolveSet = resolve;
+        }),
+    );
+    const { refresh } = await openPager(['p-1', 'p-2'], 0, { onSetPhoto, onDeletePhoto: vi.fn() });
+
+    fireEvent.change(dialog().querySelector('label.photo-lightbox-add input'), {
+      target: { files: [FILE] },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /close/i }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+
+    await act(async () => {
+      resolveSet();
+    });
+    refresh(['p-1', 'p-2', 'photo-new']);
+
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  test('at the photo cap the view offers no Add', async () => {
+    const ids = Array.from({ length: MAX_PHOTOS }, (_, index) => `p-${index + 1}`);
+    await openPager(ids, 0, { onSetPhoto: vi.fn(), onDeletePhoto: vi.fn() });
+
+    expect(dialog().querySelector('label.photo-lightbox-add')).toBeNull();
+    // Retake is unaffected — replacing a photo does not add one.
+    expect(dialog().querySelector('label.photo-lightbox-retake')).not.toBeNull();
+  });
+
+  test('one below the cap still offers Add', async () => {
+    const ids = Array.from({ length: MAX_PHOTOS - 1 }, (_, index) => `p-${index + 1}`);
+    await openPager(ids, 0, { onSetPhoto: vi.fn(), onDeletePhoto: vi.fn() });
+
+    expect(dialog().querySelector('label.photo-lightbox-add')).not.toBeNull();
+  });
+
+  test('a read-only row still pages, and offers neither Retake nor Add', async () => {
+    await openPager(['p-1', 'p-2'], 0);
+
+    expect(dialog().querySelector('.photo-lightbox-actions')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /next photo/i }));
+    expect(shownSrc()).toBe('blob:p-2');
+  });
+
+  test('the view keeps its photo when an earlier one leaves the record', async () => {
+    // Keyed by photo id, not by index: a refresh that drops p-1 must not slide
+    // the surveyor onto a different photo.
+    const { refresh } = await openPager(['p-1', 'p-2', 'p-3'], 2);
+
+    refresh(['p-2', 'p-3']);
+
+    expect(shownSrc()).toBe('blob:p-3');
+    expect(caption()).toMatch(/2 of 2/);
   });
 });
 
