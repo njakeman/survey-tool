@@ -5,6 +5,7 @@ import { useHeading } from './hooks/useHeading.js';
 import { SessionBar } from './SessionBar.js';
 import { ReadingsPanel, STALE_AFTER_MS } from './ReadingsPanel.js';
 import { PhotoField } from './PhotoField.js';
+import { MAX_PHOTOS } from '../photo/dimensions.js';
 import { SaveButton } from './SaveButton.js';
 import { VoiceNoteField } from './VoiceNoteField.js';
 import { ObservationsList } from './ObservationsList.js';
@@ -88,11 +89,15 @@ export function CapturePage({
   const [exportMessage, setExportMessage] = useState('');
 
   const [note, setNote] = useState('');
-  // The revisit pairing rides the composed photo itself (photo.referencePhoto),
-  // not a sibling ref — replacing the photo replaces the pairing by
-  // construction, so a stale pairing can't survive a new pick or a station
-  // switch. Validated afresh against the current station at save time below.
-  const [photo, setPhoto] = useState(null);
+  // The strip being composed, not a single slot — a plain pick and a framed
+  // shot each append their own entry rather than replacing one another. The
+  // revisit pairing rides each entry itself (photo.referencePhoto), not a
+  // sibling ref, so removing or re-pairing one photo can't disturb another.
+  // Validated afresh against the current station at save time below.
+  const [photos, setPhotos] = useState([]);
+  // Keys the strip by pick, not by array index — a removal must not make
+  // React/Preact reuse another photo's DOM node (and its object URL).
+  const photoKeyRef = useRef(0);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [photoError, setPhotoError] = useState(null);
 
@@ -445,13 +450,24 @@ export function CapturePage({
     }
   }
 
-  async function handlePhotoSelect(file) {
+  // Shared by a plain pick and a framed shot — both entry points append to
+  // the strip, differing only in the pairing they carry. The length check
+  // runs before downscale is even attempted: PhotoField already disables its
+  // input at the cap, so this is the belt-and-braces backstop, and the
+  // functional setPhotos guard covers the two entry points racing each
+  // other rather than trusting the closed-over `photos` twice.
+  async function appendPhoto(file, referencePhoto) {
+    if (photos.length >= MAX_PHOTOS) return;
     setPhotoBusy(true);
     setPhotoError(null);
     try {
-      // A plain pick is never paired to a reference photo, even mid-framing
-      // — it replaces whatever was composed before, pairing included.
-      setPhoto({ ...(await downscale(file)), referencePhoto: null });
+      const downscaled = await downscale(file);
+      const key = `photo-${photoKeyRef.current++}`;
+      setPhotos((current) =>
+        current.length >= MAX_PHOTOS
+          ? current
+          : [...current, { ...downscaled, referencePhoto, key }],
+      );
     } catch (error) {
       setPhotoError(error.message || 'Could not process that photo');
     } finally {
@@ -459,9 +475,14 @@ export function CapturePage({
     }
   }
 
-  function handlePhotoClear() {
-    setPhoto(null);
-    setPhotoError(null);
+  async function handlePhotoSelect(file) {
+    // A plain pick is never paired to a reference photo, even mid-framing —
+    // it sits beside whatever's already composed, not replacing it.
+    await appendPhoto(file, null);
+  }
+
+  function handlePhotoRemove(key) {
+    setPhotos((current) => current.filter((photo) => photo.key !== key));
   }
 
   async function handleSave() {
@@ -482,15 +503,16 @@ export function CapturePage({
       const allowedReferencePhotos = new Set(
         (paired ? (currentStation.photos ?? []) : []).map((stationPhoto) => stationPhoto.filename),
       );
-      const referencePhoto =
-        photo?.referencePhoto && allowedReferencePhotos.has(photo.referencePhoto)
-          ? photo.referencePhoto
-          : null;
       const observation = await service.saveObservation({
         reading: position,
         heading,
         note,
-        photos: photo ? [{ blob: photo.blob, referencePhoto }] : [],
+        photos: photos.map((entry) => ({
+          blob: entry.blob,
+          referencePhoto: allowedReferencePhotos.has(entry.referencePhoto)
+            ? entry.referencePhoto
+            : null,
+        })),
         audio,
         feature: linkedFeature,
         pickedPoint,
@@ -514,7 +536,7 @@ export function CapturePage({
         station: paired ? { referenceObservationId: currentStation.id } : null,
       });
       setNote('');
-      setPhoto(null);
+      setPhotos([]);
       setAudio(null);
       setAudioError(null);
       // The draft died inside the save transaction; the strip follows it.
@@ -668,27 +690,16 @@ export function CapturePage({
     }
   }
 
-  // The framed shot: close the step first, then run the shared downscale
-  // path — the photo lands in the same compose state a direct pick would,
-  // with the station still armed for Save.
+  // The framed shot: close the step first, then run the shared append path
+  // — the photo lands in the strip beside anything already composed, with
+  // the station still armed for Save.
   async function handleFramedPhoto(file) {
     setFraming(false);
-    setPhotoBusy(true);
-    setPhotoError(null);
-    try {
-      // Paired to the current station's photo right here, at composition —
-      // handleSave re-validates this against the current station before
-      // save, so a later station switch degrades to unpaired rather than
-      // mis-paired.
-      setPhoto({
-        ...(await downscale(file)),
-        referencePhoto: currentStation?.photos?.[0]?.filename ?? null,
-      });
-    } catch (error) {
-      setPhotoError(error.message || 'Could not process that photo');
-    } finally {
-      setPhotoBusy(false);
-    }
+    // Paired to the current station's photo right here, at composition —
+    // handleSave re-validates this against the current station before save,
+    // so a later station switch degrades to unpaired rather than
+    // mis-paired.
+    await appendPhoto(file, currentStation?.photos?.[0]?.filename ?? null);
   }
 
   async function handleNoAccess(reason) {
@@ -1127,11 +1138,12 @@ export function CapturePage({
               </label>
               <div class="capture-actions">
                 <${PhotoField}
-                  photo=${photo}
+                  photos=${photos}
                   busy=${photoBusy}
                   error=${photoError}
+                  atCap=${photos.length >= MAX_PHOTOS}
                   onSelect=${handlePhotoSelect}
-                  onClear=${handlePhotoClear}
+                  onRemove=${handlePhotoRemove}
                 />
                 ${
                   recordAudio

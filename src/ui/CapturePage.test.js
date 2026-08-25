@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor, act, within } from '@testing-librar
 import { html } from 'htm/preact';
 import { CapturePage } from './CapturePage.js';
 import { buildZip } from '../import/fixtures/buildZip.js';
+import { MAX_PHOTOS } from '../photo/dimensions.js';
 
 const OPEN_SESSION = {
   id: 'sess-1',
@@ -390,14 +391,14 @@ describe('CapturePage — session gating (design pass 3 §5a/5b)', () => {
 });
 
 describe('CapturePage — saving an observation', () => {
-  async function renderReady(serviceOverrides, { recordAudio } = {}) {
+  async function renderReady(serviceOverrides, { recordAudio, downscale = vi.fn() } = {}) {
     const service = createFakeService({ openSession: OPEN_SESSION, ...serviceOverrides });
     const { sensors, pushPosition, pushHeading, positionStop, headingStop } = createFakeSensors();
     render(
       html`<${CapturePage}
         service=${service}
         sensors=${sensors}
-        downscale=${vi.fn()}
+        downscale=${downscale}
         recordAudio=${recordAudio}
       />`,
     );
@@ -540,6 +541,158 @@ describe('CapturePage — saving an observation', () => {
     fireEvent.change(document.querySelector('input[type="file"]'), { target: { files: [file] } });
 
     await screen.findByText(/could not decode/);
+  });
+
+  test('picking two photos in a row composes both, in pick order', async () => {
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:fake');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const blobA = new Blob(['a'], { type: 'image/jpeg' });
+    const blobB = new Blob(['b'], { type: 'image/jpeg' });
+    const downscale = vi
+      .fn()
+      .mockResolvedValueOnce({ blob: blobA, width: 10, height: 10 })
+      .mockResolvedValueOnce({ blob: blobB, width: 10, height: 10 });
+    const { service } = await renderReady({}, { downscale });
+    const input = document.querySelector('input[type="file"]');
+
+    fireEvent.change(input, {
+      target: { files: [new File(['a'], 'a.jpg', { type: 'image/jpeg' })] },
+    });
+    await waitFor(() => expect(downscale).toHaveBeenCalledTimes(1));
+    fireEvent.change(input, {
+      target: { files: [new File(['b'], 'b.jpg', { type: 'image/jpeg' })] },
+    });
+    await waitFor(() => expect(downscale).toHaveBeenCalledTimes(2));
+
+    fireEvent.click(screen.getByRole('button', { name: /save observation/i }));
+
+    await waitFor(() =>
+      expect(service.saveObservation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          photos: [
+            { blob: blobA, referencePhoto: null },
+            { blob: blobB, referencePhoto: null },
+          ],
+        }),
+      ),
+    );
+
+    URL.createObjectURL.mockRestore();
+    URL.revokeObjectURL.mockRestore();
+  });
+
+  test('removing the first of two photos leaves the second', async () => {
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:fake');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const blobA = new Blob(['a'], { type: 'image/jpeg' });
+    const blobB = new Blob(['b'], { type: 'image/jpeg' });
+    const downscale = vi
+      .fn()
+      .mockResolvedValueOnce({ blob: blobA, width: 10, height: 10 })
+      .mockResolvedValueOnce({ blob: blobB, width: 10, height: 10 });
+    const { service } = await renderReady({}, { downscale });
+    const input = document.querySelector('input[type="file"]');
+
+    fireEvent.change(input, {
+      target: { files: [new File(['a'], 'a.jpg', { type: 'image/jpeg' })] },
+    });
+    await waitFor(() => expect(downscale).toHaveBeenCalledTimes(1));
+    fireEvent.change(input, {
+      target: { files: [new File(['b'], 'b.jpg', { type: 'image/jpeg' })] },
+    });
+    await waitFor(() => expect(downscale).toHaveBeenCalledTimes(2));
+
+    fireEvent.click(screen.getByRole('button', { name: /remove photo 1 of 2/i }));
+
+    fireEvent.click(screen.getByRole('button', { name: /save observation/i }));
+
+    await waitFor(() =>
+      expect(service.saveObservation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          photos: [{ blob: blobB, referencePhoto: null }],
+        }),
+      ),
+    );
+
+    URL.createObjectURL.mockRestore();
+    URL.revokeObjectURL.mockRestore();
+  });
+
+  test('a successful save empties the photo strip', async () => {
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:fake');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const downscale = vi
+      .fn()
+      .mockResolvedValue({ blob: new Blob(['x'], { type: 'image/jpeg' }), width: 10, height: 10 });
+    await renderReady({}, { downscale });
+    const input = document.querySelector('input[type="file"]');
+
+    fireEvent.change(input, {
+      target: { files: [new File(['x'], 'x.jpg', { type: 'image/jpeg' })] },
+    });
+    await screen.findByRole('img');
+
+    fireEvent.click(screen.getByRole('button', { name: /save observation/i }));
+
+    await waitFor(() => expect(screen.queryByRole('img')).toBeNull());
+
+    URL.createObjectURL.mockRestore();
+    URL.revokeObjectURL.mockRestore();
+  });
+
+  test('a failed save retains the photo strip', async () => {
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:fake');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const downscale = vi
+      .fn()
+      .mockResolvedValue({ blob: new Blob(['x'], { type: 'image/jpeg' }), width: 10, height: 10 });
+    const { service } = await renderReady({}, { downscale });
+    service.saveObservation.mockRejectedValue(new Error('disk full'));
+    const input = document.querySelector('input[type="file"]');
+
+    fireEvent.change(input, {
+      target: { files: [new File(['x'], 'x.jpg', { type: 'image/jpeg' })] },
+    });
+    await screen.findByRole('img');
+
+    fireEvent.click(screen.getByRole('button', { name: /save observation/i }));
+
+    await screen.findByText(/disk full/);
+    expect(screen.getByRole('img')).toBeInTheDocument();
+
+    URL.createObjectURL.mockRestore();
+    URL.revokeObjectURL.mockRestore();
+  });
+
+  test('at the cap the photo input is disabled and a further pick never calls downscale', async () => {
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:fake');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const downscale = vi.fn().mockImplementation(async () => ({
+      blob: new Blob(['x'], { type: 'image/jpeg' }),
+      width: 10,
+      height: 10,
+    }));
+    await renderReady({}, { downscale });
+    const input = document.querySelector('input[type="file"]');
+
+    for (let i = 0; i < MAX_PHOTOS; i += 1) {
+      fireEvent.change(input, {
+        target: { files: [new File([String(i)], `${i}.jpg`, { type: 'image/jpeg' })] },
+      });
+      await waitFor(() => expect(downscale).toHaveBeenCalledTimes(i + 1));
+    }
+
+    await waitFor(() => expect(input).toBeDisabled());
+    await screen.findByText(/10 photos/);
+
+    fireEvent.change(input, {
+      target: { files: [new File(['eleven'], 'eleven.jpg', { type: 'image/jpeg' })] },
+    });
+
+    expect(downscale).toHaveBeenCalledTimes(MAX_PHOTOS);
+
+    URL.createObjectURL.mockRestore();
+    URL.revokeObjectURL.mockRestore();
   });
 });
 
@@ -2000,13 +2153,15 @@ describe('CapturePage — revisit', () => {
     );
   });
 
-  test('picking a new photo after framing drops the stale pairing', async () => {
-    // A plain pick replaces whatever was composed, pairing included —
-    // otherwise it ships an unframed shot paired to the reference photo the
-    // surveyor was framing a moment ago.
+  test('a plain pick after framing sits beside the framed shot, not paired', async () => {
+    // A plain pick is never paired, even mid-framing — it appends beside
+    // whatever's already composed rather than replacing it.
     const service = revisitService();
     const { sensors, pushPosition } = createFakeSensors();
-    const downscale = vi.fn().mockResolvedValue({ blob: new Blob(['x'], { type: 'image/jpeg' }) });
+    const downscale = vi
+      .fn()
+      .mockResolvedValueOnce({ blob: new Blob([new Uint8Array([1])], { type: 'image/jpeg' }) })
+      .mockResolvedValueOnce({ blob: new Blob([new Uint8Array([2])], { type: 'image/jpeg' }) });
     renderPage({ service, sensors, downscale });
     pushPosition(POSITION);
     await screen.findByText('Station 1 of 2');
@@ -2022,7 +2177,8 @@ describe('CapturePage — revisit', () => {
       expect(screen.queryByRole('dialog', { name: /frame the photo/i })).toBeNull(),
     );
 
-    // Replace it via the plain Photo input, still visible below.
+    // Added via the plain Photo input, still visible below — beside the
+    // framed shot, not in place of it.
     const picked = new File([new Uint8Array([2])], 'picked.jpg', { type: 'image/jpeg' });
     fireEvent.change(document.querySelector('input[type="file"]'), {
       target: { files: [picked] },
@@ -2034,7 +2190,52 @@ describe('CapturePage — revisit', () => {
     await waitFor(() =>
       expect(service.saveObservation).toHaveBeenCalledWith(
         expect.objectContaining({
-          photos: [expect.objectContaining({ referencePhoto: null })],
+          photos: [
+            expect.objectContaining({ referencePhoto: 'ref-1.jpg' }),
+            expect.objectContaining({ referencePhoto: null }),
+          ],
+        }),
+      ),
+    );
+  });
+
+  test('a plain pick followed by a framed shot puts the pairing second', async () => {
+    const service = revisitService();
+    const { sensors, pushPosition } = createFakeSensors();
+    const downscale = vi
+      .fn()
+      .mockResolvedValueOnce({ blob: new Blob([new Uint8Array([2])], { type: 'image/jpeg' }) })
+      .mockResolvedValueOnce({ blob: new Blob([new Uint8Array([1])], { type: 'image/jpeg' }) });
+    renderPage({ service, sensors, downscale });
+    pushPosition(POSITION);
+    await screen.findByText('Station 1 of 2');
+
+    const picked = new File([new Uint8Array([2])], 'picked.jpg', { type: 'image/jpeg' });
+    fireEvent.change(document.querySelector('input[type="file"]'), {
+      target: { files: [picked] },
+    });
+    await waitFor(() => expect(downscale).toHaveBeenCalledWith(picked));
+
+    fireEvent.click(screen.getByRole('button', { name: /frame the photo/i }));
+    await screen.findByRole('dialog', { name: /frame the photo/i });
+    const framed = new File([new Uint8Array([1])], 'framed.jpg', { type: 'image/jpeg' });
+    fireEvent.change(document.querySelector('.framing-screen input[type="file"]'), {
+      target: { files: [framed] },
+    });
+    await waitFor(() => expect(downscale).toHaveBeenCalledWith(framed));
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: /frame the photo/i })).toBeNull(),
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /save observation/i }));
+
+    await waitFor(() =>
+      expect(service.saveObservation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          photos: [
+            expect.objectContaining({ referencePhoto: null }),
+            expect.objectContaining({ referencePhoto: 'ref-1.jpg' }),
+          ],
         }),
       ),
     );
