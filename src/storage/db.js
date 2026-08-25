@@ -75,6 +75,20 @@ export function openDatabase(name = DB_NAME) {
         // transaction itself so no record ever exists in both shapes; the
         // photo records are untouched — only the pointer changes shape.
         // Cursor, not getAll: a long-lived device may hold thousands.
+        //
+        // A photoless row's referencePhoto is dropped: with no photo slot to
+        // hang it on there is nowhere for it to live, and real devices do
+        // hold such rows — pre-branch captureService stamped referencePhoto
+        // whether or not the surveyor took a photo. Only a convenience
+        // filename is lost; referenceObservationId, the key the longitudinal
+        // join actually runs on, rides through untouched.
+        //
+        // Every migrated record still satisfies the domain: v7 already
+        // refused a referencePhoto without a referenceObservationId, so a
+        // migrated photos[] entry can only name a reference photo on a
+        // record that also names its station — exactly what createObservation
+        // demands of photos[i].referencePhoto today.
+        //
         // idb calls this upgrade callback as a bare statement — it never
         // awaits or catches whatever this chain returns, and `openDB`
         // settles from the native open request instead. Without a terminal
@@ -98,7 +112,13 @@ export function openDatabase(name = DB_NAME) {
           })
           .catch((error) => {
             console.error('DB v8 upgrade failed — rolling back', error);
-            transaction.abort();
+            try {
+              transaction.abort();
+            } catch {
+              // Already finished (auto-committed, or aborted by the failure
+              // itself) — there is nothing left to roll back, and throwing
+              // here would replace the real error with a bookkeeping one.
+            }
             // idb caches its own `transaction.done` promise the moment it
             // wraps this transaction to hand it to us — abort() rejects
             // that promise too, and idb never consumes it itself. Left

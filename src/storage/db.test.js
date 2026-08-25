@@ -218,6 +218,16 @@ describe('openDatabase', () => {
       photoId: null,
       referencePhoto: null,
     });
+    // The photoless-but-paired row real devices hold: pre-branch
+    // captureService stamped referencePhoto whether or not a photo was
+    // taken. The convenience filename goes; the join key stays.
+    await v7.put('observations', {
+      id: 'obs-4',
+      sessionId: 's',
+      photoId: null,
+      referencePhoto: 'ref.jpg',
+      referenceObservationId: 'r1',
+    });
     await v7.put('photos', {
       id: 'obs-1',
       arrayBuffer: new ArrayBuffer(4),
@@ -240,6 +250,13 @@ describe('openDatabase', () => {
     expect((await db.get('observations', 'obs-2')).referenceObservationId).toBe('r1');
     expect((await db.get('observations', 'obs-3')).photos).toEqual([]);
     expect(await db.get('observations', 'obs-3')).not.toHaveProperty('photoId');
+    // A referencePhoto with no photo to hang it on is dropped — there is no
+    // slot left to carry it — but referenceObservationId, the key the
+    // longitudinal join actually runs on, survives untouched.
+    const obs4 = await db.get('observations', 'obs-4');
+    expect(obs4.photos).toEqual([]);
+    expect(obs4.referenceObservationId).toBe('r1');
+    expect(obs4).not.toHaveProperty('referencePhoto');
     expect((await db.get('photos', 'obs-1')).arrayBuffer.byteLength).toBe(4);
     db.close();
   });
