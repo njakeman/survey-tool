@@ -35,7 +35,18 @@ function observationToFeature(obs, session, appVersion, gridRef, audioFilename) 
       heading_deg: obs.headingDeg,
       heading_accuracy_deg: obs.headingAccuracyDeg,
       note: obs.note,
-      photo: obs.photoId ? `${obs.photoId}.jpg` : null,
+      // Every photo, in capture order, each with the reference photo it
+      // re-framed (revisit) or null. Always an array — the column-set rule.
+      // `?? []` because records stored before photos[] existed have no key
+      // (the DB v8 upgrade rewrites them, but be honest anyway). Adding this
+      // changed every export's bytes once (2026-08-25).
+      photos: (obs.photos ?? []).map((entry) => ({
+        photo: `${entry.id}.jpg`,
+        ref_photo: entry.referencePhoto ?? null,
+      })),
+      // The first photo, kept so consumers and builds that predate photos[]
+      // still read one filename per row. Null where there are none.
+      photo: obs.photos?.[0] ? `${obs.photos[0].id}.jpg` : null,
       // The voice note's filename inside the zip. Injected (like gridRef)
       // because the extension depends on the recording's contentType, which
       // lives with the bytes in the audio store, not on the observation.
@@ -74,14 +85,14 @@ function observationToFeature(obs, session, appVersion, gridRef, audioFilename) 
       // the export and be read back on import. `?? null` — the feature-link
       // precedent; adding it changed every export's bytes once (2026-08-24).
       trace_gaps: obs.traceGaps ?? null,
-      // The revisit pairing: the reference station this observation revisits
-      // and that station's photo filename inside the reference zip. Emitted
-      // on every row (`?? null`, the feature-link precedent) — which changed
-      // the exported bytes of existing sessions once, free while nothing
-      // diffs old exports against new ones. The pairing key is what makes a
-      // longitudinal record joinable; it must never drop.
+      // The revisit pairing: the reference station this observation revisits,
+      // and the first photo's pairing; the per-photo pairings ride `photos`.
+      // Emitted on every row (`?? null`, the feature-link precedent) — which
+      // changed the exported bytes of existing sessions once, free while
+      // nothing diffs old exports against new ones. The pairing key is what
+      // makes a longitudinal record joinable; it must never drop.
       ref_obs_id: obs.referenceObservationId ?? null,
-      ref_photo: obs.referencePhoto ?? null,
+      ref_photo: obs.photos?.[0]?.referencePhoto ?? null,
       session_name: session.name,
       app_version: appVersion,
     },

@@ -50,7 +50,7 @@ describe('sessionToFeatureCollection', () => {
       gpsAccuracyM: 8.2,
       headingDeg: 271.5,
       note: 'gate post',
-      photoId: 'obs-1',
+      photos: [{ id: 'obs-1' }],
     });
 
     const fc = sessionToFeatureCollection(session, [obs], { appVersion: '0.1.0' });
@@ -71,6 +71,7 @@ describe('sessionToFeatureCollection', () => {
           heading_deg: 271.5,
           heading_accuracy_deg: null,
           note: 'gate post',
+          photos: [{ photo: 'obs-1.jpg', ref_photo: null }],
           photo: 'obs-1.jpg',
           audio: null,
           audio_duration_ms: null,
@@ -239,7 +240,6 @@ describe('sessionToFeatureCollection', () => {
       headingDeg: null,
       headingAccuracyDeg: null,
       note: '',
-      photoId: null,
     };
 
     const { properties } = sessionToFeatureCollection(session, [legacy], { appVersion: '0.1.0' })
@@ -300,6 +300,40 @@ describe('sessionToFeatureCollection', () => {
     });
     const fc = sessionToFeatureCollection(session, [obs], { appVersion: '0.1.0' });
     expect(fc.features[0].properties.photo).toBeNull();
+  });
+
+  test('emits photos[] on every feature, with photo/ref_photo mirroring the first entry', () => {
+    const base = {
+      sessionId: 'sess-1',
+      recordedAt: '2026-08-06T10:00:00.000Z',
+      fixAt: '2026-08-06T09:59:20.000Z',
+      lat: 51.5,
+      lon: -0.14,
+      gpsAccuracyM: 8.2,
+    };
+    const fc = sessionToFeatureCollection(
+      session,
+      [
+        createObservation({ ...base, id: 'a', photos: [] }),
+        createObservation({
+          ...base,
+          id: 'b',
+          referenceObservationId: 'ref-1',
+          photos: [{ id: 'p1', referencePhoto: 'old.jpg' }, { id: 'p2' }],
+        }),
+      ],
+      { appVersion: 'test' },
+    );
+    const [a, b] = fc.features.map((f) => f.properties);
+    expect(a.photos).toEqual([]);
+    expect(a.photo).toBeNull();
+    expect(a.ref_photo).toBeNull();
+    expect(b.photos).toEqual([
+      { photo: 'p1.jpg', ref_photo: 'old.jpg' },
+      { photo: 'p2.jpg', ref_photo: null },
+    ]);
+    expect(b.photo).toBe('p1.jpg');
+    expect(b.ref_photo).toBe('old.jpg');
   });
 
   test('orders features by recorded_at ascending regardless of input order', () => {
@@ -486,7 +520,7 @@ describe('revisit exports', () => {
       lon: -0.14,
       gpsAccuracyM: 8.2,
       referenceObservationId: 'ref-obs-4',
-      referencePhoto: 'ref-obs-4.jpg',
+      photos: [{ id: 'obs-1', referencePhoto: 'ref-obs-4.jpg' }],
     });
   }
 
@@ -574,6 +608,7 @@ describe('revisit exports', () => {
         'heading_deg',
         'heading_accuracy_deg',
         'note',
+        'photos',
         'photo',
         'audio',
         'audio_duration_ms',
