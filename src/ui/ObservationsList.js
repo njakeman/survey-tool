@@ -9,7 +9,7 @@ import {
 } from '../sensors/format.js';
 import { formatDuration } from './format.js';
 import { lineLengthM } from '../geo/lineMetrics.js';
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { ExportBadge } from './ExportBadge.js';
 import { TraceGlyph } from './traceGlyphs.js';
 import { VoiceTransport } from './VoiceTransport.js';
@@ -198,6 +198,7 @@ function SavedPhotos({ observation, gridReference, loadPhoto, onSetPhoto, onDele
   const prevIdsRef = useRef(ids); // the shape before this refresh, to place the open view
   const pendingShowLastRef = useRef(false); // an add from the view: land on what it appends
   const swipeRef = useRef(null); // where a pointer went down on the stage
+  const swipedRef = useRef(false); // the gesture just ended was a swipe, not a tap
 
   useEffect(() => {
     mountedRef.current = true;
@@ -213,7 +214,13 @@ function SavedPhotos({ observation, gridReference, loadPhoto, onSetPhoto, onDele
   // photos[] changed shape: revoke what no id points at any more, and settle
   // where an open view now sits. Keyed on the joined ids so a re-render with
   // the same photos does nothing.
-  useEffect(() => {
+  //
+  // Layout, not passive: on the render that delivers a retake, the open id is
+  // momentarily absent from photos[], so the portal renders nothing. A
+  // passive effect would let that frame reach the screen — the full-screen
+  // photo blinking out and back, dropping focus with it. Running before paint
+  // means the fallback below is chosen while the DOM is still uncommitted.
+  useLayoutEffect(() => {
     liveIdsRef.current = idsKey;
     const nextIds = idsKey === '' ? [] : idsKey.split('|');
     const live = new Set(nextIds);
@@ -296,6 +303,10 @@ function SavedPhotos({ observation, gridReference, loadPhoto, onSetPhoto, onDele
 
   function close() {
     setConfirmingDelete(false);
+    // Closing spends any add-then-show intent: a write still in flight must
+    // not throw the view back open, nor drag a reopened view onto the photo
+    // it appends.
+    pendingShowLastRef.current = false;
     setOpenId(null);
   }
 
@@ -328,6 +339,12 @@ function SavedPhotos({ observation, gridReference, loadPhoto, onSetPhoto, onDele
     swipeRef.current = { x: event.clientX, y: event.clientY };
   }
 
+  // The system took the gesture — a call, the app switcher, an edge swipe.
+  // Whatever lifts afterwards is not a page turn.
+  function handleStagePointerCancel() {
+    swipeRef.current = null;
+  }
+
   function handleStagePointerUp(event) {
     const start = swipeRef.current;
     swipeRef.current = null;
@@ -337,6 +354,13 @@ function SavedPhotos({ observation, gridReference, loadPhoto, onSetPhoto, onDele
     // Far enough, and more across than down — a vertical drag is someone
     // scrolling or steadying themselves, not turning a page.
     if (Math.abs(dx) < SWIPE_MIN_PX || Math.abs(dx) <= Math.abs(dy)) return;
+    // A finger keeps the stage's pointer stream (implicit pointer capture),
+    // but the click that follows is dispatched to the nearest common
+    // ancestor of where it went down and came up — the backdrop, whenever
+    // the swipe travels off the photo. Without this the page turn would be
+    // followed by a dismissal. Cleared by the next pointerdown anywhere in
+    // the view, so the suppression lasts one gesture and no longer.
+    swipedRef.current = true;
     show(openIndex + (dx < 0 ? 1 : -1));
   }
 
@@ -365,11 +389,21 @@ function SavedPhotos({ observation, gridReference, loadPhoto, onSetPhoto, onDele
     if (!file) return;
     // Added from inside the open view: the refresh should land on the photo
     // just taken, not leave the surveyor on the one they were looking at.
-    // The flag is set before the await, so a fast refresh can still see it.
+    // The flag must be set before the await — the parent refreshes inside
+    // its own writer, so by the time this promise settles the refresh render
+    // has already been and gone.
     if (shown) pendingShowLastRef.current = true;
     setBusy('add');
     try {
       await onSetPhoto(observation.id, null, file);
+    } catch {
+      // Nothing landed, so there is nothing to jump to — and the intent must
+      // not outlive the attempt, or some later append would drag the view
+      // onto a photo the surveyor never took. Swallowed rather than
+      // rethrown: this handler's caller is the DOM, which can only turn a
+      // rejection into an unhandled one. Reporting a failed row write to the
+      // surveyor is a gap on the parent's side, not one this catch can fill.
+      pendingShowLastRef.current = false;
     } finally {
       setBusy(null);
     }
@@ -449,9 +483,19 @@ function SavedPhotos({ observation, gridReference, loadPhoto, onSetPhoto, onDele
               class="photo-lightbox"
               role="dialog"
               aria-label="Photo"
+              onPointerDown=${() => {
+                // A fresh gesture: whatever the last one was, it is over.
+                swipedRef.current = false;
+              }}
               onClick=${(event) => {
                 // Backdrop taps close; taps on the photo itself do not, so
-                // a mis-hit while peering at the image can't dismiss it.
+                // a mis-hit while peering at the image can't dismiss it. A
+                // swipe that ended out here is a page turn that overshot,
+                // not a tap — see handleStagePointerUp.
+                if (swipedRef.current) {
+                  swipedRef.current = false;
+                  return;
+                }
                 if (event.target === event.currentTarget) close();
               }}
             >
@@ -488,6 +532,7 @@ function SavedPhotos({ observation, gridReference, loadPhoto, onSetPhoto, onDele
                 class="photo-lightbox-stage"
                 onPointerDown=${handleStagePointerDown}
                 onPointerUp=${handleStagePointerUp}
+                onPointerCancel=${handleStagePointerCancel}
               >
                 ${
                   // draggable="false": a long press that drifts is a swipe on

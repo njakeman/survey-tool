@@ -1109,6 +1109,56 @@ describe('ObservationsList — the photo view pages through the photos', () => {
     expect(shownSrc()).toBe('blob:p-2');
   });
 
+  test('a swipe that ends over the backdrop pages without closing the view', async () => {
+    // The finger keeps the stage's pointer stream (implicit capture) but the
+    // synthetic click lands on the nearest common ancestor — the backdrop.
+    // Turning a page must not also dismiss the photo.
+    await openPager(['p-1', 'p-2', 'p-3'], 0);
+
+    swipe(-70, 5);
+    fireEvent.click(dialog());
+
+    expect(screen.queryByRole('dialog')).not.toBeNull();
+    expect(shownSrc()).toBe('blob:p-2');
+  });
+
+  test('a backdrop tap after a swipe that stayed on the photo still closes', async () => {
+    // The suppression lasts one gesture, not until the next backdrop tap.
+    await openPager(['p-1', 'p-2'], 0);
+
+    swipe(-70, 5);
+    fireEvent.pointerDown(dialog(), { clientX: 10, clientY: 10 });
+    fireEvent.click(dialog());
+
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  test('a pointerup with no pointerdown before it does nothing', async () => {
+    // A finger that came down outside the stage and lifted over it: there is
+    // no start to measure from, so there is no gesture.
+    await openPager(['p-1', 'p-2'], 0);
+
+    fireEvent.pointerUp(dialog().querySelector('.photo-lightbox-stage'), {
+      clientX: 0,
+      clientY: 300,
+    });
+
+    expect(shownSrc()).toBe('blob:p-1');
+  });
+
+  test('a cancelled pointer is not a swipe', async () => {
+    // The system took the gesture (a call, the app switcher, an edge swipe);
+    // whatever lifts afterwards is not a page turn.
+    await openPager(['p-1', 'p-2'], 0);
+    const stage = dialog().querySelector('.photo-lightbox-stage');
+
+    fireEvent.pointerDown(stage, { clientX: 200, clientY: 300 });
+    fireEvent.pointerCancel(stage, { clientX: 200, clientY: 300 });
+    fireEvent.pointerUp(stage, { clientX: 120, clientY: 300 });
+
+    expect(shownSrc()).toBe('blob:p-1');
+  });
+
   test('opening a photo fetches its neighbours, not the whole strip', async () => {
     // The next tap must not wait on a read: the two adjacent photos are
     // fetched with the one being looked at, and no more.
@@ -1278,6 +1328,88 @@ describe('ObservationsList — the photo view pages through the photos', () => {
     refresh(['p-1', 'p-2', 'photo-new']);
 
     expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  test('a view closed and reopened during an add stays on the photo reopened', async () => {
+    // Closing spends the add-then-show intent. Coming back to a different
+    // photo before the write lands must not then jump to the appended one.
+    let resolveSet;
+    const onSetPhoto = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          resolveSet = resolve;
+        }),
+    );
+    const { refresh } = await openPager(['p-1', 'p-2', 'p-3'], 0, {
+      onSetPhoto,
+      onDeletePhoto: vi.fn(),
+    });
+
+    fireEvent.change(dialog().querySelector('label.photo-lightbox-add input'), {
+      target: { files: [FILE] },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /close/i }));
+    fireEvent.click(screen.getByAltText('Photo for this observation (2 of 3)'));
+    expect(shownSrc()).toBe('blob:p-2');
+
+    await act(async () => {
+      resolveSet();
+    });
+    refresh(['p-1', 'p-2', 'p-3', 'p-4']);
+
+    expect(shownSrc()).toBe('blob:p-2');
+    expect(caption()).toMatch(/2 of 4/);
+  });
+
+  test('a view closed by a delete is not reopened by an add still in flight', async () => {
+    // The other way out of the view: Delete stays live while an add is being
+    // written, and closing that way must be as final as tapping Close.
+    let resolveSet;
+    const onSetPhoto = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          resolveSet = resolve;
+        }),
+    );
+    const { refresh } = await openPager(['p-1'], 0, {
+      onSetPhoto,
+      onDeletePhoto: vi.fn().mockResolvedValue(undefined),
+    });
+
+    fireEvent.change(dialog().querySelector('label.photo-lightbox-add input'), {
+      target: { files: [FILE] },
+    });
+    fireEvent.click(within(dialog()).getByRole('button', { name: /^delete$/i }));
+    fireEvent.click(within(dialog()).getByRole('button', { name: /delete photo/i }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    // The add's own refresh lands first, before the delete's.
+    await act(async () => {
+      resolveSet();
+    });
+    refresh(['p-1', 'p-2']);
+
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  test('an add that fails leaves no intent behind for a later refresh to act on', async () => {
+    const onSetPhoto = vi.fn().mockRejectedValue(new Error('no room on the device'));
+    const { refresh } = await openPager(['p-1', 'p-2'], 0, {
+      onSetPhoto,
+      onDeletePhoto: vi.fn(),
+    });
+
+    fireEvent.change(dialog().querySelector('label.photo-lightbox-add input'), {
+      target: { files: [FILE] },
+    });
+    await waitFor(() => expect(onSetPhoto).toHaveBeenCalled());
+
+    // Some other write appends a photo later — the failed add must not make
+    // the view jump to it.
+    refresh(['p-1', 'p-2', 'p-3']);
+
+    expect(shownSrc()).toBe('blob:p-1');
+    expect(caption()).toMatch(/1 of 3/);
   });
 
   test('at the photo cap the view offers no Add', async () => {
