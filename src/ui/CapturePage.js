@@ -88,11 +88,11 @@ export function CapturePage({
   const [exportMessage, setExportMessage] = useState('');
 
   const [note, setNote] = useState('');
+  // The revisit pairing rides the composed photo itself (photo.referencePhoto),
+  // not a sibling ref — replacing the photo replaces the pairing by
+  // construction, so a stale pairing can't survive a new pick or a station
+  // switch. Validated afresh against the current station at save time below.
   const [photo, setPhoto] = useState(null);
-  // The station photo this framed shot is paired against, set by
-  // handleFramedPhoto and cleared everywhere the compose photo itself is —
-  // the pairing belongs to the photo being composed, not to the station.
-  const [framedRef, setFramedRef] = useState(null);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [photoError, setPhotoError] = useState(null);
 
@@ -449,7 +449,9 @@ export function CapturePage({
     setPhotoBusy(true);
     setPhotoError(null);
     try {
-      setPhoto(await downscale(file));
+      // A plain pick is never paired to a reference photo, even mid-framing
+      // — it replaces whatever was composed before, pairing included.
+      setPhoto({ ...(await downscale(file)), referencePhoto: null });
     } catch (error) {
       setPhotoError(error.message || 'Could not process that photo');
     } finally {
@@ -459,7 +461,6 @@ export function CapturePage({
 
   function handlePhotoClear() {
     setPhoto(null);
-    setFramedRef(null);
     setPhotoError(null);
   }
 
@@ -468,11 +469,23 @@ export function CapturePage({
     setSaveState('saving');
     setSaveError(null);
     try {
+      // Re-validate the pairing against the *current* station rather than
+      // trusting whatever the photo carries: a station switch after framing
+      // must not ship a photo mis-paired to a station it no longer names —
+      // the pairing is a claim about *this* station, not a fact recorded
+      // once and carried blindly.
+      const allowedReferencePhotos = new Set(
+        (currentStation?.photos ?? []).map((stationPhoto) => stationPhoto.filename),
+      );
+      const referencePhoto =
+        photo?.referencePhoto && allowedReferencePhotos.has(photo.referencePhoto)
+          ? photo.referencePhoto
+          : null;
       const observation = await service.saveObservation({
         reading: position,
         heading,
         note,
-        photos: photo ? [{ blob: photo.blob, referencePhoto: framedRef }] : [],
+        photos: photo ? [{ blob: photo.blob, referencePhoto }] : [],
         audio,
         feature: linkedFeature,
         pickedPoint,
@@ -500,7 +513,6 @@ export function CapturePage({
       });
       setNote('');
       setPhoto(null);
-      setFramedRef(null);
       setAudio(null);
       setAudioError(null);
       // The draft died inside the save transaction; the strip follows it.
@@ -659,8 +671,22 @@ export function CapturePage({
   // with the station still armed for Save.
   async function handleFramedPhoto(file) {
     setFraming(false);
-    setFramedRef(currentStation?.photos?.[0]?.filename ?? null);
-    await handlePhotoSelect(file);
+    setPhotoBusy(true);
+    setPhotoError(null);
+    try {
+      // Paired to the current station's photo right here, at composition —
+      // handleSave re-validates this against the current station before
+      // save, so a later station switch degrades to unpaired rather than
+      // mis-paired.
+      setPhoto({
+        ...(await downscale(file)),
+        referencePhoto: currentStation?.photos?.[0]?.filename ?? null,
+      });
+    } catch (error) {
+      setPhotoError(error.message || 'Could not process that photo');
+    } finally {
+      setPhotoBusy(false);
+    }
   }
 
   async function handleNoAccess(reason) {
