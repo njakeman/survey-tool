@@ -334,11 +334,15 @@ binding on later changes.
   rule — a read never competes with Save for the surface's accent). The bytes stay in IndexedDB
   until the tap (the SavedVoiceNote rule; memory, not politeness), then one fetch and one object
   URL serve both the inline `.observations-photo-thumb` (≤180px tall) and the full-screen view.
+  The chip trigger and the ≤180px block are both gone — superseded first by the fourth pass's
+  64px strip thumbnail, then by _Multiple photos_ (2026-08-25), below.
 - **The photo lightbox** (`.photo-lightbox`): fixed near-black scrim in every mode, the photo
   `object-fit: contain`, one full-width `.button-inverse` Close (≥44px) — no accent fill on the
   overlay, and the existing night rule already turns `.button-inverse` into an accent hairline.
   Backdrop taps close it; taps on the photo don't (a mis-hit while peering must not dismiss).
-  It is row state, not a route — there is no router, and it dies with its row.
+  It is row state, not a route — there is no router, and it dies with its row. The full-width
+  Close was replaced by the fourth pass's 44px ✕; the pager (nav buttons, multi-photo caption)
+  is _Multiple photos_ (2026-08-25), below.
 - **Photos at night are dimmed, not red-shifted** (`brightness(0.55)` on thumb and lightbox
   image): the map's grayscale+red multiply would make a photograph useless, but full brightness
   at 2am would reset the dark adaptation the mode exists to protect. Dim, don't recolour.
@@ -451,7 +455,9 @@ observation, `?? null`.
   link pushed right** (it changes the record; the chips read it). Loading keeps the chip's own
   content so the strip's width never jumps; the dashed border is the pending treatment. A
   loaded photo chip becomes the **64px square thumbnail** (`object-fit: cover`) — the 180px
-  block is gone; a saved list is an index.
+  block is gone; a saved list is an index. The single chip is superseded by the scroll-snap
+  strip of _Multiple photos_ (2026-08-25), below, though the 64px thumbnail shape carries
+  forward unchanged.
 - **The voice transport** (`src/ui/VoiceTransport.js`, 5c states 3/4 + §7b): one component for
   the compose field (with the ✕) and the saved rows (without — deleting a saved voice note is
   a different act and is not offered). 44px play/pause, sixteen **fixed-pattern** bars whose
@@ -470,7 +476,10 @@ observation, `?? null`.
   takes the remaining box in `dvh` minus insets, and one caption line — time · grid reference
   — says which record is on screen. Backdrop-tap-to-close and night's `brightness(0.55)`
   stay. The containing-block bug the handoff inferred was **not found in the code** (no
-  ancestor carries a filter/transform); the portal makes the question moot.
+  ancestor carries a filter/transform); the portal makes the question moot. The body portal,
+  the 44px ✕, backdrop-tap-to-close and the night dimming all carry forward unchanged; the
+  caption and the single-photo assumption are superseded by the pager in _Multiple photos_
+  (2026-08-25), below.
 - **Retake · Delete · Add photo** (§7e): in the full view only, and only where the parent
   passes `onSetPhoto`/`onDeletePhoto` — history passes neither, the same
   absence-is-the-flag rule as `onEditNote`. Retake is an outlined-on-dark label wrapping a
@@ -481,7 +490,11 @@ observation, `?? null`.
   light-on-dark value, used nowhere off the scrim — and `Keep it` under the finger.
   Deleting closes the view; the emptied slot offers **Add photo** as a link, not a chip
   ("an empty slot is not something to open"). A voice note is deliberately not addable after
-  the fact — recorded somewhere else, minutes later, it describes the wrong place.
+  the fact — recorded somewhere else, minutes later, it describes the wrong place. Retake,
+  Delete and the danger-on-dark commit all carry forward; deleting the _last_ photo still
+  closes the view exactly as described, but deleting one of several no longer does — see
+  _Multiple photos_ (2026-08-25), below, for what changed once there was a strip to land back
+  on.
 - **CHANGED SINCE EXPORT** — the badge's third state. A photo retake/delete/add or a note
   edit stamps `changedAt` on the observation and `changedSinceExportAt` on its session
   (one transaction, `storage/photoWrite.js` / `updateObservationNote`); the badge compares
@@ -508,7 +521,9 @@ Six reports against the deployed pass-4 build, three of them defects in it.
   refresh repoints `photoId` and the same effect that serves a retake fetches the new bytes.
   While a fetch is in flight the chip shape holds (`attachment-chip-loading`) rather than a
   broken `<img>`. Both file inputs clear their `value` (same file twice must still fire), and
-  the add path gets the retake's busy treatment ("Adding…").
+  the add path gets the retake's busy treatment ("Adding…"). `SavedPhoto` (singular) is now
+  `SavedPhotos` (the strip); the never-unmounts-across-an-add property is the one this
+  paragraph exists to state, and it still holds — see _Multiple photos_ (2026-08-25), below.
 - **Changed since export earns its highlight.** The predicate now requires the observation to
   have been _in_ the export (`isChangedSinceExport` includes `isExported` — a post-export save
   that gets edited is honestly still Not exported). The badge takes its own register:
@@ -645,3 +660,116 @@ colour tokens** (nothing to keep in lockstep across the two dark blocks):
 Skip confirms **after** the fact (a dismissible status line with Undo); no-access confirms
 before. Both per the design's reasoning: skip is cheap and reversible, no-access lands in the
 export.
+
+## Multiple photos (2026-08-25)
+
+An observation carries up to `MAX_PHOTOS` (10) photos instead of one. Three surfaces change —
+the compose strip, the saved strip, the lightbox — and none of them invent new tokens or a new
+accent use; every new control reuses the disc/link/outline vocabulary already in the sheet.
+
+- **The compose strip** (`.photo-field-strip`): thumbs wrap onto their own lines under the
+  Photo button rather than scrolling — composing is a handful of shots at most, never the ten
+  a saved row can carry, so there is no case here worth a scroller. Each 64px thumb
+  (`.photo-field-thumb`) carries its own remove control: a 44px hit area laid over the thumb
+  (`top: -8px; right: -8px`, so the touch target doesn't eat most of a 64px photo) but the
+  visible mark is a 22px `--surface` disc so it doesn't blot out the shot it removes. The ✕
+  itself is drawn, not an icon file or an inline SVG — two 11px `linear-gradient` bars crossed
+  at 45°/-45° on the disc's `::after`, `currentColor` so it inks correctly in both modes. It is
+  the same "every glyph is CSS" rule as `.glyph-camera`, extended to a case the original pass
+  never needed: a glyph with a hit area bigger than the mark itself. Once a strip exists, the
+  photo field takes the compose row's full width (`.capture-actions
+.photo-field:has(.photo-field-strip)`) rather than fighting the voice field for half of it —
+  the same move the loaded voice transport already makes.
+- **The cap line** (`.photo-field-cap`, "10 photos — the most one record holds") appears only
+  at the cap, left-aligned under the button rather than centred like the export/load hints
+  (the field stacks in a column; it isn't a row of its own). The button itself goes dashed and
+  muted at the cap (`.photo-field-button-capped`, the save-button-blocked shape) so the field
+  explains itself before the line underneath is even read, rather than presenting a plain
+  disabled control with no reason attached.
+- **The saved strip** (`.attachment-strip-photos`): a horizontally-scrolling, scroll-snapped
+  row of 64px thumbs — no chrome, no scrollbar (`scrollbar-width: none` plus the WebKit
+  pseudo-element, since `scrollbar-width` alone doesn't touch WebKit's bar), `scroll-snap-type:
+x mandatory` so a swipe settles on a whole thumb rather than half of the next one. The chip
+  is gone entirely: where the fourth pass put one loaded photo straight onto the row as a 64px
+  thumbnail, several photos now render the same way, just scrollable. More than one photo
+  takes the row's own full-width line (`.attachment-strip-photos.attachment-strip-multi`) —
+  the same "a strip worth having gets the whole width" move the loaded voice transport and the
+  compose strip both make. That selector is **compound, not descendant**: `-multi` and
+  `-photos` land on the same `<ul>` (`ObservationsList.js` sets `class="attachment-strip-photos
+${n > 1 ? 'attachment-strip-multi' : ''}"` on one element), so a descendant rule
+  (`.attachment-strip-multi .attachment-strip-photos`) would never match anything — this shipped
+  wrong once, in Task 8, and was caught in coordinator review before merge. Each thumb is
+  **viewport-lazy**: it renders a dashed, `--surface-faint` placeholder
+  (`.observations-photo-thumb-pending`) until an `IntersectionObserver` says it is within 200px
+  of the viewport, then fetches its bytes once and disconnects. An installed iOS PWA has little
+  memory headroom for decoding rows nobody is scrolled to, and a session can hold dozens of
+  photos across its rows — fetching everything at mount was never affordable, and a strip of
+  several photos on one row makes the saving larger, not smaller.
+- **The lightbox pager**: Previous/Next (`.photo-lightbox-nav`, `-prev`/`-next`) are absolute
+  against `.photo-lightbox` — the fixed, scrimmed backdrop — not against the image. The stage
+  centres a photo whose aspect ratio varies shot to shot, so anchoring the arrows to the image
+  would walk them around the screen as the surveyor pages; anchoring them to the scrim instead
+  holds them at the same left/right edge, `top: 50%` / `translateY(-50%)`, for every photo in
+  the strip. They wear Close's translucent-disc treatment (`rgba(0,0,0,.45)` fill, a hairline
+  border) rather than a new one, and `:disabled { opacity: .3 }` marks the ends — Previous dead
+  at photo 1, Next dead at the last — rather than hiding the control and having the row of
+  controls change width. The caption changed from a bare "time · grid reference" line to one
+  string built the same way, with `· i of n` appended only when there is a strip to be lost in
+  (`ids.length > 1`) — one of one says nothing worth reading. Paging also answers to a raw
+  `pointerdown`/`pointerup` swipe on the stage (`.photo-lightbox-stage`,
+  `touch-action: pan-y`): the horizontal axis is handed to the swipe handler, the vertical axis
+  stays the browser's own scroll/pinch, and a drag has to clear a minimum distance and be more
+  across than down before it counts as a page turn rather than someone scrolling or steadying a
+  thumb.
+- **The swipe-then-backdrop guard**: a swipe that starts on the photo and travels far enough
+  can end past its edge, on the backdrop — and the backdrop's own `onClick` closes the view on
+  anything that isn't a tap on the image. Without a guard, every page-turn swipe that overshot
+  the image would be immediately followed by a dismissal. A ref (`swipedRef`) is set the moment
+  a swipe's distance/direction test passes, consulted once by the very next click, and cleared
+  either by that consultation or by the next `pointerdown` anywhere in the view — so the
+  suppression lasts exactly one gesture, never longer.
+- **The `useLayoutEffect` reconcile**: when `photos[]` changes shape — a retake repoints an id,
+  a delete removes one, an add appends one — the open view has to decide, before the next
+  paint, whether it is still looking at something that exists. This runs as a layout effect,
+  not a passive one, because on the render that delivers a retake the open id is momentarily
+  absent from `photos[]`: a passive effect would let that frame reach the screen as the
+  full-screen photo blinking out and back, taking focus with it. The layout effect settles the
+  replacement id (or the neighbour, on a delete, or `null` when nothing is left) before the DOM
+  the browser paints ever shows the gap.
+- **Writers on the shown photo**: Retake and Add both ride the same file input shape as the
+  fourth pass described, but Add is not a new writer — it is the existing `onSetPhoto` called
+  with a `null` photo id in place of the one being replaced, the identical call the empty-slot
+  Add photo link already made. **Deleting the last photo still closes the view**, exactly as
+  the fourth pass described; deleting one of several instead lands the view on a neighbour —
+  the next photo where there is one, the previous where there is not — so a run of bad photos
+  can be cleared without reopening the view each time.
+- **The shared save-error line now carries row-edit failures.** Retake, Add and Delete on a
+  saved row funnel through `CapturePage`'s existing `save-error` `panel-danger role="alert"`
+  line — the one every other write failure already uses — rather than failing silently or
+  inventing a second error surface. The row's own handler still resets its local busy state on
+  failure (via a rethrow the parent's `try/catch` doesn't swallow), and the error clears at the
+  start of the next attempt, the same way `handleSave` already clears its own.
+- **Night and touch extensions**: the night list picks up `.photo-field-thumb img` alongside
+  the existing saved-thumb and lightbox-image dimming rules — a compose-time thumb dims exactly
+  like a saved one, rather than staying full-brightness until the surveyor saves. The
+  `user-select: none` list picks up `label.photo-lightbox-add`, matching Retake and every other
+  label-wrapping-a-hidden-input control already on that list — Android's long-press text
+  selection popup has no business appearing over a camera control.
+
+### What this pass did not do
+
+- **No reordering.** Photos file in the order they were taken; there is no drag-to-reorder and
+  no "make this the cover photo." Nothing in the surfaced field reports asked for it.
+- **The framing screen (revisit mode) does not page.** It still shows the reference photo as a
+  single image with no gallery, even where a reference station carries several — this pass
+  touched capture and the saved view, not the revisit framing skeleton.
+- **Off-screen strip rows keep their `IntersectionObserver` running and their object URLs
+  live.** A thumb that scrolls out of view is neither unobserved nor revoked; only the row's own
+  unmount, or the id leaving `photos[]`, frees it. A long session's worth of scrolled-past rows
+  each holding a handful of live object URLs was not measured against the memory ceiling that
+  motivated the viewport-lazy fetch in the first place.
+- **Paging carries no live region.** Next/Previous update the caption and the image, but a
+  screen-reader user gets no announcement that the page turned — nothing reads "2 of 5" aloud
+  on its own. This is a design call left open, not an oversight fixed elsewhere: the caption is
+  visually present and the buttons are labelled, but nothing currently pushes the page change
+  itself to assistive technology.
