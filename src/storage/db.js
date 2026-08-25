@@ -1,7 +1,7 @@
 import { openDB } from 'idb';
 
 export const DB_NAME = 'survey-tool';
-export const DB_VERSION = 7;
+export const DB_VERSION = 8;
 
 // `name` is overridable so tests can open an isolated database per test
 // instead of sharing state through the default name.
@@ -11,7 +11,7 @@ export const DB_VERSION = 7;
 // stores without its existing records being touched.
 export function openDatabase(name = DB_NAME) {
   return openDB(name, DB_VERSION, {
-    upgrade(db, oldVersion) {
+    upgrade(db, oldVersion, _newVersion, transaction) {
       if (oldVersion < 1) {
         db.createObjectStore('sessions', { keyPath: 'id' });
 
@@ -68,6 +68,21 @@ export function openDatabase(name = DB_NAME) {
         // derived from observations (domain/revisit.js), never stamped here.
         db.createObjectStore('revisitReferences', { keyPath: 'sessionId' });
         db.createObjectStore('revisitStations', { keyPath: ['sessionId', 'refObsId'] });
+      }
+      if (oldVersion < 8) {
+        // Multi-photo (2026-08-25): the single photoId/referencePhoto pair
+        // becomes photos: [{ id, referencePhoto }]. Rewritten in the upgrade
+        // transaction itself so no record ever exists in both shapes; the
+        // photo records are untouched — only the pointer changes shape.
+        // Cursor, not getAll: a long-lived device may hold thousands.
+        const store = transaction.objectStore('observations');
+        store.openCursor().then(function step(cursor) {
+          if (!cursor) return;
+          const { photoId, referencePhoto, ...rest } = cursor.value;
+          const photos = photoId ? [{ id: photoId, referencePhoto: referencePhoto ?? null }] : [];
+          cursor.update({ ...rest, photos });
+          return cursor.continue().then(step);
+        });
       }
     },
   });

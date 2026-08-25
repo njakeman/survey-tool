@@ -99,10 +99,13 @@ describe('openDatabase', () => {
 
     expect(db.version).toBe(DB_VERSION);
     expect([...db.objectStoreNames]).toContain('featureLayers');
+    // openDatabase() upgrades all the way to DB_VERSION, so the v8 branch
+    // folds this photoId-less observation's (absent) photo into photos: [].
     expect(await db.get('observations', 'obs-1')).toEqual({
       id: 'obs-1',
       sessionId: 'sess-1',
       note: 'gate post',
+      photos: [],
     });
     expect((await db.get('photos', 'obs-1')).arrayBuffer.byteLength).toBe(4);
     expect((await db.get('basemap', 'north-wiltshire')).arrayBuffer.byteLength).toBe(8);
@@ -175,6 +178,69 @@ describe('openDatabase', () => {
       sessionId: 'sess-1',
       mode: 'path',
     });
+    db.close();
+  });
+
+  test('upgrades a v7 database to v8, folding photoId/referencePhoto into photos[]', async () => {
+    const v7 = await openDB('db-test-upgrade-v8', 7, {
+      upgrade(db) {
+        db.createObjectStore('sessions', { keyPath: 'id' });
+        const observations = db.createObjectStore('observations', { keyPath: 'id' });
+        observations.createIndex('by-session', 'sessionId');
+        db.createObjectStore('photos', { keyPath: 'id' });
+        db.createObjectStore('basemap', { keyPath: 'id' });
+        db.createObjectStore('settings', { keyPath: 'key' });
+        db.createObjectStore('featureLayers', { keyPath: 'id' });
+        db.createObjectStore('audio', { keyPath: 'id' });
+        db.createObjectStore('traceDrafts', { keyPath: 'id' });
+        db.createObjectStore('traceVertices', { keyPath: ['draftId', 'seq'] });
+        db.createObjectStore('revisitReferences', { keyPath: 'sessionId' });
+        db.createObjectStore('revisitStations', { keyPath: ['sessionId', 'refObsId'] });
+      },
+    });
+    await v7.put('observations', {
+      id: 'obs-1',
+      sessionId: 's',
+      photoId: 'obs-1',
+      referencePhoto: null,
+      note: 'a',
+    });
+    await v7.put('observations', {
+      id: 'obs-2',
+      sessionId: 's',
+      photoId: 'p9',
+      referencePhoto: 'ref.jpg',
+      referenceObservationId: 'r1',
+    });
+    await v7.put('observations', {
+      id: 'obs-3',
+      sessionId: 's',
+      photoId: null,
+      referencePhoto: null,
+    });
+    await v7.put('photos', {
+      id: 'obs-1',
+      arrayBuffer: new ArrayBuffer(4),
+      contentType: 'image/jpeg',
+    });
+    v7.close();
+
+    const db = await openDatabase('db-test-upgrade-v8');
+
+    expect(db.version).toBe(DB_VERSION);
+    expect(await db.get('observations', 'obs-1')).toEqual({
+      id: 'obs-1',
+      sessionId: 's',
+      note: 'a',
+      photos: [{ id: 'obs-1', referencePhoto: null }],
+    });
+    expect((await db.get('observations', 'obs-2')).photos).toEqual([
+      { id: 'p9', referencePhoto: 'ref.jpg' },
+    ]);
+    expect((await db.get('observations', 'obs-2')).referenceObservationId).toBe('r1');
+    expect((await db.get('observations', 'obs-3')).photos).toEqual([]);
+    expect(await db.get('observations', 'obs-3')).not.toHaveProperty('photoId');
+    expect((await db.get('photos', 'obs-1')).arrayBuffer.byteLength).toBe(4);
     db.close();
   });
 });
