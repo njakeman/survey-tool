@@ -216,10 +216,12 @@ function SavedPhotos({ observation, gridReference, loadPhoto, onSetPhoto, onDele
   // the same photos does nothing.
   //
   // Layout, not passive: on the render that delivers a retake, the open id is
-  // momentarily absent from photos[], so the portal renders nothing. A
-  // passive effect would let that frame reach the screen — the full-screen
-  // photo blinking out and back, dropping focus with it. Running before paint
-  // means the fallback below is chosen while the DOM is still uncommitted.
+  // momentarily absent from photos[], so the view has no photo to show. The
+  // overlay itself does not go anywhere — it is mounted on `openId != null`,
+  // never on the photo, so the portal survives the gap and the stand-in
+  // covers it. Running before paint is what keeps that gap off the screen:
+  // the replacement id is settled while the DOM is still uncommitted, so the
+  // browser paints the new photo rather than a frame of "Loading…".
   useLayoutEffect(() => {
     liveIdsRef.current = idsKey;
     const nextIds = idsKey === '' ? [] : idsKey.split('|');
@@ -415,6 +417,10 @@ function SavedPhotos({ observation, gridReference, loadPhoto, onSetPhoto, onDele
   }
 
   async function handleDelete() {
+    // No photo under the view (a refresh landed mid-edit and the reconcile
+    // has not settled the replacement id yet): there is nothing to delete,
+    // and guessing at one would take the wrong photo.
+    if (!shown) return;
     try {
       await onDeletePhoto(observation.id, shown.id);
     } catch {
@@ -458,10 +464,12 @@ function SavedPhotos({ observation, gridReference, loadPhoto, onSetPhoto, onDele
 
   // One string, not three interpolations — htm drops the whitespace around a
   // line break between expressions. " · i of n" only where there is a strip
-  // to be lost in: one of one says nothing.
+  // to be lost in: one of one says nothing. And only while the view is
+  // actually on a photo — mid-retake there is no i to state, and "0 of 3"
+  // would be worse than the plain caption.
   const caption =
     [formatTime(observation.fixAt), gridReference].filter(Boolean).join(' · ') +
-    (ids.length > 1 ? ` · ${openIndex + 1} of ${ids.length}` : '');
+    (ids.length > 1 && openIndex >= 0 ? ` · ${openIndex + 1} of ${ids.length}` : '');
   const shownUrl = shown ? urls[shown.id] : null;
 
   return html`
@@ -486,10 +494,14 @@ function SavedPhotos({ observation, gridReference, loadPhoto, onSetPhoto, onDele
       })}
     </ul>
     ${
-      // Open on the photo, not on its bytes: a retake repoints the id under
-      // the view, and closing it there would drop the surveyor back on the
-      // strip mid-judgement. The image appears when the new bytes land.
-      shown
+      // Mounted on "a view is open", not on the photo it is showing. A retake
+      // repoints the id under the view, so for one render there is no photo
+      // at this index at all — gating on that would unmount the portal
+      // (BodyPortal's cleanup runs synchronously in the diff) and remount it
+      // through a passive effect a frame later, blinking the full-screen
+      // photo out and dropping focus with it. The stage's stand-in covers
+      // the gap instead, and the reconcile settles the new id before paint.
+      openId != null
         ? html`<${BodyPortal}>
             <div
               class="photo-lightbox"

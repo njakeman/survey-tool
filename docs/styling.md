@@ -728,14 +728,23 @@ ${n > 1 ? 'attachment-strip-multi' : ''}"` on one element), so a descendant rule
   a swipe's distance/direction test passes, consulted once by the very next click, and cleared
   either by that consultation or by the next `pointerdown` anywhere in the view — so the
   suppression lasts exactly one gesture, never longer.
+- **The overlay is mounted on "a view is open", not on the photo.** The portal's condition is
+  `openId != null`, never "the photo that id names still exists" — because on the render that
+  delivers a retake it briefly does not. Gating on the photo would tear the overlay off the
+  body mid-edit: `BodyPortal`'s cleanup runs synchronously inside the diff, while its remount
+  goes through a **passive** effect flushed after paint, so the surveyor would get at least one
+  frame with the full-screen photo gone and the focus inside it dropped. Nothing else covers
+  that gap; keeping it mounted is what makes the retake seamless. The stage's stand-in
+  (`.photo-lightbox-loading`) already handles "open, but no bytes to show", so the momentary
+  no-photo state has a treatment, and the caption drops its ` · i of n` while there is no `i`
+  to state rather than reading "0 of 3".
 - **The `useLayoutEffect` reconcile**: when `photos[]` changes shape — a retake repoints an id,
   a delete removes one, an add appends one — the open view has to decide, before the next
-  paint, whether it is still looking at something that exists. This runs as a layout effect,
-  not a passive one, because on the render that delivers a retake the open id is momentarily
-  absent from `photos[]`: a passive effect would let that frame reach the screen as the
-  full-screen photo blinking out and back, taking focus with it. The layout effect settles the
-  replacement id (or the neighbour, on a delete, or `null` when nothing is left) before the DOM
-  the browser paints ever shows the gap.
+  paint, which photo it is now on. This runs as a layout effect, not a passive one, so the
+  replacement id (or the neighbour, on a delete, or `null` when nothing is left) is settled
+  while the DOM is still uncommitted: the browser paints the new photo, not a frame of the
+  stand-in. It is the *content* the layout timing protects — the overlay itself never goes
+  anywhere, per the bullet above.
 - **Writers on the shown photo**: Retake and Add both ride the same file input shape as the
   fourth pass described, but Add is not a new writer — it is the existing `onSetPhoto` called
   with a `null` photo id in place of the one being replaced, the identical call the empty-slot

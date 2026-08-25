@@ -1469,6 +1469,36 @@ describe('ObservationsList — the photo view pages through the photos', () => {
     expect(shownSrc()).toBe('blob:p-2');
   });
 
+  test('a retake never unmounts the view — the same overlay node stays on the body', async () => {
+    // The refresh that delivers a retake arrives with the open id already
+    // gone from photos[]. If the portal were gated on the photo rather than
+    // on "a view is open", that render would tear the overlay off the body
+    // and the reconcile would build a fresh one — at least one frame of
+    // full-screen photo gone, with the focus inside it.
+    const { refresh } = await openPager(['p-1', 'p-2', 'p-3'], 1, {
+      onSetPhoto: vi.fn(),
+      onDeletePhoto: vi.fn(),
+    });
+    const overlay = document.body.querySelector('.photo-lightbox');
+    expect(overlay).not.toBeNull();
+
+    refresh(['p-1', 'photo-x', 'p-3']);
+    await act(() => {});
+
+    expect(document.body.querySelector('.photo-lightbox')).toBe(overlay);
+    await waitFor(() => expect(shownSrc()).toBe('blob:photo-x'));
+  });
+
+  test('a photo leaving the record elsewhere leaves the open view on the body untouched', async () => {
+    const { refresh } = await openPager(['p-1', 'p-2', 'p-3'], 2);
+    const overlay = document.body.querySelector('.photo-lightbox');
+
+    refresh(['p-2', 'p-3']);
+    await act(() => {});
+
+    expect(document.body.querySelector('.photo-lightbox')).toBe(overlay);
+  });
+
   test('the view keeps its photo when an earlier one leaves the record', async () => {
     // Keyed by photo id, not by index: a refresh that drops p-1 must not slide
     // the surveyor onto a different photo.
