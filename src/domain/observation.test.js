@@ -27,7 +27,7 @@ describe('createObservation', () => {
       headingDeg: null,
       headingAccuracyDeg: null,
       note: '',
-      photoId: null,
+      photos: [],
       audioId: null,
       featureLayerId: null,
       featureId: null,
@@ -38,7 +38,6 @@ describe('createObservation', () => {
       audioDurationMs: null,
       changedAt: null,
       referenceObservationId: null,
-      referencePhoto: null,
       synced: false,
       syncedAt: null,
     });
@@ -49,24 +48,27 @@ describe('createObservation', () => {
       const obs = createObservation({
         ...baseFields,
         referenceObservationId: 'ref-obs-4',
-        referencePhoto: 'ref-obs-4.jpg',
+        photos: [{ id: 'photo-1', referencePhoto: 'ref-obs-4.jpg' }],
       });
 
       expect(obs.referenceObservationId).toBe('ref-obs-4');
-      expect(obs.referencePhoto).toBe('ref-obs-4.jpg');
+      expect(obs.photos[0].referencePhoto).toBe('ref-obs-4.jpg');
     });
 
     test('a station with no photo still pairs — the id alone is a legal link', () => {
       const obs = createObservation({ ...baseFields, referenceObservationId: 'ref-obs-4' });
 
       expect(obs.referenceObservationId).toBe('ref-obs-4');
-      expect(obs.referencePhoto).toBeNull();
+      expect(obs.photos).toEqual([]);
     });
 
     test('rejects a reference photo without its station — a filename joins to nothing', () => {
-      expect(() => createObservation({ ...baseFields, referencePhoto: 'ref-obs-4.jpg' })).toThrow(
-        /referencePhoto/,
-      );
+      expect(() =>
+        createObservation({
+          ...baseFields,
+          photos: [{ id: 'photo-1', referencePhoto: 'ref-obs-4.jpg' }],
+        }),
+      ).toThrow(/referencePhoto/);
     });
   });
 
@@ -149,12 +151,12 @@ describe('createObservation', () => {
       headingDeg: 271.5,
       headingAccuracyDeg: 5,
       note: 'gate post, leaning',
-      photoId: 'photo-1',
+      photos: [{ id: 'photo-1' }],
     });
     expect(obs.altitudeM).toBe(45.2);
     expect(obs.headingDeg).toBe(271.5);
     expect(obs.note).toBe('gate post, leaning');
-    expect(obs.photoId).toBe('photo-1');
+    expect(obs.photos).toEqual([{ id: 'photo-1', referencePhoto: null }]);
   });
 
   test.each([
@@ -387,5 +389,48 @@ describe('createObservation', () => {
     expect(() => createObservation({ ...baseFields, gpsAccuracyM: value })).toThrow(
       /gpsAccuracyM/i,
     );
+  });
+
+  describe('photos', () => {
+    test('defaults to an empty array and carries no photoId', () => {
+      const obs = createObservation(baseFields);
+      expect(obs.photos).toEqual([]);
+      expect(obs).not.toHaveProperty('photoId');
+      expect(obs).not.toHaveProperty('referencePhoto');
+    });
+
+    test('keeps capture order and normalises a bare entry to referencePhoto: null', () => {
+      const obs = createObservation({
+        ...baseFields,
+        photos: [{ id: 'p2' }, { id: 'p1', referencePhoto: null }],
+      });
+      expect(obs.photos).toEqual([
+        { id: 'p2', referencePhoto: null },
+        { id: 'p1', referencePhoto: null },
+      ]);
+    });
+
+    test('rejects a non-array, an entry without an id, and a duplicate id', () => {
+      expect(() => createObservation({ ...baseFields, photos: 'p1' })).toThrow(
+        /photos must be an array/,
+      );
+      expect(() => createObservation({ ...baseFields, photos: [{}] })).toThrow(/photos\[0\]/);
+      expect(() =>
+        createObservation({ ...baseFields, photos: [{ id: 'p1' }, { id: 'p1' }] }),
+      ).toThrow(/duplicate/);
+    });
+
+    test('a referencePhoto on any entry requires referenceObservationId', () => {
+      expect(() =>
+        createObservation({ ...baseFields, photos: [{ id: 'p1', referencePhoto: 'abc.jpg' }] }),
+      ).toThrow(/referencePhoto requires referenceObservationId/);
+      const obs = createObservation({
+        ...baseFields,
+        referenceObservationId: 'ref-1',
+        photos: [{ id: 'p1', referencePhoto: 'abc.jpg' }, { id: 'p2' }],
+      });
+      expect(obs.photos[0].referencePhoto).toBe('abc.jpg');
+      expect(obs.photos[1].referencePhoto).toBeNull();
+    });
   });
 });

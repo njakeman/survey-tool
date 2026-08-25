@@ -90,7 +90,11 @@ export function createObservation({
   headingDeg = null,
   headingAccuracyDeg = null,
   note = '',
-  photoId = null,
+  // Every photo attached to this observation, in capture order. Each entry
+  // is the photo record's id plus — for a revisit — the reference photo
+  // filename it re-framed. Empty when there are none. Ids are minted fresh
+  // per photo (never the observation's id) — one observation can hold many.
+  photos = [],
   audioId = null,
   // Where this observation was started from, when the surveyor tapped a
   // feature on the map rather than just standing somewhere. Optional and
@@ -126,12 +130,11 @@ export function createObservation({
   // lastExportedAt to mark records whose export is stale — see
   // isChangedSinceExport in session.js.
   changedAt = null,
-  // The revisit pairing: which reference station this observation revisits,
-  // and that station's photo filename inside the reference zip. The id is
-  // the key longitudinal comparison joins on; the filename is a convenience
-  // that survives the reference's own ids being reminted on re-export.
+  // The revisit pairing: which reference station this observation revisits.
+  // The id is the key longitudinal comparison joins on; each photo's own
+  // referencePhoto (above) is a convenience that survives the reference's
+  // own ids being reminted on re-export.
   referenceObservationId = null,
-  referencePhoto = null,
 }) {
   if (!id) throw new Error('createObservation: id is required');
   if (!sessionId) throw new Error('createObservation: sessionId is required');
@@ -213,15 +216,30 @@ export function createObservation({
   // The label is a convenience on top of the link, never the link itself.
   const linked = Boolean(featureLayerId);
 
-  // Half of both-halves: a reference photo filename without its station id
-  // joins to nothing. The id alone IS legal — a station may honestly have no
-  // photo, and the pairing is still a pairing.
-  if (referencePhoto && !referenceObservationId) {
-    throw new Error(
-      'createObservation: referencePhoto requires referenceObservationId (got ' +
-        `referencePhoto=${referencePhoto} alone)`,
-    );
+  if (!Array.isArray(photos)) {
+    throw new Error(`createObservation: photos must be an array (got ${photos})`);
   }
+  const seenPhotoIds = new Set();
+  const normalisedPhotos = photos.map((entry, index) => {
+    const id = entry?.id;
+    if (typeof id !== 'string' || id.length === 0) {
+      throw new Error(`createObservation: photos[${index}] needs a non-empty string id`);
+    }
+    if (seenPhotoIds.has(id)) {
+      throw new Error(`createObservation: duplicate photo id ${id} in photos`);
+    }
+    seenPhotoIds.add(id);
+    const referencePhoto = entry.referencePhoto ?? null;
+    // Half of both-halves: a reference photo filename without its station
+    // id joins to nothing. The id alone IS legal — a station may honestly
+    // have no photo, and the pairing is still a pairing.
+    if (referencePhoto && !referenceObservationId) {
+      throw new Error(
+        `createObservation: photos[${index}].referencePhoto requires referenceObservationId`,
+      );
+    }
+    return { id, referencePhoto };
+  });
 
   return {
     id,
@@ -236,7 +254,7 @@ export function createObservation({
     headingDeg,
     headingAccuracyDeg,
     note,
-    photoId,
+    photos: normalisedPhotos,
     audioId,
     featureLayerId,
     featureId,
@@ -247,7 +265,6 @@ export function createObservation({
     audioDurationMs,
     changedAt,
     referenceObservationId,
-    referencePhoto,
     synced: false,
     syncedAt: null,
   };
