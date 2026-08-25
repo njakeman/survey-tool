@@ -1448,6 +1448,66 @@ describe('ObservationsList — the photo view pages through the photos', () => {
   });
 });
 
+// Task 7: the history page passes loadPhoto alone — no onSetPhoto,
+// no onDeletePhoto (SessionHistoryPage.js needs no change for this; the
+// component's existing absence-is-the-flag rule already covers it). These
+// tests pin that a read-only row still gets the full strip-and-pager
+// experience, just none of the write actions.
+describe('ObservationsList — the history view pages photos read-only (task 7)', () => {
+  beforeEach(() => {
+    URL.createObjectURL = vi.fn((blob) => `blob:${blob.photoId}`);
+    URL.revokeObjectURL = vi.fn();
+    // History renders every thumb at once — paging is what this block is
+    // about, not when bytes arrive.
+    vi.stubGlobal('IntersectionObserver', undefined);
+  });
+  afterEach(() => {
+    delete URL.createObjectURL;
+    delete URL.revokeObjectURL;
+    vi.unstubAllGlobals();
+  });
+
+  const record = (id) => ({ id, contentType: 'image/jpeg', blob: { photoId: id } });
+  const historyObservation = {
+    ...OBS_WITH_PHOTO,
+    photos: ['h-1', 'h-2', 'h-3'].map((id) => ({ id, referencePhoto: null })),
+  };
+
+  test('with loadPhoto alone, three photos: the strip, the lightbox and its nav all work — no Retake/Add/Delete', async () => {
+    const loadPhoto = vi.fn(async (id) => record(id));
+    render(
+      html`<${ObservationsList} observations=${[historyObservation]} loadPhoto=${loadPhoto} />`,
+    );
+
+    const thumbs = await screen.findAllByRole('img', { name: /photo for this observation/i });
+    expect(thumbs).toHaveLength(3);
+
+    fireEvent.click(thumbs[1]);
+    const dialog = screen.getByRole('dialog', { name: /photo/i });
+    const caption = () => dialog.querySelector('.photo-lightbox-caption').textContent;
+    const shownSrc = () => dialog.querySelector('img.photo-lightbox-image')?.getAttribute('src');
+    expect(caption()).toMatch(/2 of 3/);
+    expect(shownSrc()).toBe('blob:h-2');
+
+    fireEvent.click(within(dialog).getByRole('button', { name: /next photo/i }));
+    await waitFor(() => expect(shownSrc()).toBe('blob:h-3'));
+    fireEvent.click(within(dialog).getByRole('button', { name: /previous photo/i }));
+    await waitFor(() => expect(shownSrc()).toBe('blob:h-2'));
+
+    // No writers were passed, so none of the write actions are offered.
+    expect(within(dialog).queryByText(/retake/i)).toBeNull();
+    expect(within(dialog).queryByText(/^add$/i)).toBeNull();
+    expect(within(dialog).queryByRole('button', { name: /^delete$/i })).toBeNull();
+    expect(dialog.querySelector('.photo-lightbox-actions')).toBeNull();
+  });
+
+  test('an observation with no photos and no onSetPhoto offers no Add photo link', () => {
+    render(html`<${ObservationsList} observations=${[{ ...OBS_NO_PHOTO, photos: [] }]} />`);
+
+    expect(screen.queryByText(/add photo/i)).toBeNull();
+  });
+});
+
 describe('ObservationsList — the voice chip (design pass 4 §7a/7b)', () => {
   beforeEach(() => {
     URL.createObjectURL = vi.fn(() => 'blob:audio-0');
