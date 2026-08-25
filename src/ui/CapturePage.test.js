@@ -697,6 +697,13 @@ describe('CapturePage — saving an observation', () => {
 });
 
 describe('CapturePage — undo lifecycle', () => {
+  // The saved-photo rows below take the no-observer path (see the per-test
+  // stub): happy-dom defines an IntersectionObserver that never fires, so a
+  // lazily-fetched thumb would otherwise stay pending for ever.
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   async function renderReadyWithSave() {
     const service = createFakeService({ openSession: OPEN_SESSION });
     // Mount lists an honest empty session; every read after the save below
@@ -787,6 +794,7 @@ describe('CapturePage — undo lifecycle', () => {
   });
 
   test('viewing a saved photo goes through the service — the open session offers photos too', async () => {
+    vi.stubGlobal('IntersectionObserver', undefined);
     const observation = {
       id: 'obs-1',
       sessionId: 'sess-1',
@@ -804,9 +812,6 @@ describe('CapturePage — undo lifecycle', () => {
     render(html`<${CapturePage} service=${service} sensors=${sensors} downscale=${vi.fn()} />`);
     await screen.findByText('gate post');
 
-    const [row] = screen.getAllByRole('listitem');
-    fireEvent.click(within(row).getByRole('button', { name: 'Photo' }));
-
     await waitFor(() => expect(service.getPhoto).toHaveBeenCalledWith('obs-1'));
   });
 
@@ -814,6 +819,7 @@ describe('CapturePage — undo lifecycle', () => {
     // Design pass 4 §7e: the capture page passes onSetPhoto/onDeletePhoto —
     // history does not — and the raw camera file goes through the same
     // 1600px downscale as a compose-time photo.
+    vi.stubGlobal('IntersectionObserver', undefined);
     const observation = {
       id: 'obs-1',
       sessionId: 'sess-1',
@@ -834,8 +840,6 @@ describe('CapturePage — undo lifecycle', () => {
     render(html`<${CapturePage} service=${service} sensors=${sensors} downscale=${downscale} />`);
     await screen.findByText('gate post');
 
-    const [row] = screen.getAllByRole('listitem');
-    fireEvent.click(within(row).getByRole('button', { name: 'Photo' }));
     fireEvent.click(await screen.findByRole('img', { name: /photo for this observation/i }));
 
     const dialog = screen.getByRole('dialog', { name: /photo/i });
@@ -886,6 +890,7 @@ describe('CapturePage — undo lifecycle', () => {
   });
 
   test('confirming Delete on a saved photo goes through service.deletePhoto and a refresh', async () => {
+    vi.stubGlobal('IntersectionObserver', undefined);
     const observation = {
       id: 'obs-1',
       sessionId: 'sess-1',
@@ -904,8 +909,6 @@ describe('CapturePage — undo lifecycle', () => {
     render(html`<${CapturePage} service=${service} sensors=${sensors} downscale=${vi.fn()} />`);
     await screen.findByText('gate post');
 
-    const [row] = screen.getAllByRole('listitem');
-    fireEvent.click(within(row).getByRole('button', { name: 'Photo' }));
     fireEvent.click(await screen.findByRole('img', { name: /photo for this observation/i }));
 
     const dialog = screen.getByRole('dialog', { name: /photo/i });

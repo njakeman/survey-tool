@@ -48,7 +48,7 @@ export function FramingScreen({
 
   // One lazy read of one entry, straight out of the stored zip. Revoke via
   // a ref read at unmount, not a [url]-keyed effect — a pending effect's
-  // cleanup never fires (the SavedPhoto rule).
+  // cleanup never fires (the SavedPhotos rule).
   const urlRef = useRef(null);
   useEffect(() => () => urlRef.current && URL.revokeObjectURL(urlRef.current), []);
   useEffect(() => {

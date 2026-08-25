@@ -265,10 +265,16 @@ describe('ObservationsList — viewing a photo', () => {
       return url;
     });
     URL.revokeObjectURL = vi.fn();
+    // happy-dom defines IntersectionObserver but never fires it, so a thumb
+    // left to the real one would stay pending for ever. These rows are about
+    // what happens once the bytes arrive: take the no-observer path, where
+    // the strip fetches every thumb at once.
+    vi.stubGlobal('IntersectionObserver', undefined);
   });
   afterEach(() => {
     delete URL.createObjectURL;
     delete URL.revokeObjectURL;
+    vi.unstubAllGlobals();
   });
 
   const photoRecord = { id: 'obs-2', contentType: 'image/jpeg', blob: new Blob(['x']) };
@@ -280,14 +286,13 @@ describe('ObservationsList — viewing a photo', () => {
     expect(screen.queryByRole('button', { name: /photo/i })).toBeNull();
   });
 
-  test('Show photo fetches the photo once and renders it as a thumbnail', async () => {
+  test('a visible thumb fetches the photo once and renders it', async () => {
     const loadPhoto = vi.fn().mockResolvedValue(photoRecord);
     render(html`<${ObservationsList} observations=${[OBS_WITH_PHOTO]} loadPhoto=${loadPhoto} />`);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Photo' }));
-
     const img = await screen.findByRole('img', { name: /photo for this observation/i });
     expect(loadPhoto).toHaveBeenCalledWith('obs-2');
+    expect(loadPhoto).toHaveBeenCalledTimes(1);
     expect(img).toHaveClass('observations-photo-thumb');
     expect(img).toHaveAttribute('src', savedUrls[0]);
     expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
@@ -297,16 +302,12 @@ describe('ObservationsList — viewing a photo', () => {
     const loadPhoto = vi.fn().mockResolvedValue(undefined);
     render(html`<${ObservationsList} observations=${[OBS_WITH_PHOTO]} loadPhoto=${loadPhoto} />`);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Photo' }));
-
     await waitFor(() => expect(screen.getByText(/photo could not be loaded/i)).toBeInTheDocument());
   });
 
   test('a read that rejects lands on the same inline failure', async () => {
     const loadPhoto = vi.fn().mockRejectedValue(new Error('gone'));
     render(html`<${ObservationsList} observations=${[OBS_WITH_PHOTO]} loadPhoto=${loadPhoto} />`);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Photo' }));
 
     await waitFor(() => expect(screen.getByText(/photo could not be loaded/i)).toBeInTheDocument());
   });
@@ -315,7 +316,6 @@ describe('ObservationsList — viewing a photo', () => {
     const loadPhoto = vi.fn().mockResolvedValue(photoRecord);
     render(html`<${ObservationsList} observations=${[OBS_WITH_PHOTO]} loadPhoto=${loadPhoto} />`);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Photo' }));
     fireEvent.click(await screen.findByRole('img', { name: /photo for this observation/i }));
 
     const dialog = screen.getByRole('dialog', { name: /photo/i });
@@ -339,7 +339,6 @@ describe('ObservationsList — viewing a photo', () => {
       />`,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Photo' }));
     fireEvent.click(await screen.findByRole('img', { name: /photo for this observation/i }));
 
     const dialog = screen.getByRole('dialog', { name: /photo/i });
@@ -350,7 +349,6 @@ describe('ObservationsList — viewing a photo', () => {
     const loadPhoto = vi.fn().mockResolvedValue(photoRecord);
     render(html`<${ObservationsList} observations=${[OBS_WITH_PHOTO]} loadPhoto=${loadPhoto} />`);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Photo' }));
     fireEvent.click(await screen.findByRole('img', { name: /photo for this observation/i }));
     fireEvent.click(screen.getByRole('button', { name: /close/i }));
 
@@ -362,7 +360,6 @@ describe('ObservationsList — viewing a photo', () => {
     const loadPhoto = vi.fn().mockResolvedValue(photoRecord);
     render(html`<${ObservationsList} observations=${[OBS_WITH_PHOTO]} loadPhoto=${loadPhoto} />`);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Photo' }));
     fireEvent.click(await screen.findByRole('img', { name: /photo for this observation/i }));
     fireEvent.click(screen.getByRole('dialog', { name: /photo/i }));
 
@@ -375,7 +372,6 @@ describe('ObservationsList — viewing a photo', () => {
       html`<${ObservationsList} observations=${[OBS_WITH_PHOTO]} loadPhoto=${loadPhoto} />`,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Photo' }));
     await screen.findByRole('img', { name: /photo for this observation/i });
     // Flush the url effect so its cleanup is registered before unmount —
     // Preact schedules effects asynchronously.
@@ -415,7 +411,7 @@ describe('ObservationsList — voice-note lifecycle', () => {
   };
 
   test('unmounting after a voice note is loaded revokes its object URL', async () => {
-    // The same pending-effect race SavedPhoto's test exposed: a [url]-keyed
+    // The same pending-effect race SavedPhotos' test exposed: a [url]-keyed
     // revoke effect registered after the async load may never have run by
     // unmount, and a pending effect's cleanup never fires.
     const loadAudio = vi
@@ -438,10 +434,14 @@ describe('ObservationsList — retake, delete and add photo (design pass 4 §7e)
   beforeEach(() => {
     URL.createObjectURL = vi.fn(() => 'blob:fake-0');
     URL.revokeObjectURL = vi.fn();
+    // The no-observer path: every thumb fetches at once, so these rows are
+    // about the writers, not about when the bytes arrive.
+    vi.stubGlobal('IntersectionObserver', undefined);
   });
   afterEach(() => {
     delete URL.createObjectURL;
     delete URL.revokeObjectURL;
+    vi.unstubAllGlobals();
   });
 
   const photoRecord = { id: 'obs-2', contentType: 'image/jpeg', blob: new Blob(['x']) };
@@ -457,7 +457,6 @@ describe('ObservationsList — retake, delete and add photo (design pass 4 §7e)
         onDeletePhoto=${extraProps.onDeletePhoto}
       />`,
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Photo' }));
     fireEvent.click(await screen.findByRole('img', { name: /photo for this observation/i }));
     return screen.getByRole('dialog', { name: /photo/i });
   }
@@ -481,6 +480,49 @@ describe('ObservationsList — retake, delete and add photo (design pass 4 §7e)
     await waitFor(() => expect(onSetPhoto).toHaveBeenCalledWith('obs-2', 'obs-2', FILE));
     // Retaking keeps the view open so the second attempt can be judged.
     expect(screen.getByRole('dialog', { name: /photo/i })).toBeInTheDocument();
+  });
+
+  test('the view survives the repointed id and shows the retaken photo in place', async () => {
+    // The parent refresh swaps a fresh photo id into photos[], so the shown
+    // photo is momentarily one with no bytes yet. Closing the view there
+    // would take the surveyor back to the strip mid-judgement.
+    const loadPhoto = vi.fn(async (id) => ({
+      id,
+      contentType: 'image/jpeg',
+      blob: new Blob([id]),
+    }));
+    const onSetPhoto = vi.fn().mockResolvedValue(undefined);
+    const { rerender } = render(
+      html`<${ObservationsList}
+        observations=${[OBS_WITH_PHOTO]}
+        loadPhoto=${loadPhoto}
+        onSetPhoto=${onSetPhoto}
+        onDeletePhoto=${vi.fn()}
+      />`,
+    );
+    fireEvent.click(await screen.findByRole('img', { name: /photo for this observation/i }));
+    const input = screen
+      .getByRole('dialog', { name: /photo/i })
+      .querySelector('input[capture="environment"]');
+    fireEvent.change(input, { target: { files: [FILE] } });
+    await waitFor(() => expect(onSetPhoto).toHaveBeenCalledWith('obs-2', 'obs-2', FILE));
+
+    rerender(
+      html`<${ObservationsList}
+        observations=${[{ ...OBS_WITH_PHOTO, photos: [{ id: 'photo-2', referencePhoto: null }] }]}
+        loadPhoto=${loadPhoto}
+        onSetPhoto=${onSetPhoto}
+        onDeletePhoto=${vi.fn()}
+      />`,
+    );
+
+    expect(screen.getByRole('dialog', { name: /photo/i })).toBeInTheDocument();
+    await waitFor(() => expect(loadPhoto).toHaveBeenCalledWith('photo-2'));
+    await waitFor(() =>
+      expect(
+        screen.getByRole('dialog', { name: /photo/i }).querySelector('img.photo-lightbox-image'),
+      ).not.toBeNull(),
+    );
   });
 
   test('Delete is two-step: the confirm replaces the action row, Keep it escapes', async () => {
@@ -620,7 +662,6 @@ describe('ObservationsList — retake, delete and add photo (design pass 4 §7e)
     const { rerender } = render(
       html`<${ObservationsList} observations=${[OBS_WITH_PHOTO]} loadPhoto=${loadPhoto} />`,
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Photo' }));
     await screen.findByRole('img', { name: /photo for this observation/i });
     await act(() => {});
 
@@ -632,6 +673,240 @@ describe('ObservationsList — retake, delete and add photo (design pass 4 §7e)
     );
 
     await waitFor(() => expect(loadPhoto).toHaveBeenCalledWith('photo-2'));
+  });
+});
+
+describe('ObservationsList — the saved photo strip', () => {
+  const savedUrls = [];
+  beforeEach(() => {
+    savedUrls.length = 0;
+    URL.createObjectURL = vi.fn(() => {
+      const url = `blob:strip-${savedUrls.length}`;
+      savedUrls.push(url);
+      return url;
+    });
+    URL.revokeObjectURL = vi.fn();
+  });
+  afterEach(() => {
+    delete URL.createObjectURL;
+    delete URL.revokeObjectURL;
+    vi.unstubAllGlobals();
+  });
+
+  // happy-dom ships an IntersectionObserver that never fires, so a test that
+  // relies on the default would hang on the pending box. Every test here
+  // states which path it is exercising: no observer at all (fetch every
+  // thumb at once) or this fake, whose callbacks the test fires by hand.
+  const observed = [];
+  class FakeIO {
+    constructor(callback, options) {
+      this.callback = callback;
+      this.options = options;
+      this.disconnected = false;
+    }
+    observe(element) {
+      observed.push({ callback: this.callback, element, options: this.options, observer: this });
+    }
+    unobserve() {}
+    disconnect() {
+      this.disconnected = true;
+    }
+  }
+
+  function useFakeObserver() {
+    observed.length = 0;
+    vi.stubGlobal('IntersectionObserver', FakeIO);
+  }
+
+  function useNoObserver() {
+    vi.stubGlobal('IntersectionObserver', undefined);
+  }
+
+  async function scrollIntoView(entry) {
+    await act(async () => {
+      entry.callback([{ isIntersecting: true, target: entry.element }], entry.observer);
+    });
+  }
+
+  function withPhotos(ids) {
+    return { ...OBS_WITH_PHOTO, photos: ids.map((id) => ({ id, referencePhoto: null })) };
+  }
+
+  const record = (id) => ({ id, contentType: 'image/jpeg', blob: new Blob([id]) });
+
+  test('every photo gets its own thumb, keyed and numbered in its alt text', async () => {
+    useNoObserver();
+    const loadPhoto = vi.fn(async (id) => record(id));
+    const { container } = render(
+      html`<${ObservationsList}
+        observations=${[withPhotos(['p-1', 'p-2', 'p-3'])]}
+        loadPhoto=${loadPhoto}
+      />`,
+    );
+
+    await waitFor(() =>
+      expect(container.querySelectorAll('img.observations-photo-thumb')).toHaveLength(3),
+    );
+    expect(screen.getByAltText('Photo for this observation (1 of 3)')).toBeInTheDocument();
+    expect(screen.getByAltText('Photo for this observation (2 of 3)')).toBeInTheDocument();
+    expect(screen.getByAltText('Photo for this observation (3 of 3)')).toBeInTheDocument();
+    expect(container.querySelectorAll('li.attachment-strip-photo')).toHaveLength(3);
+    expect(container.querySelector('.attachment-strip-photos')).toHaveClass(
+      'attachment-strip-multi',
+    );
+    expect(loadPhoto.mock.calls.map(([id]) => id)).toEqual(['p-1', 'p-2', 'p-3']);
+  });
+
+  test('a single photo keeps the unnumbered alt — one of one is not worth saying', async () => {
+    useNoObserver();
+    const loadPhoto = vi.fn(async (id) => record(id));
+    const { container } = render(
+      html`<${ObservationsList} observations=${[withPhotos(['p-1'])]} loadPhoto=${loadPhoto} />`,
+    );
+
+    expect(await screen.findByAltText('Photo for this observation')).toBeInTheDocument();
+    expect(container.querySelector('.attachment-strip-photos')).not.toHaveClass(
+      'attachment-strip-multi',
+    );
+  });
+
+  test('a thumb below the fold holds a dashed pending box and fetches nothing', () => {
+    // Viewport-lazy, not tap-lazy: a session can hold dozens of ~200 KB
+    // JPEGs and an installed iOS PWA has little memory headroom for decoding
+    // rows nobody is looking at.
+    useFakeObserver();
+    const loadPhoto = vi.fn(async (id) => record(id));
+    const { container } = render(
+      html`<${ObservationsList}
+        observations=${[withPhotos(['p-1', 'p-2'])]}
+        loadPhoto=${loadPhoto}
+      />`,
+    );
+
+    expect(loadPhoto).not.toHaveBeenCalled();
+    const pending = container.querySelectorAll('.observations-photo-thumb-pending');
+    expect(pending).toHaveLength(2);
+    expect(pending[0]).toHaveAttribute('aria-busy', 'true');
+    expect(container.querySelector('img')).toBeNull();
+    expect(observed).toHaveLength(2);
+    expect(observed[0].options).toMatchObject({ rootMargin: '200px' });
+  });
+
+  test('scrolling one thumb into view fetches that photo alone', async () => {
+    useFakeObserver();
+    const loadPhoto = vi.fn(async (id) => record(id));
+    render(
+      html`<${ObservationsList}
+        observations=${[withPhotos(['p-1', 'p-2'])]}
+        loadPhoto=${loadPhoto}
+      />`,
+    );
+
+    await scrollIntoView(observed[1]);
+
+    await waitFor(() => expect(loadPhoto).toHaveBeenCalledWith('p-2'));
+    expect(loadPhoto).toHaveBeenCalledTimes(1);
+    // Once its bytes are in, the thumb stops watching the viewport.
+    expect(observed[1].observer.disconnected).toBe(true);
+  });
+
+  test('unmounting revokes every object URL the strip made', async () => {
+    useNoObserver();
+    const loadPhoto = vi.fn(async (id) => record(id));
+    const { unmount, container } = render(
+      html`<${ObservationsList}
+        observations=${[withPhotos(['p-1', 'p-2', 'p-3'])]}
+        loadPhoto=${loadPhoto}
+      />`,
+    );
+
+    await waitFor(() => expect(container.querySelectorAll('img')).toHaveLength(3));
+    await act(() => {});
+    unmount();
+
+    expect(savedUrls).toHaveLength(3);
+    for (const url of savedUrls) expect(URL.revokeObjectURL).toHaveBeenCalledWith(url);
+  });
+
+  test('a retake repoints one id: only the new photo is fetched, the stale URL revoked', async () => {
+    useNoObserver();
+    const loadPhoto = vi.fn(async (id) => record(id));
+    const { rerender, container } = render(
+      html`<${ObservationsList}
+        observations=${[withPhotos(['p-1', 'p-2', 'p-3'])]}
+        loadPhoto=${loadPhoto}
+      />`,
+    );
+    await waitFor(() => expect(container.querySelectorAll('img')).toHaveLength(3));
+    await act(() => {});
+
+    rerender(
+      html`<${ObservationsList}
+        observations=${[withPhotos(['p-1', 'photo-x', 'p-3'])]}
+        loadPhoto=${loadPhoto}
+      />`,
+    );
+
+    await waitFor(() => expect(loadPhoto).toHaveBeenCalledWith('photo-x'));
+    expect(loadPhoto.mock.calls.map(([id]) => id)).toEqual(['p-1', 'p-2', 'p-3', 'photo-x']);
+    // Exactly one URL is dropped — the replaced photo's; its siblings keep
+    // the decode they already have.
+    expect(URL.revokeObjectURL).toHaveBeenCalledTimes(1);
+  });
+
+  test('a read landing after its id was replaced revokes rather than keeps its URL', async () => {
+    // The reconcile effect has already run by the time these bytes arrive,
+    // so nothing else would ever revoke this one.
+    useNoObserver();
+    let release;
+    const gate = new Promise((resolve) => {
+      release = resolve;
+    });
+    const loadPhoto = vi.fn(async (id) => {
+      if (id === 'p-1') await gate;
+      return record(id);
+    });
+    const { rerender } = render(
+      html`<${ObservationsList} observations=${[withPhotos(['p-1'])]} loadPhoto=${loadPhoto} />`,
+    );
+
+    // The retake lands while p-1's read is still in flight.
+    rerender(
+      html`<${ObservationsList}
+        observations=${[withPhotos(['photo-x'])]}
+        loadPhoto=${loadPhoto}
+      />`,
+    );
+    await waitFor(() => expect(loadPhoto).toHaveBeenCalledWith('photo-x'));
+    await act(async () => {
+      release();
+    });
+
+    const kept = (await screen.findByRole('img')).getAttribute('src');
+    const stale = savedUrls.filter((url) => url !== kept);
+    expect(stale).toHaveLength(1);
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith(stale[0]);
+  });
+
+  test('one unreadable record fails in its own slot; its siblings still render', async () => {
+    useNoObserver();
+    const loadPhoto = vi.fn(async (id) => (id === 'p-2' ? undefined : record(id)));
+    const { container } = render(
+      html`<${ObservationsList}
+        observations=${[withPhotos(['p-1', 'p-2', 'p-3'])]}
+        loadPhoto=${loadPhoto}
+      />`,
+    );
+
+    await waitFor(() => expect(screen.getByText(/photo could not be loaded/i)).toBeInTheDocument());
+    await waitFor(() => expect(container.querySelectorAll('img')).toHaveLength(2));
+  });
+
+  test('without loadPhoto the strip states the count rather than offering thumbs', () => {
+    render(html`<${ObservationsList} observations=${[withPhotos(['p-1', 'p-2'])]} />`);
+
+    expect(screen.getByText(/2 photos/)).toBeInTheDocument();
+    expect(screen.queryByRole('img')).toBeNull();
   });
 });
 

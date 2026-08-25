@@ -1,4 +1,4 @@
-import { describe, expect, test, vi } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/preact';
 import { html } from 'htm/preact';
 import { SessionHistoryPage } from './SessionHistoryPage.js';
@@ -302,6 +302,10 @@ describe('SessionHistoryPage — the detail map', () => {
 });
 
 describe('SessionHistoryPage — detail', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   test('tapping a session shows its observations and an Export button', async () => {
     const service = createFakeService({
       sessions: [CLOSED_A],
@@ -319,6 +323,10 @@ describe('SessionHistoryPage — detail', () => {
   });
 
   test('a saved photo can be viewed from the read-only detail — photos are reads', async () => {
+    // happy-dom defines an IntersectionObserver that never fires; the
+    // no-observer path fetches every thumb at once, which is what this row
+    // is about — the read reaching the service at all.
+    vi.stubGlobal('IntersectionObserver', undefined);
     const service = createFakeService({
       sessions: [CLOSED_A],
       observationsBySession: {
@@ -333,8 +341,6 @@ describe('SessionHistoryPage — detail', () => {
     );
     await screen.findByText('Site A');
     fireEvent.click(screen.getByRole('button', { name: /Site A/ }));
-
-    fireEvent.click(await screen.findByRole('button', { name: 'Photo' }));
 
     await waitFor(() => expect(service.getPhoto).toHaveBeenCalledWith('obs-1'));
 

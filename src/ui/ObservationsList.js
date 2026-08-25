@@ -28,7 +28,7 @@ function SavedVoiceNote({ audioId, durationMs, loadAudio }) {
   const [state, setState] = useState('idle'); // idle | loading | ready | error
 
   // Revoke via a ref-read at unmount, not a [url]-dependent effect — the
-  // same pending-effect race SavedPhoto documents below: an effect
+  // same pending-effect race SavedPhotos documents below: an effect
   // registered after the async load may never run before unmount, and a
   // pending effect's cleanup never fires, leaking the URL.
   const urlRef = useRef(null);
@@ -79,93 +79,182 @@ function SavedVoiceNote({ audioId, durationMs, loadAudio }) {
   `;
 }
 
-// A saved photo, loaded only when the surveyor asks to see it — a session
+// One slot in the strip: a 64px thumbnail once its bytes are in, a dashed
+// pending box until then, an inline failure if the record has gone. The
+// pending box is what the observer watches — the fetch is deliberately not
+// started at mount but when the slot comes within 200px of the viewport, so
+// a session's worth of rows costs nothing to scroll past.
+function SavedPhotoThumb({ photoId, url, state, alt, onVisible, onOpen }) {
+  const boxRef = useRef(null);
+
+  useEffect(() => {
+    if (state !== 'pending') return undefined;
+    // No IntersectionObserver (older WebKit, and any test that says so):
+    // fetch at once rather than leave a box that never resolves.
+    if (typeof IntersectionObserver === 'undefined') {
+      onVisible(photoId);
+      return undefined;
+    }
+    const element = boxRef.current;
+    if (!element) return undefined;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return;
+        // Once, then stop watching: the bytes only need fetching the first
+        // time the slot is seen.
+        observer.disconnect();
+        onVisible(photoId);
+      },
+      { rootMargin: '200px' },
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
+    // Keyed on the id and its state alone; onVisible is a fresh closure over
+    // the parent's stable fetcher each render — deliberately not a dep.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [photoId, state]);
+
+  if (state === 'error') {
+    return html`<p class="observations-photo">Photo could not be loaded</p>`;
+  }
+
+  if (state === 'ready') {
+    return html`<img class="observations-photo-thumb" src=${url} alt=${alt} onClick=${onOpen} />`;
+  }
+
+  return html`<div
+    ref=${boxRef}
+    class="observations-photo-thumb observations-photo-thumb-pending"
+    aria-busy="true"
+  />`;
+}
+
+// Every photo on a saved observation, as a strip of thumbnails. A session
 // can hold dozens of ~200 KB JPEGs and an installed iOS PWA has little
-// memory headroom for decoding rows nobody is looking at. The stored 1600px
-// JPEG is the only size that exists, so one fetch and one object URL serve
-// both the 64px thumbnail and the full-screen view; the URL is revoked on
-// unmount, and re-fetched if a retake repoints photoId under us.
+// memory headroom for decoding rows nobody is looking at, so a thumb fetches
+// its bytes when it scrolls into view (SavedPhotoThumb above) rather than at
+// mount. The stored 1600px JPEG is the only size that exists, so one fetch
+// and one object URL serve both the 64px thumbnail and the full-screen view.
+//
+// The URLs live in `urls` (photoId → url | 'error'), mirrored in `urlsRef`:
+// a deps-keyed revoke effect registered after an async load may still be
+// pending when the row unmounts, and a pending effect's cleanup never runs —
+// the URL would leak. The mount cleanup reads whatever the ref holds, and
+// the reconcile effect drops the URL of any id that has left photos[] (a
+// retake repoints one id; a delete removes one).
 //
 // The full-screen view portals to document.body (design pass 4 §7c): a
 // row-owned position:fixed overlay is one ancestor filter/transform away
 // from laying out inside its own <li>, and night mode adds filters to this
 // app for a living. State stays here — there is still no router, and the
 // overlay still dies with its row.
-function SavedPhoto({ observation, gridReference, loadPhoto, onSetPhoto, onDeletePhoto }) {
-  const photoId = observation.photos?.[0]?.id ?? null;
-  const [url, setUrl] = useState(null);
-  const [state, setState] = useState('idle'); // idle | loading | thumb | full | error
+function SavedPhotos({ observation, gridReference, loadPhoto, onSetPhoto, onDeletePhoto }) {
+  const photos = observation.photos ?? [];
+  const ids = photos.map((photo) => photo.id);
+  const idsKey = ids.join('|');
+
+  const [urls, setUrls] = useState({});
+  const [openIndex, setOpenIndex] = useState(null); // the photo the lightbox shows
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [busy, setBusy] = useState(false); // a retake's downscale in flight
+  const [busy, setBusy] = useState(false); // a retake's or an add's downscale in flight
 
-  // Revoke via a ref-read at unmount rather than a [url]-dependent effect: a
-  // deps-keyed effect registered after the async load may still be pending
-  // when the row unmounts, and a pending effect's cleanup never runs — the
-  // URL would leak. The mount-time cleanup reads whatever the ref holds.
-  const urlRef = useRef(null);
-  useEffect(() => () => urlRef.current && URL.revokeObjectURL(urlRef.current), []);
+  const urlsRef = useRef({});
+  const pendingRef = useRef(new Set()); // fetches in flight, so a re-render can't double one
+  const mountedRef = useRef(true);
+  const liveIdsRef = useRef(idsKey); // what photos[] holds now, for reads in flight
 
-  async function fetchPhoto() {
-    const record = await loadPhoto(photoId);
-    if (!record) {
-      setState('error');
-      return;
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      for (const value of Object.values(urlsRef.current)) {
+        if (value !== 'error') URL.revokeObjectURL(value);
+      }
+      urlsRef.current = {};
+    };
+  }, []);
+
+  // photos[] changed shape: revoke what no id points at any more. Keyed on
+  // the joined ids so a re-render with the same photos does nothing.
+  useEffect(() => {
+    liveIdsRef.current = idsKey;
+    const live = new Set(idsKey === '' ? [] : idsKey.split('|'));
+    const next = {};
+    let dropped = false;
+    for (const [id, value] of Object.entries(urlsRef.current)) {
+      if (live.has(id)) {
+        next[id] = value;
+        continue;
+      }
+      if (value !== 'error') URL.revokeObjectURL(value);
+      dropped = true;
     }
-    if (urlRef.current) URL.revokeObjectURL(urlRef.current);
-    const objectUrl = URL.createObjectURL(record.blob);
-    urlRef.current = objectUrl;
-    setUrl(objectUrl);
+    if (!dropped) return;
+    urlsRef.current = next;
+    setUrls(next);
+  }, [idsKey]);
+
+  function remember(photoId, value) {
+    urlsRef.current = { ...urlsRef.current, [photoId]: value };
+    setUrls(urlsRef.current);
   }
 
-  // A retake writes a new photo record and repoints photoId (fresh id by
-  // design — same id would serve the stale cached URL). If the image is on
-  // screen, swap it for the new bytes; the view stays open so the second
-  // attempt can be judged against the first.
-  const shownIdRef = useRef(null);
-  useEffect(() => {
-    if (state !== 'thumb' && state !== 'full') return;
-    if (shownIdRef.current === photoId) return;
-    shownIdRef.current = photoId;
-    fetchPhoto().catch(() => setState('error'));
-    // Refetch is keyed on the repointed id alone; state joins the deps only
-    // to catch a load that finished between renders. fetchPhoto is a fresh
-    // closure each render over the stable loadPhoto — deliberately not a dep.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [photoId, state]);
+  // Nothing arriving late may be kept: the row can unmount, or the id can
+  // leave photos[] (a retake, a delete), while a read is in flight — the
+  // unmount cleanup and the reconcile effect have both already run by then,
+  // so neither would ever revoke what this read is about to create.
+  function stillWanted(photoId) {
+    if (!mountedRef.current) return false;
+    return liveIdsRef.current.split('|').includes(photoId);
+  }
 
-  async function open() {
-    setState('loading');
+  async function ensure(photoId) {
+    if (!loadPhoto) return;
+    if (urlsRef.current[photoId] || pendingRef.current.has(photoId)) return;
+    pendingRef.current.add(photoId);
     try {
-      await fetchPhoto();
-      shownIdRef.current = photoId;
-      setState('thumb');
+      const record = await loadPhoto(photoId);
+      if (!record) {
+        if (stillWanted(photoId)) remember(photoId, 'error');
+        return;
+      }
+      const objectUrl = URL.createObjectURL(record.blob);
+      if (!stillWanted(photoId)) {
+        URL.revokeObjectURL(objectUrl);
+        return;
+      }
+      remember(photoId, objectUrl);
     } catch {
-      setState('error');
+      if (stillWanted(photoId)) remember(photoId, 'error');
+    } finally {
+      pendingRef.current.delete(photoId);
     }
   }
 
   function close() {
     setConfirmingDelete(false);
-    setState('thumb');
+    setOpenIndex(null);
   }
+
+  const openPhoto = openIndex == null ? null : (photos[openIndex] ?? null);
 
   async function handleRetake(event) {
     const file = event.target.files?.[0];
     // Clearing the value is what lets the same file be picked twice — a
     // repeated selection otherwise fires no change event.
     event.target.value = '';
-    if (!file || !onSetPhoto) return;
+    if (!file || !onSetPhoto || !openPhoto) return;
     setBusy(true);
     try {
-      await onSetPhoto(observation.id, photoId, file);
+      await onSetPhoto(observation.id, openPhoto.id, file);
     } finally {
       setBusy(false);
     }
   }
 
-  // Adding after the fact rides the retake machinery: this component now
-  // owns the empty slot too, so it never unmounts across the add — the
-  // parent refresh repoints photoId and the effect above fetches it, which
+  // Adding after the fact rides the same writer with a null photo id. This
+  // component owns the empty slot too, so it never unmounts across the add —
+  // the parent refresh delivers the new id and the strip fetches it, which
   // is what makes the new thumbnail appear without another tap (field
   // report, 2026-08-14).
   async function handleAdd(event) {
@@ -175,13 +264,20 @@ function SavedPhoto({ observation, gridReference, loadPhoto, onSetPhoto, onDelet
     setBusy(true);
     try {
       await onSetPhoto(observation.id, null, file);
-      setState('thumb');
     } finally {
       setBusy(false);
     }
   }
 
-  if (!photoId) {
+  async function handleDelete() {
+    await onDeletePhoto(observation.id, openPhoto.id);
+    // The view closes; the parent refresh drops the id from photos[] and the
+    // reconcile effect revokes its URL.
+    setConfirmingDelete(false);
+    setOpenIndex(null);
+  }
+
+  if (ids.length === 0) {
     // 7e: a link, not a chip — the chips mean "there is something here to
     // open", and an empty slot is not that. Offered only where the parent
     // passes onSetPhoto (the open session); history renders nothing.
@@ -199,131 +295,122 @@ function SavedPhoto({ observation, gridReference, loadPhoto, onSetPhoto, onDelet
   }
 
   if (!loadPhoto) {
-    return html`<p class="observations-photo">${cameraGlyph}Photo</p>`;
+    // No reader passed: state the count, since the bytes can't be shown.
+    return html`<p class="observations-photo">
+      ${cameraGlyph}${ids.length === 1 ? 'Photo' : `${ids.length} photos`}
+    </p>`;
   }
 
-  async function handleDelete() {
-    await onDeletePhoto(observation.id, photoId);
-    // Nothing left to look at: the view closes and the row (parent-refreshed
-    // to photos: []) returns to offering Add photo.
-    if (urlRef.current) {
-      URL.revokeObjectURL(urlRef.current);
-      urlRef.current = null;
-    }
-    setConfirmingDelete(false);
-    setState('idle');
-  }
-
-  if (state === 'error') {
-    return html`<p class="observations-photo">Photo could not be loaded</p>`;
-  }
-
-  if ((state === 'thumb' || state === 'full') && !url) {
-    // The fetch for a just-added (or just-repointed) photo is in flight —
-    // hold the chip shape rather than a broken <img>.
-    return html`<button type="button" class="attachment-chip attachment-chip-loading" disabled>
-      ${cameraGlyph} Photo
-    </button>`;
-  }
-
-  if (state === 'thumb' || state === 'full') {
-    const caption = [formatTime(observation.fixAt), gridReference].filter(Boolean).join(' · ');
-    return html`
-      <img
-        class="observations-photo-thumb"
-        src=${url}
-        alt="Photo for this observation"
-        onClick=${() => setState('full')}
-      />
-      ${
-        state === 'full'
-          ? html`<${BodyPortal}>
-              <div
-                class="photo-lightbox"
-                role="dialog"
-                aria-label="Photo"
-                onClick=${(event) => {
-                  // Backdrop taps close; taps on the photo itself do not, so
-                  // a mis-hit while peering at the image can't dismiss it.
-                  if (event.target === event.currentTarget) close();
-                }}
-              >
-                <button
-                  type="button"
-                  class="photo-lightbox-close"
-                  aria-label="Close"
-                  onClick=${close}
-                >
-                  <svg viewBox="0 0 14 14" width="14" height="14" aria-hidden="true">
-                    <g stroke="currentColor" stroke-width="2" stroke-linecap="round">
-                      <line x1="2" y1="2" x2="12" y2="12" />
-                      <line x1="12" y1="2" x2="2" y2="12" />
-                    </g>
-                  </svg>
-                </button>
-                <img class="photo-lightbox-image" src=${url} alt="" />
-                <p class="photo-lightbox-caption">${caption}</p>
-                ${
-                  // Retake and Delete ride only where the parent passes the
-                  // callbacks (the capture page's open session) — history
-                  // passes neither, exactly as it declines onEditNote.
-                  onSetPhoto && onDeletePhoto
-                    ? confirmingDelete
-                      ? html`<div class="photo-lightbox-actions">
-                          <button
-                            type="button"
-                            class="photo-lightbox-delete-commit"
-                            onClick=${handleDelete}
-                          >
-                            Delete photo
-                          </button>
-                          <button
-                            type="button"
-                            class="photo-lightbox-link"
-                            onClick=${() => setConfirmingDelete(false)}
-                          >
-                            Keep it
-                          </button>
-                        </div>`
-                      : html`<div class="photo-lightbox-actions">
-                          <label class="photo-lightbox-retake">
-                            <span class="glyph-camera" aria-hidden="true"></span>
-                            ${busy ? 'Retaking…' : 'Retake'}
-                            <input
-                              type="file"
-                              accept="image/*"
-                              capture="environment"
-                              disabled=${busy}
-                              onChange=${handleRetake}
-                            />
-                          </label>
-                          <button
-                            type="button"
-                            class="photo-lightbox-link"
-                            onClick=${() => setConfirmingDelete(true)}
-                          >
-                            Delete
-                          </button>
-                        </div>`
-                    : null
-                }
-              </div>
-            <//>`
-          : null
-      }
-    `;
-  }
+  const caption = [formatTime(observation.fixAt), gridReference].filter(Boolean).join(' · ');
+  const openUrl = openPhoto ? urls[openPhoto.id] : null;
 
   return html`
-    <button
-      type="button"
-      class="attachment-chip ${state === 'loading' ? 'attachment-chip-loading' : ''}"
-      onClick=${open}
-      disabled=${state === 'loading'}
-      aria-busy=${state === 'loading'}
-    >
-      ${cameraGlyph} Photo
-    </button>
+    <ul class="attachment-strip-photos ${ids.length > 1 ? 'attachment-strip-multi' : ''}">
+      ${photos.map((photo, index) => {
+        const value = urls[photo.id];
+        const state = value === undefined ? 'pending' : value === 'error' ? 'error' : 'ready';
+        return html`<li class="attachment-strip-photo" key=${photo.id}>
+          <${SavedPhotoThumb}
+            photoId=${photo.id}
+            url=${state === 'ready' ? value : null}
+            state=${state}
+            alt=${
+              ids.length === 1
+                ? 'Photo for this observation'
+                : `Photo for this observation (${index + 1} of ${ids.length})`
+            }
+            onVisible=${ensure}
+            onOpen=${() => setOpenIndex(index)}
+          />
+        </li>`;
+      })}
+    </ul>
+    ${
+      // Open on the photo, not on its bytes: a retake repoints the id under
+      // the view, and closing it there would drop the surveyor back on the
+      // strip mid-judgement. The image appears when the new bytes land.
+      openPhoto
+        ? html`<${BodyPortal}>
+            <div
+              class="photo-lightbox"
+              role="dialog"
+              aria-label="Photo"
+              onClick=${(event) => {
+                // Backdrop taps close; taps on the photo itself do not, so
+                // a mis-hit while peering at the image can't dismiss it.
+                if (event.target === event.currentTarget) close();
+              }}
+            >
+              <button
+                type="button"
+                class="photo-lightbox-close"
+                aria-label="Close"
+                onClick=${close}
+              >
+                <svg viewBox="0 0 14 14" width="14" height="14" aria-hidden="true">
+                  <g stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                    <line x1="2" y1="2" x2="12" y2="12" />
+                    <line x1="12" y1="2" x2="2" y2="12" />
+                  </g>
+                </svg>
+              </button>
+              ${
+                openUrl && openUrl !== 'error'
+                  ? html`<img class="photo-lightbox-image" src=${openUrl} alt="" />`
+                  : html`<div
+                      class="photo-lightbox-image photo-lightbox-image-pending"
+                      aria-busy=${openUrl === 'error' ? undefined : 'true'}
+                    />`
+              }
+              <p class="photo-lightbox-caption">${caption}</p>
+              ${
+                // Retake and Delete ride only where the parent passes the
+                // callbacks (the capture page's open session) — history
+                // passes neither, exactly as it declines onEditNote.
+                onSetPhoto && onDeletePhoto
+                  ? confirmingDelete
+                    ? html`<div class="photo-lightbox-actions">
+                        <button
+                          type="button"
+                          class="photo-lightbox-delete-commit"
+                          onClick=${handleDelete}
+                        >
+                          Delete photo
+                        </button>
+                        <button
+                          type="button"
+                          class="photo-lightbox-link"
+                          onClick=${() => setConfirmingDelete(false)}
+                        >
+                          Keep it
+                        </button>
+                      </div>`
+                    : html`<div class="photo-lightbox-actions">
+                        <label class="photo-lightbox-retake">
+                          <span class="glyph-camera" aria-hidden="true"></span>
+                          ${busy ? 'Retaking…' : 'Retake'}
+                          <input
+                            type="file"
+                            accept="image/*"
+                            capture="environment"
+                            disabled=${busy}
+                            onChange=${handleRetake}
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          class="photo-lightbox-link"
+                          onClick=${() => setConfirmingDelete(true)}
+                        >
+                          Delete
+                        </button>
+                      </div>`
+                  : null
+              }
+            </div>
+          <//>`
+        : null
+    }
   `;
 }
 
@@ -447,11 +534,11 @@ function ObservationRow({
         hasStrip && !editingNote
           ? html`<div class="attachment-strip">
               ${
-                // SavedPhoto owns the empty slot too (it renders Add photo
-                // when photoId is null), so it never unmounts across an add
+                // SavedPhotos owns the empty slot too (it renders Add photo
+                // when photos[] is empty), so it never unmounts across an add
                 // and the fresh thumbnail appears without another tap.
                 obs.photos?.length || onSetPhoto
-                  ? html`<${SavedPhoto}
+                  ? html`<${SavedPhotos}
                       observation=${obs}
                       gridReference=${gridReference}
                       loadPhoto=${loadPhoto}
