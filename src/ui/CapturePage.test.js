@@ -894,6 +894,50 @@ describe('CapturePage — undo lifecycle', () => {
     expect(alert).toHaveClass('save-error');
   });
 
+  test('a successful retry clears the save-error line left by an earlier failure', async () => {
+    vi.stubGlobal('IntersectionObserver', undefined);
+    const observation = {
+      id: 'obs-1',
+      sessionId: 'sess-1',
+      lat: 51.5,
+      lon: -0.14,
+      gpsAccuracyM: 8,
+      note: 'gate post',
+      photos: [{ id: 'obs-1', referencePhoto: null }],
+    };
+    const service = createFakeService({ openSession: OPEN_SESSION, observations: [observation] });
+    service.getPhoto = vi
+      .fn()
+      .mockResolvedValue({ id: 'obs-1', contentType: 'image/jpeg', blob: new Blob(['x']) });
+    service.replacePhoto = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('no room on the device'))
+      .mockResolvedValueOnce(undefined);
+    const downscale = vi
+      .fn()
+      .mockResolvedValue({ blob: new Blob(['downscaled'], { type: 'image/jpeg' }) });
+    const { sensors } = createFakeSensors();
+    render(html`<${CapturePage} service=${service} sensors=${sensors} downscale=${downscale} />`);
+    await screen.findByText('gate post');
+
+    fireEvent.click(await screen.findByRole('img', { name: /photo for this observation/i }));
+    const dialog = screen.getByRole('dialog', { name: /photo/i });
+    const file = new File(['raw'], 'photo.jpg', { type: 'image/jpeg' });
+    fireEvent.change(dialog.querySelector('input[capture="environment"]'), {
+      target: { files: [file] },
+    });
+    await screen.findByRole('alert');
+
+    // Retake again — the message from the first attempt must not survive a
+    // second attempt that succeeds.
+    fireEvent.change(dialog.querySelector('input[capture="environment"]'), {
+      target: { files: [file] },
+    });
+
+    await waitFor(() => expect(service.replacePhoto).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+  });
+
   test('adding a photo to a row with none runs the downscale pipeline, addPhoto, and a refresh', async () => {
     const observation = {
       id: 'obs-1',
@@ -956,6 +1000,37 @@ describe('CapturePage — undo lifecycle', () => {
     await waitFor(() => expect(service.deletePhoto).toHaveBeenCalledWith('obs-1', 'obs-1'));
     // The refresh is what returns the row to offering Add photo.
     await waitFor(() => expect(service.listObservations.mock.calls.length).toBeGreaterThan(1));
+  });
+
+  test('a failed delete tells the surveyor on the page’s save-error line', async () => {
+    vi.stubGlobal('IntersectionObserver', undefined);
+    const observation = {
+      id: 'obs-1',
+      sessionId: 'sess-1',
+      lat: 51.5,
+      lon: -0.14,
+      gpsAccuracyM: 8,
+      note: 'gate post',
+      photos: [{ id: 'obs-1', referencePhoto: null }],
+    };
+    const service = createFakeService({ openSession: OPEN_SESSION, observations: [observation] });
+    service.getPhoto = vi
+      .fn()
+      .mockResolvedValue({ id: 'obs-1', contentType: 'image/jpeg', blob: new Blob(['x']) });
+    service.deletePhoto = vi.fn().mockRejectedValue(new Error('locked by another tab'));
+    const { sensors } = createFakeSensors();
+    render(html`<${CapturePage} service=${service} sensors=${sensors} downscale=${vi.fn()} />`);
+    await screen.findByText('gate post');
+
+    fireEvent.click(await screen.findByRole('img', { name: /photo for this observation/i }));
+    const dialog = screen.getByRole('dialog', { name: /photo/i });
+    fireEvent.click(within(dialog).getByRole('button', { name: /^delete$/i }));
+    fireEvent.click(within(dialog).getByRole('button', { name: /delete photo/i }));
+
+    await waitFor(() => expect(service.deletePhoto).toHaveBeenCalled());
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('locked by another tab');
+    expect(alert).toHaveClass('save-error');
   });
 
   test('a bumped sessionEpoch re-reads the session and clears the Undo affordance', async () => {

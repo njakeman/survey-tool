@@ -405,8 +405,9 @@ function SavedPhotos({ observation, gridReference, loadPhoto, onSetPhoto, onDele
       // not outlive the attempt, or some later append would drag the view
       // onto a photo the surveyor never took. Swallowed rather than
       // rethrown: this handler's caller is the DOM, which can only turn a
-      // rejection into an unhandled one. Reporting a failed row write to the
-      // surveyor is a gap on the parent's side, not one this catch can fill.
+      // rejection into an unhandled one. The parent (CapturePage) already
+      // surfaces the failure on its own save-error line — nothing more for
+      // this catch to report.
       pendingShowLastRef.current = false;
     } finally {
       setBusy(null);

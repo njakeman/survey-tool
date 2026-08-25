@@ -569,6 +569,22 @@ describe('ObservationsList — retake, delete and add photo (design pass 4 §7e)
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
+  test('a rejecting onDeletePhoto leaves the view open on the confirm, ready to retry', async () => {
+    // The parent (CapturePage) surfaces the failure on its own error line;
+    // this handler must not close the view or advance off the confirm on a
+    // write that never landed, and must not turn the rejection into an
+    // unhandled one.
+    const onDeletePhoto = vi.fn().mockRejectedValue(new Error('locked by another tab'));
+    const dialog = await openFullView({ onSetPhoto: vi.fn(), onDeletePhoto });
+
+    fireEvent.click(within(dialog).getByRole('button', { name: /^delete$/i }));
+    fireEvent.click(within(dialog).getByRole('button', { name: /delete photo/i }));
+
+    await waitFor(() => expect(onDeletePhoto).toHaveBeenCalledWith('obs-2', 'obs-2'));
+    expect(screen.getByRole('dialog', { name: /photo/i })).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: /delete photo/i })).toBeInTheDocument();
+  });
+
   test('a row without a photo offers Add photo — only when onSetPhoto is provided', () => {
     const onSetPhoto = vi.fn();
     render(html`<${ObservationsList} observations=${[OBS_NO_PHOTO]} onSetPhoto=${onSetPhoto} />`);
@@ -767,9 +783,11 @@ describe('ObservationsList — the saved photo strip', () => {
     expect(screen.getByAltText('Photo for this observation (2 of 3)')).toBeInTheDocument();
     expect(screen.getByAltText('Photo for this observation (3 of 3)')).toBeInTheDocument();
     expect(container.querySelectorAll('li.attachment-strip-photo')).toHaveLength(3);
-    expect(container.querySelector('.attachment-strip-photos')).toHaveClass(
-      'attachment-strip-multi',
-    );
+    // Both classes land on the same <ul> — the compound selector
+    // .attachment-strip-photos.attachment-strip-multi (style.css) relies on
+    // this; a descendant selector here would never match.
+    const strip = container.querySelector('.attachment-strip-photos');
+    expect(strip.classList.contains('attachment-strip-multi')).toBe(true);
     expect(loadPhoto.mock.calls.map(([id]) => id)).toEqual(['p-1', 'p-2', 'p-3']);
   });
 

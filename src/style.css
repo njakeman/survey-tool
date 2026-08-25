@@ -3217,8 +3217,9 @@ button {
 /* More than one photo takes the row's own full-width line, the same move
    a loaded voice transport and a recording voice field make above — a
    strip worth scrolling deserves the whole width, not a fight with the
-   voice chip for what's left. */
-.attachment-strip-multi .attachment-strip-photos {
+   voice chip for what's left. Compound, not descendant: -multi lands on
+   the same <ul> as -photos (ObservationsList.js), not an ancestor of it. */
+.attachment-strip-photos.attachment-strip-multi {
   flex-basis: 100%;
 }
 

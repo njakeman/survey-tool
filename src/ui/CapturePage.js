@@ -808,8 +808,11 @@ export function CapturePage({
   // A failure here used to be silent — no catch, so the row's busy state
   // hung with nothing on screen to explain why. Reusing the save-error line
   // means one place on the page carries every kind of write failure; the
-  // rethrow is what lets the row's own finally reset its busy state.
+  // rethrow is what lets the row's own finally reset its busy state. The
+  // clear at the top (handleSave's own pattern) is what lets a retry that
+  // succeeds remove a message left by an earlier failed attempt.
   const setRowPhoto = async (id, photoId, file) => {
+    setSaveError(null);
     try {
       const downscaled = await downscale(file);
       if (photoId) {
@@ -824,6 +827,7 @@ export function CapturePage({
     }
   };
   const deleteRowPhoto = async (id, photoId) => {
+    setSaveError(null);
     try {
       await service.deletePhoto(id, photoId);
       await refreshSession();
