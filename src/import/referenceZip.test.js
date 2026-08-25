@@ -105,8 +105,10 @@ describe('openReference', () => {
   test('stations carry the entry names readPhoto takes', async () => {
     const opened = await openReference(referenceZip());
 
-    expect(opened.stations[0].photoEntryName).toBe('photos/ref-1.jpg');
-    expect(opened.stations[1].photoEntryName).toBeNull();
+    expect(opened.stations[0].photos).toEqual([
+      { filename: 'ref-1.jpg', entryName: 'photos/ref-1.jpg' },
+    ]);
+    expect(opened.stations[1].photos).toEqual([]);
   });
 
   test('an entry name the zip does not hold fails by name, never returns short data', async () => {

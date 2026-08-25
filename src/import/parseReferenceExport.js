@@ -29,21 +29,31 @@ export function parseReferenceExport(geojsonData, entryNames) {
     endedAt: meta.endedAt,
   };
 
-  // Join by the photo property string, matched case-insensitively like
+  // Join by the photo property string(s), matched case-insensitively like
   // import does — never by assuming obs_id + '.jpg', because a retake mints
-  // a fresh photo id. A claim with no backing entry is nulled, not trusted.
+  // a fresh photo id. A claim with no backing entry is dropped, not trusted
+  // (mirrors parseSessionExport's own "never claim a file the zip doesn't
+  // contain").
   const entryByLowerName = new Map(entryNames.map((name) => [name.toLowerCase(), name]));
   const stations = collection.features.map((feature, index) => {
     const observation = observationFrom(feature, index, 'reference');
-    const claimed = feature?.properties?.photo ?? null;
-    const entryName = claimed
-      ? (entryByLowerName.get(`photos/${claimed}`.toLowerCase()) ?? null)
-      : null;
-    return {
-      ...observation,
-      photoFilename: entryName ? claimed : null,
-      photoEntryName: entryName,
-    };
+    // observationFrom already folded photos[] / legacy photo into ids on
+    // observation.photos; the station instead needs the *filenames* as
+    // claimed, in export order, so read the properties again here and join
+    // against the entry list. Overwriting observation.photos (ids) with the
+    // filename list below is fine — stations are UI-only objects that never
+    // re-enter createObservation.
+    const props = feature?.properties ?? {};
+    const claimed = Array.isArray(props.photos)
+      ? props.photos.map((entry) => entry?.photo).filter(Boolean)
+      : props.photo
+        ? [props.photo]
+        : [];
+    const photos = claimed.flatMap((filename) => {
+      const entryName = entryByLowerName.get(`photos/${filename}`.toLowerCase()) ?? null;
+      return entryName ? [{ filename, entryName }] : [];
+    });
+    return { ...observation, photos };
   });
 
   return { session, stations };

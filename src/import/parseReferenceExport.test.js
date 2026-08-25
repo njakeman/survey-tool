@@ -59,7 +59,7 @@ describe('parseReferenceExport', () => {
     });
   });
 
-  test('stations are validated observations in feature order, with their photo filenames', () => {
+  test('stations are validated observations in feature order, with their photos', () => {
     const bytes = collectionBytes({
       features: [
         feature({}),
@@ -77,17 +77,47 @@ describe('parseReferenceExport', () => {
     expect(stations[0].lat).toBe(51.5);
     expect(stations[0].headingDeg).toBe(38);
     expect(stations[0].note).toBe('Stone stile, west boundary.');
-    expect(stations[0].photoFilename).toBe('ref-1.jpg');
-    expect(stations[0].photoEntryName).toBe('photos/ref-1.jpg');
+    expect(stations[0].photos).toEqual([{ filename: 'ref-1.jpg', entryName: 'photos/ref-1.jpg' }]);
   });
 
-  test('a photo claim the zip cannot back is nulled, not trusted', () => {
+  test('lists every backed reference photo per station in order, ignoring unbacked claims', () => {
+    const bytes = collectionBytes({
+      features: [
+        feature({
+          photo: undefined,
+          photos: [{ photo: 'a.jpg' }, { photo: 'missing.jpg' }, { photo: 'B.JPG' }],
+        }),
+      ],
+    });
+
+    const { stations } = parseReferenceExport(bytes, [
+      'session.geojson',
+      'photos/a.jpg',
+      'photos/b.jpg',
+    ]);
+
+    expect(stations[0].photos).toEqual([
+      { filename: 'a.jpg', entryName: 'photos/a.jpg' },
+      { filename: 'B.JPG', entryName: 'photos/b.jpg' },
+    ]);
+    expect(stations[0]).not.toHaveProperty('photoFilename');
+    expect(stations[0]).not.toHaveProperty('photoEntryName');
+  });
+
+  test('a legacy reference with a single photo property yields one entry', () => {
+    const bytes = collectionBytes({ features: [feature({ photo: 'ref-1.jpg' })] });
+
+    const { stations } = parseReferenceExport(bytes, ['session.geojson', 'photos/ref-1.jpg']);
+
+    expect(stations[0].photos).toEqual([{ filename: 'ref-1.jpg', entryName: 'photos/ref-1.jpg' }]);
+  });
+
+  test('a photo claim the zip cannot back is dropped, not trusted', () => {
     const { stations } = parseReferenceExport(collectionBytes({ features: [feature({})] }), [
       'session.geojson',
     ]);
 
-    expect(stations[0].photoFilename).toBeNull();
-    expect(stations[0].photoEntryName).toBeNull();
+    expect(stations[0].photos).toEqual([]);
   });
 
   test('a station without a photo is still a station', () => {
@@ -96,7 +126,7 @@ describe('parseReferenceExport', () => {
       ['session.geojson'],
     );
 
-    expect(stations[0].photoFilename).toBeNull();
+    expect(stations[0].photos).toEqual([]);
   });
 
   test('refuses an export with nothing to revisit, by name', () => {
