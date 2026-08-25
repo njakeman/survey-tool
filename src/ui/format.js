@@ -1,3 +1,11 @@
+import { MAX_PHOTOS } from '../photo/dimensions.js';
+
+// The photo cap, stated the same way wherever a control goes dead because of
+// it: the compose field under its Photo button, and the saved view's pager
+// under its actions row. The number is read from MAX_PHOTOS, so the sentence
+// cannot drift from the cap it describes.
+export const PHOTO_CAP_MESSAGE = `${MAX_PHOTOS} photos — the most one record holds`;
+
 // One human file size for the maps-and-layers view, shared by the region list
 // and the feature-layer list. Decimal units, because that is how providers
 // and manifests describe sizes.

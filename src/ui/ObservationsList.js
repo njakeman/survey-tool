@@ -7,7 +7,7 @@ import {
   formatDistance,
   accuracyQuality,
 } from '../sensors/format.js';
-import { formatDuration } from './format.js';
+import { formatDuration, PHOTO_CAP_MESSAGE } from './format.js';
 import { lineLengthM } from '../geo/lineMetrics.js';
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { ExportBadge } from './ExportBadge.js';
@@ -189,7 +189,12 @@ function SavedPhotos({ observation, gridReference, loadPhoto, onSetPhoto, onDele
   const [urls, setUrls] = useState({});
   const [openId, setOpenId] = useState(null); // the photo the lightbox shows; null = closed
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const [busy, setBusy] = useState(null); // null | 'retake' | 'add' — a downscale in flight
+  const [busy, setBusy] = useState(null); // null | 'retake' | 'add' | 'delete' — a write in flight
+  // A row edit that failed, shown inside the view. CapturePage's shared
+  // save-error line is the surface for every other write failure, but it
+  // renders behind this scrim — from in here it may as well not exist, and
+  // Delete is the worst of the three: the confirm just sits there.
+  const [error, setError] = useState('');
 
   const urlsRef = useRef({});
   const pendingRef = useRef(new Set()); // fetches in flight, so a re-render can't double one
@@ -305,6 +310,7 @@ function SavedPhotos({ observation, gridReference, loadPhoto, onSetPhoto, onDele
 
   function close() {
     setConfirmingDelete(false);
+    setError('');
     // Closing spends any add-then-show intent: a write still in flight must
     // not throw the view back open, nor drag a reopened view onto the photo
     // it appends.
@@ -314,6 +320,7 @@ function SavedPhotos({ observation, gridReference, loadPhoto, onSetPhoto, onDele
 
   const openIndex = openId == null ? -1 : ids.indexOf(openId);
   const shown = openIndex < 0 ? null : photos[openIndex];
+  const atCap = ids.length >= MAX_PHOTOS;
 
   // The shown photo and the two either side of it: the next tap or swipe
   // must not wait on a read that could have happened while the surveyor was
@@ -373,12 +380,14 @@ function SavedPhotos({ observation, gridReference, loadPhoto, onSetPhoto, onDele
     event.target.value = '';
     if (!file || !onSetPhoto || !shown) return;
     setBusy('retake');
+    setError('');
     try {
       await onSetPhoto(observation.id, shown.id, file);
-    } catch {
-      // The parent (CapturePage) surfaces the failure on its own
-      // save-error line; this handler's only job is making sure busy
-      // resets below rather than leaving the row stuck on "Retaking…".
+    } catch (err) {
+      // Swallowed rather than rethrown — this handler's caller is the DOM,
+      // which can only turn a rejection into an unhandled one — but stated
+      // in the view the surveyor is actually looking at.
+      setError(err.message || 'Could not update the photo');
     } finally {
       setBusy(null);
     }
@@ -400,17 +409,19 @@ function SavedPhotos({ observation, gridReference, loadPhoto, onSetPhoto, onDele
     // has already been and gone.
     if (shown) pendingShowLastRef.current = true;
     setBusy('add');
+    setError('');
     try {
       await onSetPhoto(observation.id, null, file);
-    } catch {
+    } catch (err) {
       // Nothing landed, so there is nothing to jump to — and the intent must
       // not outlive the attempt, or some later append would drag the view
       // onto a photo the surveyor never took. Swallowed rather than
       // rethrown: this handler's caller is the DOM, which can only turn a
-      // rejection into an unhandled one. The parent (CapturePage) already
-      // surfaces the failure on its own save-error line — nothing more for
-      // this catch to report.
+      // rejection into an unhandled one. From inside the view the message
+      // below is what the surveyor sees; from the empty-slot Add photo link
+      // (no view to render it in) CapturePage's save-error line still is.
       pendingShowLastRef.current = false;
+      setError(err.message || 'Could not update the photo');
     } finally {
       setBusy(null);
     }
@@ -421,13 +432,24 @@ function SavedPhotos({ observation, gridReference, loadPhoto, onSetPhoto, onDele
     // has not settled the replacement id yet): there is nothing to delete,
     // and guessing at one would take the wrong photo.
     if (!shown) return;
+    // A gloved double-tap on the commit is one delete, not two: the second
+    // tap would otherwise ask for a photo the first has already taken.
+    // Keyed on 'delete' alone, not on busy at all — Delete deliberately
+    // stays live while an add is being written (a photo taken and not yet
+    // landed is no reason to refuse the surveyor a delete).
+    if (busy === 'delete') return;
+    setBusy('delete');
+    setError('');
     try {
       await onDeletePhoto(observation.id, shown.id);
-    } catch {
-      // The parent surfaces the failure on its own save-error line; stay on
-      // the confirm so the surveyor can retry rather than silently losing
-      // the tap to an unhandled rejection.
+    } catch (err) {
+      // Stay on the confirm so the surveyor can retry, and say why here —
+      // the shared save-error line is behind this scrim, so a delete that
+      // failed would otherwise look like a tap that did nothing at all.
+      setError(err.message || 'Could not update the photo');
       return;
+    } finally {
+      setBusy(null);
     }
     setConfirmingDelete(false);
     // Stay in the view on the neighbour — the next photo, or the previous
@@ -466,7 +488,11 @@ function SavedPhotos({ observation, gridReference, loadPhoto, onSetPhoto, onDele
   // line break between expressions. " · i of n" only where there is a strip
   // to be lost in: one of one says nothing. And only while the view is
   // actually on a photo — mid-retake there is no i to state, and "0 of 3"
-  // would be worse than the plain caption.
+  // would be worse than the plain caption. The caption is also the view's
+  // live region (aria-live="polite", set on the element below): the stage
+  // image carries alt="" because this line is what describes it, so this is
+  // the only thing that can announce a page turn. Polite, not assertive —
+  // paging is the surveyor's own doing.
   const caption =
     [formatTime(observation.fixAt), gridReference].filter(Boolean).join(' · ') +
     (ids.length > 1 && openIndex >= 0 ? ` · ${openIndex + 1} of ${ids.length}` : '');
@@ -536,28 +562,34 @@ function SavedPhotos({ observation, gridReference, loadPhoto, onSetPhoto, onDele
                   </g>
                 </svg>
               </button>
-              ${
-                // The arrows flank the stage, so the DOM order is the order a
-                // finger meets them. Only worth showing where there is
-                // somewhere to go.
-                ids.length > 1
-                  ? html`<button
-                      type="button"
-                      class="photo-lightbox-nav photo-lightbox-nav-prev"
-                      aria-label="Previous photo"
-                      disabled=${openIndex === 0}
-                      onClick=${() => show(openIndex - 1)}
-                    >
-                      <${ChevronGlyph} direction="prev" />
-                    </button>`
-                  : null
-              }
               <div
                 class="photo-lightbox-stage"
                 onPointerDown=${handleStagePointerDown}
                 onPointerUp=${handleStagePointerUp}
                 onPointerCancel=${handleStagePointerCancel}
               >
+                ${
+                  // The arrows live in the stage, not against the backdrop:
+                  // absolute against a fixed, full-screen box they hung at
+                  // the viewport's centre, which is exactly where the actions
+                  // row rises to when the photo is short. Bounded by the
+                  // stage they keep today's screen edges — deliberately not
+                  // anchored to the image, whose aspect ratio changes shot to
+                  // shot (docs/styling.md) — and can never reach Close, the
+                  // caption or the actions. DOM order is the order a finger
+                  // meets them; only worth showing with somewhere to go.
+                  ids.length > 1
+                    ? html`<button
+                        type="button"
+                        class="photo-lightbox-nav photo-lightbox-nav-prev"
+                        aria-label="Previous photo"
+                        disabled=${openIndex <= 0}
+                        onClick=${() => show(openIndex - 1)}
+                      >
+                        <${ChevronGlyph} direction="prev" />
+                      </button>`
+                    : null
+                }
                 ${
                   // draggable="false": a long press that drifts is a swipe on
                   // a phone and an image drag on a desktop, and the drag wins
@@ -576,21 +608,27 @@ function SavedPhotos({ observation, gridReference, loadPhoto, onSetPhoto, onDele
                         ${shownUrl === 'error' ? 'Photo could not be loaded' : 'Loading…'}
                       </p>`
                 }
+                ${
+                  ids.length > 1
+                    ? html`<button
+                        type="button"
+                        class="photo-lightbox-nav photo-lightbox-nav-next"
+                        aria-label="Next photo"
+                        disabled=${openIndex === ids.length - 1}
+                        onClick=${() => show(openIndex + 1)}
+                      >
+                        <${ChevronGlyph} direction="next" />
+                      </button>`
+                    : null
+                }
               </div>
+              <p class="photo-lightbox-caption" aria-live="polite">${caption}</p>
               ${
-                ids.length > 1
-                  ? html`<button
-                      type="button"
-                      class="photo-lightbox-nav photo-lightbox-nav-next"
-                      aria-label="Next photo"
-                      disabled=${openIndex === ids.length - 1}
-                      onClick=${() => show(openIndex + 1)}
-                    >
-                      <${ChevronGlyph} direction="next" />
-                    </button>`
-                  : null
+                // On the scrim, where the shared save-error line cannot be
+                // seen. Above the actions so a failed Delete explains the
+                // confirm that stayed put.
+                error ? html`<p class="photo-lightbox-error" role="alert">${error}</p>` : null
               }
-              <p class="photo-lightbox-caption">${caption}</p>
               ${
                 // Retake and Delete ride only where the parent passes the
                 // callbacks (the capture page's open session) — history
@@ -601,6 +639,7 @@ function SavedPhotos({ observation, gridReference, loadPhoto, onSetPhoto, onDele
                         <button
                           type="button"
                           class="photo-lightbox-delete-commit"
+                          disabled=${busy === 'delete'}
                           onClick=${handleDelete}
                         >
                           Delete photo
@@ -614,45 +653,55 @@ function SavedPhotos({ observation, gridReference, loadPhoto, onSetPhoto, onDele
                         </button>
                       </div>`
                     : html`<div class="photo-lightbox-actions">
-                        <label class="photo-lightbox-retake">
-                          <span class="glyph-camera" aria-hidden="true"></span>
-                          ${busy === 'retake' ? 'Retaking…' : 'Retake'}
-                          <input
-                            type="file"
-                            accept="image/*"
-                            capture="environment"
-                            disabled=${busy != null}
-                            onChange=${handleRetake}
-                          />
-                        </label>
+                          <label class="photo-lightbox-retake">
+                            <span class="glyph-camera" aria-hidden="true"></span>
+                            ${busy === 'retake' ? 'Retaking…' : 'Retake'}
+                            <input
+                              type="file"
+                              accept="image/*"
+                              capture="environment"
+                              disabled=${busy != null}
+                              onChange=${handleRetake}
+                            />
+                          </label>
+                          ${
+                            // Another photo of the same thing, taken from where
+                            // the surveyor is standing now, without going back
+                            // to the strip. At the cap it stays put and goes
+                            // disabled, with the cap line beside it — the
+                            // compose field's treatment exactly. Withholding it
+                            // would change the row's width and explain nothing.
+                            html`<label
+                              class="photo-lightbox-add"
+                              aria-disabled=${atCap ? 'true' : undefined}
+                            >
+                              <span class="glyph-camera" aria-hidden="true"></span>
+                              ${busy === 'add' ? 'Adding…' : 'Add'}
+                              <input
+                                type="file"
+                                accept="image/*"
+                                capture="environment"
+                                disabled=${busy != null || atCap}
+                                onChange=${handleAdd}
+                              />
+                            </label>`
+                          }
+                          <button
+                            type="button"
+                            class="photo-lightbox-link"
+                            onClick=${() => setConfirmingDelete(true)}
+                          >
+                            Delete
+                          </button>
+                        </div>
                         ${
-                          // Another photo of the same thing, taken from where
-                          // the surveyor is standing now, without going back
-                          // to the strip. Withheld at the cap rather than
-                          // offered and refused (CapturePage holds the same
-                          // line on the capture screen).
-                          ids.length < MAX_PHOTOS
-                            ? html`<label class="photo-lightbox-add">
-                                <span class="glyph-camera" aria-hidden="true"></span>
-                                ${busy === 'add' ? 'Adding…' : 'Add'}
-                                <input
-                                  type="file"
-                                  accept="image/*"
-                                  capture="environment"
-                                  disabled=${busy != null}
-                                  onChange=${handleAdd}
-                                />
-                              </label>`
+                          // Under the row, not in it: the same "say why the
+                          // control went dead" line the compose field prints,
+                          // in the on-scrim muted voice.
+                          atCap
+                            ? html`<p class="photo-lightbox-cap">${PHOTO_CAP_MESSAGE}</p>`
                             : null
-                        }
-                        <button
-                          type="button"
-                          class="photo-lightbox-link"
-                          onClick=${() => setConfirmingDelete(true)}
-                        >
-                          Delete
-                        </button>
-                      </div>`
+                        }`
                   : null
               }
             </div>
@@ -699,8 +748,8 @@ function NoteEditor({ observation, onEditNote, onClose }) {
 }
 
 // One row: the record's data first, then a single attachment strip (design
-// pass 4 §7a) — the photo chip or thumbnail, the voice chip, and Edit note
-// pushed right, on one line whose height no longer varies with how many
+// pass 4 §7a) — the photo thumbnails, the voice chip, and Edit note pushed
+// right, on one line whose height no longer varies with how many
 // attachments the row happens to carry. Editing state is row-local.
 function ObservationRow({
   obs,
@@ -737,11 +786,9 @@ function ObservationRow({
         )}`
       : null;
 
-  // 7e: Add photo is a link, not a chip — the chips mean "there is something
-  // here to open", and an empty slot is not that. Offered only where the
-  // parent passes onSetPhoto (the open session); a voice note is
-  // deliberately not addable here — recording one somewhere else, minutes
-  // later, describes the wrong place.
+  // A voice note is deliberately not addable here (7e) — recording one
+  // somewhere else, minutes later, describes the wrong place. The empty
+  // photo slot is SavedPhotos' own business; see its Add photo link.
   const hasStrip = Boolean(
     obs.photos?.length || obs.audioId || onEditNote || (onSetPhoto && !obs.photos?.length),
   );

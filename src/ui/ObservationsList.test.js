@@ -1445,11 +1445,20 @@ describe('ObservationsList — the photo view pages through the photos', () => {
     expect(caption()).toMatch(/1 of 3/);
   });
 
-  test('at the photo cap the view offers no Add', async () => {
+  test('at the photo cap Add stays put, disabled, with the cap line beside it', async () => {
+    // The compose field's treatment, not a vanishing control: a row of
+    // actions that changes width at the cap reads as a rendering fault, and
+    // an absent Add explains nothing about why.
     const ids = Array.from({ length: MAX_PHOTOS }, (_, index) => `p-${index + 1}`);
     await openPager(ids, 0, { onSetPhoto: vi.fn(), onDeletePhoto: vi.fn() });
 
-    expect(dialog().querySelector('label.photo-lightbox-add')).toBeNull();
+    const add = dialog().querySelector('label.photo-lightbox-add');
+    expect(add).not.toBeNull();
+    expect(add).toHaveAttribute('aria-disabled', 'true');
+    expect(add.querySelector('input')).toBeDisabled();
+    expect(
+      within(dialog()).getByText(`${MAX_PHOTOS} photos — the most one record holds`),
+    ).toBeInTheDocument();
     // Retake is unaffected — replacing a photo does not add one.
     expect(dialog().querySelector('label.photo-lightbox-retake')).not.toBeNull();
   });
@@ -1458,7 +1467,135 @@ describe('ObservationsList — the photo view pages through the photos', () => {
     const ids = Array.from({ length: MAX_PHOTOS - 1 }, (_, index) => `p-${index + 1}`);
     await openPager(ids, 0, { onSetPhoto: vi.fn(), onDeletePhoto: vi.fn() });
 
-    expect(dialog().querySelector('label.photo-lightbox-add')).not.toBeNull();
+    const add = dialog().querySelector('label.photo-lightbox-add');
+    expect(add).not.toBeNull();
+    expect(add).not.toHaveAttribute('aria-disabled');
+    expect(add.querySelector('input')).not.toBeDisabled();
+    expect(within(dialog()).queryByText(/most one record holds/)).toBeNull();
+  });
+
+  test('the arrows live inside the stage, so they can never reach the actions row', async () => {
+    // Absolute against the fixed backdrop, they sat at the viewport's centre
+    // — which is where the actions row rises to when the photo is short.
+    // Bounded by the stage instead, they keep the screen edges and stay off
+    // Close, the caption and the actions whatever the photo's shape.
+    await openPager(['p-1', 'p-2'], 0);
+
+    const stage = dialog().querySelector('.photo-lightbox-stage');
+    for (const name of [/previous photo/i, /next photo/i]) {
+      expect(screen.getByRole('button', { name }).closest('.photo-lightbox-stage')).toBe(stage);
+    }
+  });
+
+  test('a tap on an arrow inside the stage pages, and is never read as a swipe', async () => {
+    // The arrows sit in the stage's pointer stream now: a pointerdown on one
+    // starts a gesture the stage will measure. A tap travels nowhere, so it
+    // stays a tap — and the page turn must not also dismiss the view.
+    await openPager(['p-1', 'p-2', 'p-3'], 0);
+
+    const next = screen.getByRole('button', { name: /next photo/i });
+    fireEvent.pointerDown(next, { clientX: 340, clientY: 400 });
+    fireEvent.pointerUp(next, { clientX: 340, clientY: 400 });
+    fireEvent.click(next);
+
+    expect(shownSrc()).toBe('blob:p-2');
+    expect(screen.queryByRole('dialog')).not.toBeNull();
+  });
+
+  test('the caption announces the page turn', async () => {
+    // The image carries alt="" (the caption is what describes it), so the
+    // caption is the only thing that can say the page moved.
+    await openPager(['p-1', 'p-2'], 0);
+
+    expect(dialog().querySelector('.photo-lightbox-caption')).toHaveAttribute(
+      'aria-live',
+      'polite',
+    );
+  });
+
+  test('a retake that fails says so inside the view, and the next attempt clears it', async () => {
+    // CapturePage's shared save-error line renders behind this scrim — a
+    // failure the surveyor cannot see is a failure they will not retry.
+    const onSetPhoto = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('no room on the device'))
+      .mockResolvedValueOnce(undefined);
+    await openPager(['p-1', 'p-2'], 0, { onSetPhoto, onDeletePhoto: vi.fn() });
+
+    const retake = () => dialog().querySelector('label.photo-lightbox-retake input');
+    fireEvent.change(retake(), { target: { files: [FILE] } });
+
+    await waitFor(() =>
+      expect(within(dialog()).getByRole('alert')).toHaveTextContent('no room on the device'),
+    );
+
+    fireEvent.change(retake(), { target: { files: [FILE] } });
+
+    await waitFor(() => expect(within(dialog()).queryByRole('alert')).toBeNull());
+  });
+
+  test('an add that fails says so inside the view', async () => {
+    const onSetPhoto = vi.fn().mockRejectedValue(new Error('quota exceeded'));
+    await openPager(['p-1', 'p-2'], 0, { onSetPhoto, onDeletePhoto: vi.fn() });
+
+    fireEvent.change(dialog().querySelector('label.photo-lightbox-add input'), {
+      target: { files: [FILE] },
+    });
+
+    await waitFor(() =>
+      expect(within(dialog()).getByRole('alert')).toHaveTextContent('quota exceeded'),
+    );
+  });
+
+  test('a delete that fails says so on the confirm rather than looking ignored', async () => {
+    const onDeletePhoto = vi.fn().mockRejectedValue(new Error('locked by another tab'));
+    await openPager(['p-1', 'p-2'], 0, { onSetPhoto: vi.fn(), onDeletePhoto });
+
+    fireEvent.click(within(dialog()).getByRole('button', { name: /^delete$/i }));
+    fireEvent.click(within(dialog()).getByRole('button', { name: /delete photo/i }));
+
+    await waitFor(() =>
+      expect(within(dialog()).getByRole('alert')).toHaveTextContent('locked by another tab'),
+    );
+    expect(within(dialog()).getByRole('button', { name: /delete photo/i })).toBeInTheDocument();
+  });
+
+  test('closing the view drops the failure with it', async () => {
+    const onSetPhoto = vi.fn().mockRejectedValue(new Error('no room on the device'));
+    await openPager(['p-1', 'p-2'], 0, { onSetPhoto, onDeletePhoto: vi.fn() });
+
+    fireEvent.change(dialog().querySelector('label.photo-lightbox-retake input'), {
+      target: { files: [FILE] },
+    });
+    await waitFor(() => expect(within(dialog()).getByRole('alert')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole('button', { name: /close/i }));
+    fireEvent.click(screen.getByAltText('Photo for this observation (1 of 2)'));
+
+    expect(within(dialog()).queryByRole('alert')).toBeNull();
+  });
+
+  test('a gloved double-tap on Delete photo deletes once', async () => {
+    let resolveDelete;
+    const onDeletePhoto = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          resolveDelete = resolve;
+        }),
+    );
+    await openPager(['p-1', 'p-2'], 0, { onSetPhoto: vi.fn(), onDeletePhoto });
+
+    fireEvent.click(within(dialog()).getByRole('button', { name: /^delete$/i }));
+    const commit = within(dialog()).getByRole('button', { name: /delete photo/i });
+    fireEvent.click(commit);
+    fireEvent.click(commit);
+
+    expect(onDeletePhoto).toHaveBeenCalledTimes(1);
+    expect(commit).toBeDisabled();
+
+    await act(async () => {
+      resolveDelete();
+    });
   });
 
   test('a read-only row still pages, and offers neither Retake nor Add', async () => {

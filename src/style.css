@@ -3451,9 +3451,19 @@ button {
 /* The stage centres the image and is where the swipe-to-page gesture is
    read (handleStagePointerDown/Up in ObservationsList.js) — touch-action:
    pan-y leaves vertical scroll/pinch to the browser and hands the
-   horizontal axis to the swipe handler instead of the page. */
+   horizontal axis to the swipe handler instead of the page.
+
+   It is also the nav arrows' containing block (position: relative), and it
+   takes the column's spare height (flex: 1 1 auto; min-height: 0) so those
+   arrows are bounded by the photo's own band rather than by the viewport —
+   see .photo-lightbox-nav. */
 .photo-lightbox-stage {
+  position: relative;
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
   display: flex;
+  align-items: center;
   justify-content: center;
   max-width: 100%;
   touch-action: pan-y;
@@ -3488,12 +3498,14 @@ button {
   border-radius: var(--radius);
 }
 
-/* Only shown with more than one photo (ObservationsList.js), so both flank
-   the stage rather than the whole scrim — the same translucent-disc
-   treatment as Close, vertically centred against the fixed lightbox
-   itself (.photo-lightbox is the column flex box; without position:
-   absolute here these would stack in its flow instead of sitting at the
-   image's edges). */
+/* Only shown with more than one photo (ObservationsList.js). Absolute
+   against the STAGE, not the fixed .photo-lightbox: against the backdrop
+   their top: 50% was the viewport's centre, which is exactly where the
+   actions row rises to when the photo is short — the arrows would sit on
+   Retake/Delete. Bounded by the stage they keep the same screen edges
+   (left/right at --space-2; deliberately not anchored to the image, whose
+   aspect ratio changes shot to shot) and can never reach Close, the
+   caption or the actions. The same translucent-disc treatment as Close. */
 .photo-lightbox-nav {
   position: absolute;
   top: 50%;
@@ -3536,6 +3548,30 @@ button {
   font-size: var(--type-small);
   color: rgba(244, 240, 232, 0.75);
   text-align: center;
+}
+
+/* A row edit that failed, stated inside the view. CapturePage's shared
+   save-error line carries every other write failure, but it renders behind
+   this scrim — from in here it may as well not exist. The one light-on-dark
+   danger value (--danger-on-dark), used on the scrim and nowhere else, as
+   .photo-lightbox-delete-commit already is. */
+.photo-lightbox-error {
+  margin: 0;
+  width: 100%;
+  max-width: 24rem;
+  font-size: var(--type-small);
+  color: var(--danger-on-dark);
+}
+
+/* The saved view's cap line, the compose field's .photo-field-cap in the
+   on-scrim muted voice: it says why Add just went dead, rather than the
+   control quietly disappearing and taking the reason with it. */
+.photo-lightbox-cap {
+  margin: 0;
+  width: 100%;
+  max-width: 24rem;
+  font-size: var(--type-small);
+  color: rgba(244, 240, 232, 0.75);
 }
 
 /* Retake and Delete (§7e), above the home indicator. Neither is filled —
@@ -3586,6 +3622,14 @@ button {
   color: rgba(255, 255, 255, 0.8);
   text-decoration: underline;
   cursor: pointer;
+}
+
+/* At the cap: the sheet's "unavailable" opacity rather than a vanishing
+   control — the actions row keeps its width, and .photo-lightbox-cap
+   underneath says why. */
+.photo-lightbox-add[aria-disabled='true'] {
+  opacity: 0.55;
+  cursor: default;
 }
 
 .photo-lightbox-add input {

@@ -705,12 +705,21 @@ ${n > 1 ? 'attachment-strip-multi' : ''}"` on one element), so a descendant rule
   memory headroom for decoding rows nobody is scrolled to, and a session can hold dozens of
   photos across its rows — fetching everything at mount was never affordable, and a strip of
   several photos on one row makes the saving larger, not smaller.
-- **The lightbox pager**: Previous/Next (`.photo-lightbox-nav`, `-prev`/`-next`) are absolute
-  against `.photo-lightbox` — the fixed, scrimmed backdrop — not against the image. The stage
-  centres a photo whose aspect ratio varies shot to shot, so anchoring the arrows to the image
-  would walk them around the screen as the surveyor pages; anchoring them to the scrim instead
-  holds them at the same left/right edge, `top: 50%` / `translateY(-50%)`, for every photo in
-  the strip. They wear Close's translucent-disc treatment (`rgba(0,0,0,.45)` fill, a hairline
+- **The lightbox pager**: Previous/Next (`.photo-lightbox-nav`, `-prev`/`-next`) live inside
+  `.photo-lightbox-stage` and are absolute against it — **not** against the image, and no
+  longer against the fixed backdrop. Not the image, because the stage centres a photo whose
+  aspect ratio varies shot to shot: anchoring there would walk the arrows around the screen as
+  the surveyor pages. Not the backdrop either, though that is where they started: `top: 50%`
+  against a full-screen fixed box is the _viewport's_ centre, which is exactly where the
+  actions row rises to when the photo is short — the arrows landed on Retake and Delete. The
+  stage is now `position: relative` and takes the column's spare height (`flex: 1 1 auto` with
+  `min-height: 0`, centring its image), so arrows absolute against it keep the same screen
+  edges (`left`/`right: var(--space-2)`, `top: 50%` / `translateY(-50%)`) while being bounded
+  by the photo's own band — they can never reach Close, the caption or the actions. Being
+  inside the
+  stage puts them in its pointer stream, which is harmless: `swipeRef` is set on `pointerdown`
+  and a tap travels nowhere, so a nav tap stays a tap and the button's click pages as normal.
+  They wear Close's translucent-disc treatment (`rgba(0,0,0,.45)` fill, a hairline
   border) rather than a new one, and `:disabled { opacity: .3 }` marks the ends — Previous dead
   at photo 1, Next dead at the last — rather than hiding the control and having the row of
   controls change width. The caption changed from a bare "time · grid reference" line to one
@@ -728,6 +737,11 @@ ${n > 1 ? 'attachment-strip-multi' : ''}"` on one element), so a descendant rule
   a swipe's distance/direction test passes, consulted once by the very next click, and cleared
   either by that consultation or by the next `pointerdown` anywhere in the view — so the
   suppression lasts exactly one gesture, never longer.
+- **The caption is the pager's live region** (`aria-live="polite"`), so "2 of 5" is read when
+  the page turns. Polite rather than assertive: paging is the surveyor's own doing, and it
+  belongs after whatever is being read, not over it. It is the only thing that can announce a
+  turn — the stage image carries `alt=""` deliberately, because this line is what describes it
+  and alt text would only double the announcement.
 - **The overlay is mounted on "a view is open", not on the photo.** The portal's condition is
   `openId != null`, never "the photo that id names still exists" — because on the render that
   delivers a retake it briefly does not. Gating on the photo would tear the overlay off the
@@ -743,7 +757,7 @@ ${n > 1 ? 'attachment-strip-multi' : ''}"` on one element), so a descendant rule
   paint, which photo it is now on. This runs as a layout effect, not a passive one, so the
   replacement id (or the neighbour, on a delete, or `null` when nothing is left) is settled
   while the DOM is still uncommitted: the browser paints the new photo, not a frame of the
-  stand-in. It is the *content* the layout timing protects — the overlay itself never goes
+  stand-in. It is the _content_ the layout timing protects — the overlay itself never goes
   anywhere, per the bullet above.
 - **Writers on the shown photo**: Retake and Add both ride the same file input shape as the
   fourth pass described, but Add is not a new writer — it is the existing `onSetPhoto` called
@@ -752,12 +766,26 @@ ${n > 1 ? 'attachment-strip-multi' : ''}"` on one element), so a descendant rule
   the fourth pass described; deleting one of several instead lands the view on a neighbour —
   the next photo where there is one, the previous where there is not — so a run of bad photos
   can be cleared without reopening the view each time.
-- **The shared save-error line now carries row-edit failures.** Retake, Add and Delete on a
-  saved row funnel through `CapturePage`'s existing `save-error` `panel-danger role="alert"`
-  line — the one every other write failure already uses — rather than failing silently or
-  inventing a second error surface. The row's own handler still resets its local busy state on
-  failure (via a rethrow the parent's `try/catch` doesn't swallow), and the error clears at the
-  start of the next attempt, the same way `handleSave` already clears its own.
+- **A failure inside the view is stated inside the view** (`.photo-lightbox-error`,
+  `role="alert"`, above the actions row). Row edits from the _strip_ still funnel through
+  `CapturePage`'s shared `save-error` line — the one every other write failure uses — but that
+  line renders behind a `position: fixed; z-index: 10` scrim, so from inside the full-screen
+  view it may as well not exist. Delete was the worst of the three: on a failed write the
+  confirm just sat there, saying nothing. The message is the thrown `error.message`, falling
+  back to "Could not update the photo"; it clears at the start of the next attempt and on close,
+  the same way `handleSave` clears its own. It inks in `--danger-on-dark`, the one light-on-dark
+  danger value, used on this scrim and nowhere else — as `.photo-lightbox-delete-commit`
+  already does.
+- **The confirm is single-shot** (`disabled` while its own write is in flight, and the handler
+  refuses a second call): a gloved double-tap on Delete photo is one delete, not two. Keyed on
+  that write alone, never on `busy` generally — Delete deliberately stays live while an _add_
+  is still being written.
+- **At the cap the view's Add stays put and goes dead**, `aria-disabled` with its input
+  disabled at the sheet's "unavailable" opacity, and `.photo-lightbox-cap` prints the same
+  sentence the compose field does in the on-scrim muted voice. Withholding the control
+  (which is what shipped first) changed the actions row's width and explained nothing. The
+  sentence itself is `PHOTO_CAP_MESSAGE` in `src/ui/format.js`, built from `MAX_PHOTOS` and
+  shared with `.photo-field-cap`, so the copy cannot drift from the cap it describes.
 - **Night and touch extensions**: the night list picks up `.photo-field-thumb img` alongside
   the existing saved-thumb and lightbox-image dimming rules — a compose-time thumb dims exactly
   like a saved one, rather than staying full-brightness until the surveyor saves. The
@@ -777,8 +805,6 @@ ${n > 1 ? 'attachment-strip-multi' : ''}"` on one element), so a descendant rule
   unmount, or the id leaving `photos[]`, frees it. A long session's worth of scrolled-past rows
   each holding a handful of live object URLs was not measured against the memory ceiling that
   motivated the viewport-lazy fetch in the first place.
-- **Paging carries no live region.** Next/Previous update the caption and the image, but a
-  screen-reader user gets no announcement that the page turned — nothing reads "2 of 5" aloud
-  on its own. This is a design call left open, not an oversight fixed elsewhere: the caption is
-  visually present and the buttons are labelled, but nothing currently pushes the page change
-  itself to assistive technology.
+- **No richer pager semantics.** The caption's live region (above) is the whole of what a
+  screen-reader user gets on a page turn: no roving focus, no `aria-roledescription` carousel
+  wrapper, and nothing that describes the photograph itself.
