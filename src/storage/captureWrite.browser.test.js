@@ -35,4 +35,51 @@ describe('saveObservationWithPhoto against real IndexedDB', () => {
 
     db.close();
   });
+
+  test('writes every photo of a multi-photo observation in the one transaction', async () => {
+    // Two photos, both records and both slots, against a real engine: the
+    // node tier proves the loop, this proves the multi-put transaction and
+    // that capture order survives a real round trip.
+    const db = await openDatabase(`browser-capture-write-multi-${Math.random()}`);
+    const observation = createObservation({
+      id: 'obs-2',
+      sessionId: 'sess-1',
+      recordedAt: '2026-08-06T10:00:00.000Z',
+      fixAt: '2026-08-06T10:00:00.000Z',
+      lat: 51.5,
+      lon: -0.14,
+      gpsAccuracyM: 8,
+      referenceObservationId: 'ref-1',
+      photos: [
+        { id: 'p1', referencePhoto: 'ref-1.jpg' },
+        { id: 'p2', referencePhoto: null },
+      ],
+    });
+
+    await saveObservationWithPhoto(db, {
+      observation,
+      photos: [
+        {
+          id: 'p1',
+          blob: new Blob(['first browser bytes'], { type: 'image/jpeg' }),
+          contentType: 'image/jpeg',
+        },
+        {
+          id: 'p2',
+          blob: new Blob(['second browser bytes'], { type: 'image/jpeg' }),
+          contentType: 'image/jpeg',
+        },
+      ],
+    });
+
+    const stored = await getObservation(db, 'obs-2');
+    expect(stored.photos).toEqual([
+      { id: 'p1', referencePhoto: 'ref-1.jpg' },
+      { id: 'p2', referencePhoto: null },
+    ]);
+    expect(await (await getPhoto(db, 'p1')).blob.text()).toBe('first browser bytes');
+    expect(await (await getPhoto(db, 'p2')).blob.text()).toBe('second browser bytes');
+
+    db.close();
+  });
 });

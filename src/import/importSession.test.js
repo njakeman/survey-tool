@@ -738,3 +738,107 @@ describe('traced observations through the round trip', () => {
     expect(obs.referenceObservationId).toBe('ref-1');
   });
 });
+
+describe('two photos with per-photo pairing survive a full export → import → export', () => {
+  test('the re-exported session.geojson matches the original, ids aside', async () => {
+    // The byte-identical claim, end to end: canonical-json means identical
+    // content produces identical bytes, so if order, per-photo pairing and
+    // every property survive the copy, the second export's text differs from
+    // the first only where import deliberately mints something new.
+    const db = await openDatabase('roundtrip-two-photos-source');
+    const service = createCaptureService({
+      db,
+      newId: fakeIdGenerator('orig'),
+      nowIso: () => FIXED_NOW,
+    });
+    const source = await service.startSession('Long Barrow revisit', {
+      reference: {
+        filename: 'long-barrow-2025-04-12.zip',
+        hash: 'a'.repeat(64),
+        sessionId: 'ref-sess-1',
+        sessionName: 'Long Barrow south',
+        startedAt: '2025-04-12T09:00:00.000Z',
+        stationCount: 1,
+        photoCount: 1,
+      },
+      referenceBuffer: new Uint8Array([0x50, 0x4b, 3, 4]).buffer,
+    });
+    await service.saveObservation({
+      reading: { lat: 51.5, lon: -0.14, accuracyM: 8.2, fixAt: '2026-08-06T09:59:20.000Z' },
+      heading: null,
+      note: 'stile, both faces',
+      photos: [
+        // The framed one answers a reference photo; the second is an extra
+        // the surveyor took of the same station.
+        {
+          blob: new Blob([new Uint8Array([1, 2, 3, 4])], { type: 'image/jpeg' }),
+          referencePhoto: 'ref-1.jpg',
+        },
+        { blob: new Blob([new Uint8Array([5, 6, 7, 8])], { type: 'image/jpeg' }) },
+      ],
+      station: { referenceObservationId: 'ref-1' },
+    });
+    await service.endSession();
+
+    const firstExport = await buildSessionExport(db, {
+      sessionId: source.id,
+      appVersion: '0.9.0',
+    });
+    const parsed = parseSessionExport(await toReaderEntries(firstExport.entries));
+
+    const targetDb = await openDatabase('roundtrip-two-photos-target');
+    const { sessionId: copyId } = await writeImportedSession(targetDb, parsed, {
+      newId: fakeIdGenerator('copy'),
+    });
+
+    // Both photos travelled, in capture order, each keeping its own pairing.
+    const [copy] = await listObservationsForSession(targetDb, copyId);
+    expect(copy.photos.map((entry) => entry.referencePhoto)).toEqual(['ref-1.jpg', null]);
+    expect(copy.referenceObservationId).toBe('ref-1');
+    expect([
+      ...new Uint8Array(await (await getPhoto(targetDb, copy.photos[0].id)).blob.arrayBuffer()),
+    ]).toEqual([1, 2, 3, 4]);
+    expect([
+      ...new Uint8Array(await (await getPhoto(targetDb, copy.photos[1].id)).blob.arrayBuffer()),
+    ]).toEqual([5, 6, 7, 8]);
+    expect(firstExport.entries.filter((entry) => entry.name.startsWith('photos/'))).toHaveLength(2);
+
+    const secondExport = await buildSessionExport(targetDb, {
+      sessionId: copyId,
+      appVersion: '0.9.0',
+    });
+    const textOf = (result) =>
+      result.entries.find((entry) => entry.name === 'session.geojson').input;
+
+    // Everything import deliberately mints afresh, plus the two things a
+    // copy is honest about not being: it carries the original's name and
+    // times but its own identity, and a revisit's station list belongs to
+    // the session that walked it — the copy is a plain closed survey.
+    const normalise = (text, session) => {
+      const collection = JSON.parse(text);
+      delete collection.survey_revisit;
+      collection.survey_session = { name: session.name, started_at: session.startedAt };
+      collection.features.forEach((feature, index) => {
+        feature.properties.obs_id = `obs-${index}`;
+        feature.properties.photos = feature.properties.photos.map((entry, slot) => ({
+          ...entry,
+          photo: `photo-${index}-${slot}.jpg`,
+        }));
+        // The flat `photo`/`ref_photo` pair keeps naming the first photo, so
+        // it carries a minted id too.
+        if (feature.properties.photo) feature.properties.photo = `photo-${index}-0.jpg`;
+      });
+      return JSON.stringify(collection);
+    };
+    const [sourceSession] = (await listSessions(db)).filter((s) => s.id === source.id);
+    const [copySession] = (await listSessions(targetDb)).filter((s) => s.id === copyId);
+
+    expect(normalise(textOf(secondExport), copySession)).toBe(
+      normalise(textOf(firstExport), sourceSession),
+    );
+    // The survey_revisit member is the source's alone — a copy of a revisit
+    // is a plain closed survey, with the pairing intact.
+    expect(JSON.parse(textOf(firstExport))).toHaveProperty('survey_revisit');
+    expect(JSON.parse(textOf(secondExport))).not.toHaveProperty('survey_revisit');
+  });
+});
