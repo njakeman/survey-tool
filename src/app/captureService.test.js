@@ -64,7 +64,7 @@ describe('listSessions', () => {
     const service = await makeService('capture-service-list-sessions-all');
     const first = await service.startSession('Site A');
     // Ending an empty session discards it, so the closed one needs a record.
-    await service.saveObservation({ reading: READING, heading: null, note: '', photo: null });
+    await service.saveObservation({ reading: READING, heading: null, note: '', photos: [] });
     await service.endSession();
     const second = await service.startSession('Site B');
 
@@ -130,7 +130,7 @@ describe('endSession — a session with nothing recorded is discarded', () => {
   test('a session with observations closes as ever, and says so', async () => {
     const service = await makeService('capture-service-end-kept');
     await service.startSession('Real work');
-    await service.saveObservation({ reading: READING, heading: null, note: '', photo: null });
+    await service.saveObservation({ reading: READING, heading: null, note: '', photos: [] });
 
     const result = await service.endSession();
 
@@ -154,7 +154,7 @@ describe('reopenSession', () => {
   test('makes a past session the open one again, ready to capture into', async () => {
     const service = await makeService('capture-service-reopen');
     const session = await service.startSession('Ashton Keynes');
-    await service.saveObservation({ reading: READING, heading: null, note: '', photo: null });
+    await service.saveObservation({ reading: READING, heading: null, note: '', photos: [] });
     await service.endSession();
 
     const reopened = await service.reopenSession(session.id);
@@ -168,7 +168,7 @@ describe('reopenSession', () => {
       reading: READING,
       heading: null,
       note: 'back again',
-      photo: null,
+      photos: [],
     });
     expect(observation.sessionId).toBe(session.id);
   });
@@ -177,7 +177,7 @@ describe('reopenSession', () => {
     let now = FIXED_NOW;
     const service = await makeService('capture-service-reopen-end', { nowIso: () => now });
     const session = await service.startSession('Ashton Keynes');
-    await service.saveObservation({ reading: READING, heading: null, note: '', photo: null });
+    await service.saveObservation({ reading: READING, heading: null, note: '', photos: [] });
     await service.endSession();
 
     await service.reopenSession(session.id);
@@ -193,7 +193,7 @@ describe('reopenSession', () => {
     // would just stop receiving observations.
     const service = await makeService('capture-service-reopen-busy');
     const past = await service.startSession('Site A');
-    await service.saveObservation({ reading: READING, heading: null, note: '', photo: null });
+    await service.saveObservation({ reading: READING, heading: null, note: '', photos: [] });
     await service.endSession();
     await service.startSession('Site B');
 
@@ -210,7 +210,7 @@ describe('reopenSession', () => {
     const db = await openDatabase('capture-service-reopen-exported');
     const service = createCaptureService({ db, newId: fakeIdGenerator(), nowIso: () => FIXED_NOW });
     const session = await service.startSession('Ashton Keynes');
-    await service.saveObservation({ reading: READING, heading: null, note: '', photo: null });
+    await service.saveObservation({ reading: READING, heading: null, note: '', photos: [] });
     await service.endSession();
     const stored = await db.get('sessions', session.id);
     await db.put('sessions', {
@@ -231,7 +231,7 @@ describe('deleteSession', () => {
     const db = await openDatabase('capture-service-delete-session');
     const service = createCaptureService({ db, newId: fakeIdGenerator(), nowIso: () => FIXED_NOW });
     const session = await service.startSession('Ashton Keynes');
-    await service.saveObservation({ reading: READING, heading: null, note: 'gate', photo: null });
+    await service.saveObservation({ reading: READING, heading: null, note: 'gate', photos: [] });
     await service.endSession();
 
     await service.deleteSession(session.id);
@@ -284,18 +284,18 @@ describe('deleteExportedSessions', () => {
   test('deletes only closed sessions whose every observation has been exported', async () => {
     const { db, service } = await makeDbService('capture-service-purge');
     const exported = await service.startSession('Fully exported');
-    await service.saveObservation({ reading: READING, heading: null, note: '', photo: null });
+    await service.saveObservation({ reading: READING, heading: null, note: '', photos: [] });
     await service.endSession();
     await stampExported(db, exported.id, 1);
 
     const partial = await service.startSession('Partly exported');
-    await service.saveObservation({ reading: READING, heading: null, note: '', photo: null });
-    await service.saveObservation({ reading: READING, heading: null, note: '', photo: null });
+    await service.saveObservation({ reading: READING, heading: null, note: '', photos: [] });
+    await service.saveObservation({ reading: READING, heading: null, note: '', photos: [] });
     await service.endSession();
     await stampExported(db, partial.id, 1); // one of two exported
 
     const never = await service.startSession('Never exported');
-    await service.saveObservation({ reading: READING, heading: null, note: '', photo: null });
+    await service.saveObservation({ reading: READING, heading: null, note: '', photos: [] });
     await service.endSession();
 
     const result = await service.deleteExportedSessions();
@@ -308,7 +308,7 @@ describe('deleteExportedSessions', () => {
   test('never touches the open session, even a fully exported one', async () => {
     const { db, service } = await makeDbService('capture-service-purge-open');
     const open = await service.startSession('Live');
-    await service.saveObservation({ reading: READING, heading: null, note: '', photo: null });
+    await service.saveObservation({ reading: READING, heading: null, note: '', photos: [] });
     await stampExported(db, open.id, 1);
 
     const result = await service.deleteExportedSessions();
@@ -320,7 +320,7 @@ describe('deleteExportedSessions', () => {
   test('with nothing eligible, deletes nothing and reports zero', async () => {
     const service = await makeService('capture-service-purge-empty');
     await service.startSession('Only session');
-    await service.saveObservation({ reading: READING, heading: null, note: '', photo: null });
+    await service.saveObservation({ reading: READING, heading: null, note: '', photos: [] });
     await service.endSession();
 
     expect(await service.deleteExportedSessions()).toEqual({ deletedCount: 0 });
@@ -334,7 +334,7 @@ describe('deleteExportedSessions', () => {
       reading: READING,
       heading: null,
       note: '',
-      photo: null,
+      photos: [],
     });
     await service.endSession();
     await stampExported(db, session.id, 1);
@@ -360,7 +360,7 @@ describe('updateNote', () => {
       reading: READING,
       heading: null,
       note: 'gate post',
-      photo: null,
+      photos: [],
     });
 
     await service.updateNote(saved.id, '  hinge broken  ');
@@ -376,7 +376,7 @@ describe('updateNote', () => {
       reading: READING,
       heading: null,
       note: 'wrong field',
-      photo: null,
+      photos: [],
     });
 
     await service.updateNote(saved.id, null);
@@ -397,7 +397,7 @@ describe('updateNote', () => {
       reading: READING,
       heading: null,
       note: 'gate post',
-      photo: null,
+      photos: [],
     });
 
     await service.updateNote(saved.id, 'hinge broken');
@@ -409,53 +409,120 @@ describe('updateNote', () => {
   });
 });
 
-describe('setPhoto / deletePhoto — the post-save photo edits', () => {
+describe('addPhoto / replacePhoto / deletePhoto — the post-save photo edits', () => {
   const JPEG = () => new Blob(['retaken jpeg'], { type: 'image/jpeg' });
 
-  test('setPhoto attaches under a fresh id and stamps the change marks', async () => {
-    const service = await makeService('capture-service-set-photo');
+  test('addPhoto attaches a new photo under a fresh id and stamps the change marks', async () => {
+    const service = await makeService('capture-service-add-photo');
     const session = await service.startSession('Ashton Keynes');
     const saved = await service.saveObservation({
       reading: READING,
       heading: null,
       note: '',
-      photo: { blob: new Blob(['first jpeg'], { type: 'image/jpeg' }) },
+      photos: [{ blob: new Blob(['first jpeg'], { type: 'image/jpeg' }) }],
     });
 
-    await service.setPhoto(saved.id, { blob: JPEG() });
+    await service.addPhoto(saved.id, { blob: JPEG() });
 
     const [observation] = await service.listObservations(session.id);
-    expect(observation.photoId).not.toBe(saved.photoId);
+    expect(observation.photos).toHaveLength(2);
+    expect(observation.photos[0].id).toBe(saved.photos[0].id);
     expect(observation.changedAt).toBe(FIXED_NOW);
-    // The old record is gone; the new one reads back.
-    expect(await service.getPhoto(saved.photoId)).toBeUndefined();
-    const photo = await service.getPhoto(observation.photoId);
+    const photo = await service.getPhoto(observation.photos[1].id);
     expect(await photo.blob.text()).toBe('retaken jpeg');
   });
 
-  test('deletePhoto clears the link, deletes the record and stamps the marks', async () => {
+  test('replacePhoto swaps a photo record in place under a fresh id and stamps the change marks', async () => {
+    const service = await makeService('capture-service-replace-photo');
+    const session = await service.startSession('Ashton Keynes');
+    const saved = await service.saveObservation({
+      reading: READING,
+      heading: null,
+      note: '',
+      photos: [{ blob: new Blob(['first jpeg'], { type: 'image/jpeg' }) }],
+    });
+    const originalPhotoId = saved.photos[0].id;
+
+    await service.replacePhoto(saved.id, originalPhotoId, { blob: JPEG() });
+
+    const [observation] = await service.listObservations(session.id);
+    expect(observation.photos).toHaveLength(1);
+    expect(observation.photos[0].id).not.toBe(originalPhotoId);
+    expect(observation.changedAt).toBe(FIXED_NOW);
+    // The old record is gone; the new one reads back.
+    expect(await service.getPhoto(originalPhotoId)).toBeUndefined();
+    const photo = await service.getPhoto(observation.photos[0].id);
+    expect(await photo.blob.text()).toBe('retaken jpeg');
+  });
+
+  test('deletePhoto clears one photo, deletes its record and stamps the marks', async () => {
     const service = await makeService('capture-service-delete-photo');
     const session = await service.startSession('Ashton Keynes');
     const saved = await service.saveObservation({
       reading: READING,
       heading: null,
       note: '',
-      photo: { blob: JPEG() },
+      photos: [{ blob: JPEG() }],
     });
+    const photoId = saved.photos[0].id;
 
-    await service.deletePhoto(saved.id);
+    await service.deletePhoto(saved.id, photoId);
 
     const [observation] = await service.listObservations(session.id);
-    expect(observation.photoId).toBeNull();
+    expect(observation.photos).toEqual([]);
     expect(observation.changedAt).toBe(FIXED_NOW);
-    expect(await service.getPhoto(saved.photoId)).toBeUndefined();
+    expect(await service.getPhoto(photoId)).toBeUndefined();
     const [stored] = await service.listSessions();
     expect(stored.changedSinceExportAt).toBe(FIXED_NOW);
+  });
+
+  test('add, then replace, then delete leave the photos in the right order with the kept reference pairing', async () => {
+    const service = await makeService('capture-service-photo-lifecycle');
+    const session = await service.startSession('Ashton Keynes');
+    const saved = await service.saveObservation({
+      reading: READING,
+      heading: null,
+      note: '',
+      photos: [
+        { blob: new Blob(['first'], { type: 'image/jpeg' }), referencePhoto: 'r1.jpg' },
+        { blob: new Blob(['second'], { type: 'image/jpeg' }) },
+      ],
+      station: { referenceObservationId: 'ref-9' },
+    });
+    const [firstId, secondId] = saved.photos.map((p) => p.id);
+
+    // Append a third.
+    await service.addPhoto(saved.id, { blob: new Blob(['third'], { type: 'image/jpeg' }) });
+    let [observation] = await service.listObservations(session.id);
+    expect(observation.photos).toHaveLength(3);
+    const thirdId = observation.photos[2].id;
+
+    // Replace the first (the one with the reference pairing) in place.
+    await service.replacePhoto(saved.id, firstId, {
+      blob: new Blob(['first retaken'], { type: 'image/jpeg' }),
+    });
+    [observation] = await service.listObservations(session.id);
+    expect(observation.photos).toHaveLength(3);
+    const replacedFirstId = observation.photos[0].id;
+    // Order preserved: replaced-first, second, third.
+    expect(observation.photos.map((p) => p.id)).toEqual([replacedFirstId, secondId, thirdId]);
+    // The reference pairing survives the replace.
+    expect(observation.photos[0].referencePhoto).toBe('r1.jpg');
+    // The old record for the replaced slot is gone.
+    expect(await service.getPhoto(firstId)).toBeUndefined();
+    const replacedPhoto = await service.getPhoto(replacedFirstId);
+    expect(await replacedPhoto.blob.text()).toBe('first retaken');
+
+    // Delete the middle one.
+    await service.deletePhoto(saved.id, secondId);
+    [observation] = await service.listObservations(session.id);
+    expect(observation.photos.map((p) => p.id)).toEqual([replacedFirstId, thirdId]);
+    expect(await service.getPhoto(secondId)).toBeUndefined();
   });
 });
 
 describe('getPhoto', () => {
-  test('returns the saved photo as { id, contentType, blob } for an observation id', async () => {
+  test('returns a saved photo as { id, contentType, blob } for its own id', async () => {
     const service = await makeService('capture-service-get-photo');
     await service.startSession('Ashton Keynes');
     const blob = new Blob(['fake jpeg bytes'], { type: 'image/jpeg' });
@@ -463,11 +530,11 @@ describe('getPhoto', () => {
       reading: READING,
       heading: null,
       note: '',
-      photo: { blob },
+      photos: [{ blob }],
     });
 
-    const record = await service.getPhoto(obs.id);
-    expect(record.id).toBe(obs.id);
+    const record = await service.getPhoto(obs.photos[0].id);
+    expect(record.id).toBe(obs.photos[0].id);
     expect(record.contentType).toBe('image/jpeg');
     expect(await record.blob.text()).toBe('fake jpeg bytes');
   });
@@ -484,7 +551,7 @@ describe('saveObservation', () => {
     const service = createCaptureService({ db, newId: fakeIdGenerator(), nowIso: () => FIXED_NOW });
 
     await expect(
-      service.saveObservation({ reading: READING, heading: null, note: '', photo: null }),
+      service.saveObservation({ reading: READING, heading: null, note: '', photos: [] }),
     ).rejects.toThrow(/no open session/);
     expect(await listObservationsForSession(db, 'anything')).toEqual([]);
   });
@@ -493,11 +560,11 @@ describe('saveObservation', () => {
     const service = await makeService('capture-service-save-no-reading');
     await service.startSession('Ashton Keynes');
     await expect(
-      service.saveObservation({ reading: null, heading: null, note: '', photo: null }),
+      service.saveObservation({ reading: null, heading: null, note: '', photos: [] }),
     ).rejects.toThrow(/no position fix yet/);
   });
 
-  test('saves an observation with no photo: photoId is null, no photo record written', async () => {
+  test('saves an observation with no photos: photos is empty, no photo record written', async () => {
     const db = await openDatabase('capture-service-save-no-photo');
     const service = createCaptureService({ db, newId: fakeIdGenerator(), nowIso: () => FIXED_NOW });
     await service.startSession('Ashton Keynes');
@@ -506,14 +573,14 @@ describe('saveObservation', () => {
       reading: READING,
       heading: null,
       note: '',
-      photo: null,
+      photos: [],
     });
 
-    expect(obs.photoId).toBeNull();
+    expect(obs.photos).toEqual([]);
     expect(await getPhoto(db, obs.id)).toBeUndefined();
   });
 
-  test('saves an observation with a photo: photoId equals the observation id, blob round-trips', async () => {
+  test('saves an observation with a photo: the photo id is fresh (not the observation id), blob round-trips', async () => {
     const db = await openDatabase('capture-service-save-with-photo');
     const service = createCaptureService({ db, newId: fakeIdGenerator(), nowIso: () => FIXED_NOW });
     await service.startSession('Ashton Keynes');
@@ -523,13 +590,45 @@ describe('saveObservation', () => {
       reading: READING,
       heading: null,
       note: '',
-      photo: { blob },
+      photos: [{ blob }],
     });
 
-    expect(obs.photoId).toBe(obs.id);
-    const stored = await getPhoto(db, obs.id);
+    expect(obs.photos).toHaveLength(1);
+    expect(obs.photos[0].id).not.toBe(obs.id);
+    const stored = await getPhoto(db, obs.photos[0].id);
     expect(stored.contentType).toBe('image/jpeg');
     expect(await stored.blob.text()).toBe('fake jpeg bytes');
+  });
+
+  test('saves several photos with fresh ids and per-photo reference pairing', async () => {
+    const jpeg = (text) => new Blob([text], { type: 'image/jpeg' });
+    const service = await makeService('capture-service-save-multi-photo');
+    await service.startSession('2026-08-21', {
+      reference: {
+        filename: 'ref.zip',
+        hash: 'a'.repeat(64),
+        sessionId: 'ref-sess-1',
+        sessionName: 'Ref',
+        startedAt: '2025-04-12T09:00:00.000Z',
+        stationCount: 1,
+        photoCount: 1,
+      },
+      referenceBuffer: new Uint8Array([0x50, 0x4b, 3, 4]).buffer,
+    });
+
+    const obs = await service.saveObservation({
+      reading: READING,
+      heading: null,
+      note: '',
+      photos: [{ blob: jpeg('a'), referencePhoto: 'r1.jpg' }, { blob: jpeg('b') }],
+      station: { referenceObservationId: 'ref-1' },
+    });
+
+    expect(obs.photos).toHaveLength(2);
+    expect(obs.photos[0].id).not.toBe(obs.id);
+    expect(obs.photos[0].referencePhoto).toBe('r1.jpg');
+    expect(obs.photos[1].referencePhoto).toBeNull();
+    expect(await service.getPhoto(obs.photos[1].id)).toBeDefined();
   });
 
   test('a voice note save carries its measured duration onto the record', async () => {
@@ -542,7 +641,7 @@ describe('saveObservation', () => {
       reading: READING,
       heading: null,
       note: '',
-      photo: null,
+      photos: [],
       audio: { blob: new Blob(['opus bytes'], { type: 'audio/webm' }), durationMs: 12_400 },
     });
 
@@ -558,7 +657,7 @@ describe('saveObservation', () => {
       reading: READING,
       heading: null,
       note: '',
-      photo: null,
+      photos: [],
     });
 
     expect(obs.headingDeg).toBeNull();
@@ -573,7 +672,7 @@ describe('saveObservation', () => {
       reading: READING,
       heading: HEADING,
       note: '',
-      photo: null,
+      photos: [],
     });
 
     expect(obs.headingDeg).toBe(271.5);
@@ -588,7 +687,7 @@ describe('saveObservation', () => {
       reading: READING,
       heading: null,
       note: '  gate post  ',
-      photo: null,
+      photos: [],
     });
 
     expect(obs.note).toBe('gate post');
@@ -602,7 +701,7 @@ describe('saveObservation', () => {
       reading: READING,
       heading: null,
       note: undefined,
-      photo: null,
+      photos: [],
     });
 
     expect(obs.note).toBe('');
@@ -617,7 +716,7 @@ describe('saveObservation', () => {
       reading: READING,
       heading: null,
       note: '',
-      photo: null,
+      photos: [],
     });
 
     expect(obs.sessionId).toBe(session.id);
@@ -633,7 +732,7 @@ describe('saveObservation', () => {
       reading: READING,
       heading: null,
       note: '',
-      photo: null,
+      photos: [],
     });
 
     expect(obs.fixAt).toBe(READING.fixAt);
@@ -649,13 +748,13 @@ describe('saveObservation', () => {
       reading: READING,
       heading: null,
       note: '',
-      photo: null,
+      photos: [],
     });
     const second = await service.saveObservation({
       reading: READING,
       heading: null,
       note: '',
-      photo: null,
+      photos: [],
     });
 
     expect(second.id).not.toBe(first.id);
@@ -670,10 +769,10 @@ describe('countObservations', () => {
     const session = await service.startSession('Ashton Keynes');
 
     expect(await service.countObservations(session.id)).toBe(0);
-    await service.saveObservation({ reading: READING, heading: null, note: '', photo: null });
+    await service.saveObservation({ reading: READING, heading: null, note: '', photos: [] });
     expect(await service.countObservations(session.id)).toBe(1);
-    await service.saveObservation({ reading: READING, heading: null, note: '', photo: null });
-    await service.saveObservation({ reading: READING, heading: null, note: '', photo: null });
+    await service.saveObservation({ reading: READING, heading: null, note: '', photos: [] });
+    await service.saveObservation({ reading: READING, heading: null, note: '', photos: [] });
     expect(await service.countObservations(session.id)).toBe(3);
   });
 });
@@ -696,13 +795,13 @@ describe('listObservations', () => {
       reading: READING,
       heading: null,
       note: 'a',
-      photo: null,
+      photos: [],
     });
     const second = await service.saveObservation({
       reading: READING,
       heading: null,
       note: 'b',
-      photo: null,
+      photos: [],
     });
 
     const listed = await service.listObservations(session.id);
@@ -713,7 +812,7 @@ describe('listObservations', () => {
     const db = await openDatabase('capture-service-list-other-session');
     const service = createCaptureService({ db, newId: fakeIdGenerator(), nowIso: () => FIXED_NOW });
     const sessionA = await service.startSession('Site A');
-    await service.saveObservation({ reading: READING, heading: null, note: '', photo: null });
+    await service.saveObservation({ reading: READING, heading: null, note: '', photos: [] });
     await service.endSession();
     const sessionB = await service.startSession('Site B');
 
@@ -748,7 +847,7 @@ describe('countObservations', () => {
     });
     const session = await service.startSession('Ashton Keynes');
     for (let i = 0; i < 3; i += 1) {
-      await service.saveObservation({ reading: READING, heading: null, note: 'x', photo: null });
+      await service.saveObservation({ reading: READING, heading: null, note: 'x', photos: [] });
     }
     loaded.length = 0;
 
@@ -774,13 +873,13 @@ describe('deleteObservation', () => {
       reading: READING,
       heading: null,
       note: '',
-      photo: { blob },
+      photos: [{ blob }],
     });
 
     await service.deleteObservation(obs.id);
 
     expect(await listObservationsForSession(db, session.id)).toEqual([]);
-    expect(await getPhoto(db, obs.id)).toBeUndefined();
+    expect(await getPhoto(db, obs.photos[0].id)).toBeUndefined();
   });
 
   test('removes an observation with no photo cleanly', async () => {
@@ -791,7 +890,7 @@ describe('deleteObservation', () => {
       reading: READING,
       heading: null,
       note: '',
-      photo: null,
+      photos: [],
     });
 
     await expect(service.deleteObservation(obs.id)).resolves.toBeUndefined();
@@ -840,7 +939,7 @@ describe('deleteObservation', () => {
       reading: READING,
       heading: null,
       note: '',
-      photo: { blob },
+      photos: [{ blob }],
     });
 
     opened.length = 0;
@@ -863,7 +962,7 @@ describe('saveObservation — a point picked off the map', () => {
       reading: READING_WITH_ALTITUDE,
       heading: null,
       note: '',
-      photo: null,
+      photos: [],
       pickedPoint: PICKED,
       ...overrides,
     });
@@ -1127,12 +1226,12 @@ describe('revisit sessions', () => {
       reading: READING,
       heading: null,
       note: 'stile still standing',
-      photo: null,
-      station: { referenceObservationId: 'ref-4', referencePhoto: 'ref-4.jpg' },
+      photos: [{ blob: new Blob(['jpeg'], { type: 'image/jpeg' }), referencePhoto: 'ref-4.jpg' }],
+      station: { referenceObservationId: 'ref-4' },
     });
 
     expect(observation.referenceObservationId).toBe('ref-4');
-    expect(observation.referencePhoto).toBe('ref-4.jpg');
+    expect(observation.photos[0].referencePhoto).toBe('ref-4.jpg');
   });
 
   test('without a station, a save in a revisit is simply a new observation', async () => {
@@ -1143,11 +1242,10 @@ describe('revisit sessions', () => {
       reading: READING,
       heading: null,
       note: 'fallen ash',
-      photo: null,
+      photos: [],
     });
 
     expect(observation.referenceObservationId).toBeNull();
-    expect(observation.referencePhoto).toBeNull();
   });
 
   test('station claims write, list and clear against the open session', async () => {

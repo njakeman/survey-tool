@@ -18,7 +18,11 @@ import {
   updateObservationNote,
 } from '../storage/observationStore.js';
 import { saveObservationWithPhoto } from '../storage/captureWrite.js';
-import { setObservationPhoto, deleteObservationPhoto } from '../storage/photoWrite.js';
+import {
+  addObservationPhoto,
+  replaceObservationPhoto,
+  deleteObservationPhoto,
+} from '../storage/photoWrite.js';
 import { getAudio as getAudioFromStore } from '../storage/audioStore.js';
 import { getPhoto as getPhotoFromStore } from '../storage/photoStore.js';
 import { deleteObservationWithPhoto } from '../storage/captureDelete.js';
@@ -119,10 +123,12 @@ export function createCaptureService({ db, newId, nowIso }) {
     return reopened;
   }
 
-  // Downscaling does not happen here — the photo arrives already downscaled
+  // Downscaling does not happen here — each photo arrives already downscaled
   // (the UI downscales at capture time), so this save is instantaneous.
-  // photo: { blob } | null — contentType is read from the blob itself,
-  // since canvas.toBlob() already sets it correctly.
+  // photos: [{ blob, referencePhoto? }] — contentType is read from each
+  // blob itself, since canvas.toBlob() already sets it correctly. Every
+  // photo id is minted fresh here (never the observation's id), so one
+  // observation can hold many.
   // `feature` is the map feature the surveyor tapped Record here on, or null
   // — { layerId, featureId, title } as featureQuery.js describes it.
   //
@@ -144,14 +150,15 @@ export function createCaptureService({ db, newId, nowIso }) {
     reading,
     heading,
     note,
-    photo,
+    photos = [],
     audio = null,
     feature = null,
     pickedPoint = null,
     trace = null,
-    // The revisit pairing: { referenceObservationId, referencePhoto }. Null
-    // for an ordinary save — and for a revisit's "record something new
-    // instead", which is exactly an observation with no counterpart.
+    // The revisit pairing: { referenceObservationId }. Null for an ordinary
+    // save — and for a revisit's "record something new instead", which is
+    // exactly an observation with no counterpart. Per-photo pairing rides
+    // photos[i].referencePhoto instead of living here.
     station = null,
   }) {
     const session = await getOpenSession();
@@ -159,6 +166,12 @@ export function createCaptureService({ db, newId, nowIso }) {
     if (!reading && !trace) throw new Error('saveObservation: no position fix yet');
 
     const id = newId();
+    // Fresh id per photo, minted before createObservation so the same id
+    // links the domain record's photos[] entry to the storage write below.
+    const photoEntries = photos.map((photo) => ({
+      id: newId(),
+      referencePhoto: photo.referencePhoto ?? null,
+    }));
     const observation = createObservation({
       id,
       sessionId: session.id,
@@ -179,7 +192,7 @@ export function createCaptureService({ db, newId, nowIso }) {
       headingDeg: trace ? null : (heading?.headingDeg ?? null),
       headingAccuracyDeg: trace ? null : (heading?.headingAccuracyDeg ?? null),
       note: (note ?? '').trim(),
-      photoId: photo ? id : null,
+      photos: photoEntries,
       audioId: audio ? id : null,
       // Both or neither — createObservation rejects half a link. A feature
       // with no id of its own (legal GeoJSON) therefore links to nothing,
@@ -196,12 +209,15 @@ export function createCaptureService({ db, newId, nowIso }) {
       // row say 0:12 without loading the blob.
       audioDurationMs: audio?.durationMs ?? null,
       referenceObservationId: station?.referenceObservationId ?? null,
-      referencePhoto: station?.referencePhoto ?? null,
     });
 
     await saveObservationWithPhoto(db, {
       observation,
-      photo: photo ? { id, blob: photo.blob, contentType: photo.blob.type } : null,
+      photos: photos.map((photo, index) => ({
+        id: photoEntries[index].id,
+        blob: photo.blob,
+        contentType: photo.blob.type,
+      })),
       audio: audio ? { id, blob: audio.blob, contentType: audio.blob.type } : null,
       traceDraftId: trace ? trace.draftId : null,
     });
@@ -315,22 +331,33 @@ export function createCaptureService({ db, newId, nowIso }) {
     return updateObservationNote(db, id, (note ?? '').trim(), nowIso());
   }
 
-  // The post-save photo edits (design pass 4): retake/add writes a NEW photo
-  // record under a fresh id — repointing photoId is what busts a row's
-  // cached object URL — and delete clears the link. Both stamp the change
-  // marks in the same transaction (photoWrite.js). The service stays
-  // permissive like updateNote: read-only surfaces simply aren't handed the
-  // callbacks (absence-is-the-flag, as with onEditNote).
-  function setPhoto(observationId, photo) {
-    return setObservationPhoto(db, {
+  // The post-save photo edits (design pass 4, widened for multi-photo): add
+  // appends a new photo under a fresh id; replace writes a NEW record under
+  // a fresh id in the same slot — repointing the id is what busts a row's
+  // cached object URL — and deletes the old one; delete drops one photo's
+  // slot and record outright. All three stamp the change marks in the same
+  // transaction (photoWrite.js). The service stays permissive like
+  // updateNote: read-only surfaces simply aren't handed the callbacks
+  // (absence-is-the-flag, as with onEditNote).
+  function addPhoto(observationId, photo) {
+    return addObservationPhoto(db, {
       observationId,
       photo: { id: newId(), blob: photo.blob },
       changedAt: nowIso(),
     });
   }
 
-  function deletePhoto(observationId) {
-    return deleteObservationPhoto(db, observationId, nowIso());
+  function replacePhoto(observationId, photoId, photo) {
+    return replaceObservationPhoto(db, {
+      observationId,
+      photoId,
+      photo: { id: newId(), blob: photo.blob },
+      changedAt: nowIso(),
+    });
+  }
+
+  function deletePhoto(observationId, photoId) {
+    return deleteObservationPhoto(db, { observationId, photoId, changedAt: nowIso() });
   }
 
   // Undo-last-save support. Idempotent: deleting an id that's already gone
@@ -373,7 +400,8 @@ export function createCaptureService({ db, newId, nowIso }) {
     countObservations,
     listObservations,
     updateNote,
-    setPhoto,
+    addPhoto,
+    replacePhoto,
     deletePhoto,
     deleteObservation,
     deleteSession,
