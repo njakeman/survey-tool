@@ -2001,8 +2001,9 @@ describe('CapturePage — revisit', () => {
   });
 
   test('picking a new photo after framing drops the stale pairing', async () => {
-    // framedRef used to survive a plain Photo pick, shipping an unframed
-    // shot paired to the old reference filename (review finding, round 1).
+    // A plain pick replaces whatever was composed, pairing included —
+    // otherwise it ships an unframed shot paired to the reference photo the
+    // surveyor was framing a moment ago.
     const service = revisitService();
     const { sensors, pushPosition } = createFakeSensors();
     const downscale = vi
@@ -2042,10 +2043,10 @@ describe('CapturePage — revisit', () => {
   });
 
   test('switching the current station after framing saves the photo unpaired', async () => {
-    // framedRef used to still name station A's photo while
-    // station.referenceObservationId pointed at station B (review finding,
-    // round 1) — the pairing must be validated against the *current*
-    // station, not carried blindly.
+    // The pairing is a claim about the station Save stands for, so it is
+    // validated against the *current* station rather than carried blindly:
+    // a photo naming station A while the observation names station B is a
+    // mis-pairing no consumer could detect.
     const service = revisitService();
     const { sensors, pushPosition } = createFakeSensors();
     const downscale = vi
@@ -2106,9 +2107,7 @@ describe('CapturePage — revisit', () => {
     // station went null is half a pairing, and the domain rightly refuses it.
     const service = revisitService();
     const { sensors, pushPosition } = createFakeSensors();
-    const downscale = vi
-      .fn()
-      .mockResolvedValue({ blob: new Blob(['x'], { type: 'image/jpeg' }) });
+    const downscale = vi.fn().mockResolvedValue({ blob: new Blob(['x'], { type: 'image/jpeg' }) });
     renderPage({ service, sensors, downscale });
     pushPosition(POSITION);
     await screen.findByText('Station 1 of 2');

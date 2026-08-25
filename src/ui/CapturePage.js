@@ -823,8 +823,12 @@ export function CapturePage({
         onSetPhoto=${setRowPhoto}
         onDeletePhoto=${deleteRowPhoto}
       />`,
-    // The handlers are fresh closures every render but only wrap the stable
-    // service + downscale — deliberately not dependencies.
+    // The handlers are fresh closures every render, deliberately not
+    // dependencies. Two of them now also close over `observations` (to find
+    // the row's existing photo), so a stale closure would edit the wrong
+    // slot — what keeps them fresh is that decoratedObservations IS a
+    // dependency, and it is derived from the same `observations` array:
+    // every change to it re-runs this memo with the current closures.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [decoratedObservations, gridRef],
   );

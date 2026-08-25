@@ -39,8 +39,9 @@ export function FramingScreen({
   onClose,
   busy = false,
 }) {
-  // Read here once — the UI stays single-photo until Steps 2–4 land the
-  // multi-photo strip; this is just where 0-or-1 photo is unpacked.
+  // One reference photo is framed at a time; a station holding several is
+  // framed against its first. This is where that choice is made — the rest
+  // of the screen only ever sees one entry name.
   const entryName = station.photos?.[0]?.entryName ?? null;
   const [photoUrl, setPhotoUrl] = useState(null);
   const [photoState, setPhotoState] = useState(entryName ? 'loading' : 'none');

@@ -205,7 +205,7 @@ function SavedPhoto({ observation, gridReference, loadPhoto, onSetPhoto, onDelet
   async function handleDelete() {
     await onDeletePhoto(observation.id);
     // Nothing left to look at: the view closes and the row (parent-refreshed
-    // to photoId: null) returns to offering Add photo.
+    // to photos: []) returns to offering Add photo.
     if (urlRef.current) {
       URL.revokeObjectURL(urlRef.current);
       urlRef.current = null;

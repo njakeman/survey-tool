@@ -51,6 +51,9 @@ export async function buildSessionExport(db, { sessionId, appVersion, gridRef })
   const photoRecords = await Promise.all(photoRefs.map((entry) => getPhoto(db, entry.id)));
 
   const photoEntries = [];
+  // One set across the whole session, not per observation: photo ids are
+  // ULIDs (domain/id.js) and so globally unique — two observations sharing
+  // one would emit the same zip entry twice.
   const presentPhotoIds = new Set();
   photoRefs.forEach((entry, index) => {
     const record = photoRecords[index];

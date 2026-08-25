@@ -7,7 +7,6 @@ import { listSessions } from '../storage/sessionStore.js';
 import { listObservationsForSession } from '../storage/observationStore.js';
 import { getPhoto } from '../storage/photoStore.js';
 import { getAudio } from '../storage/audioStore.js';
-import { addObservationPhoto } from '../storage/photoWrite.js';
 import { parseSessionExport } from './parseSessionExport.js';
 import { writeImportedSession, importSessionExport } from './importSession.js';
 
@@ -47,30 +46,20 @@ async function seedSession(dbName, { withPhoto = true, endSession = true } = {})
     nowIso: () => FIXED_NOW,
   });
   await service.startSession('Hedgerow survey');
-  const gatePost = await service.saveObservation({
+  await service.saveObservation({
     reading: { lat: 51.5, lon: -0.14, accuracyM: 8.2, fixAt: '2026-08-06T09:59:20.000Z' },
     heading: { headingDeg: 271.5, headingAccuracyDeg: 15 },
     note: 'gate post',
-    photo: null,
+    // Through the real save path, so the fixture's photos[] is the one the
+    // app itself would write — ids minted per photo and all.
+    photos: withPhoto
+      ? [{ blob: new Blob([new Uint8Array([1, 2, 3, 4])], { type: 'image/jpeg' }) }]
+      : [],
   });
-  if (withPhoto) {
-    // captureService.saveObservation doesn't attach photos yet (that's
-    // Task 10); attach directly through the storage layer's own add-photo
-    // primitive so this fixture carries a real photos[] entry regardless.
-    await addObservationPhoto(db, {
-      observationId: gatePost.id,
-      photo: {
-        id: 'orig-photo-1',
-        blob: new Blob([new Uint8Array([1, 2, 3, 4])], { type: 'image/jpeg' }),
-      },
-      changedAt: null,
-    });
-  }
   await service.saveObservation({
     reading: { lat: 51.6, lon: -0.15, accuracyM: 4.1, fixAt: '2026-08-06T10:10:00.000Z' },
     heading: null,
     note: 'stile',
-    photo: null,
     audio: {
       blob: new Blob([new Uint8Array([9, 8, 7])], { type: 'audio/webm;codecs=opus' }),
       // Round-trips as audio_duration_ms, so the copy's voice chip can still
@@ -142,7 +131,9 @@ describe('export → import round trip', () => {
     const withPhoto = importedObs.find((obs) => obs.photos.length > 0);
     expect(withPhoto.photos).toHaveLength(1);
     expect(withPhoto.photos[0].id).not.toBe(withPhoto.id);
-    expect(withPhoto.photos[0].id).not.toBe('orig-photo-1');
+    expect(sourceObs.flatMap((obs) => obs.photos.map((entry) => entry.id))).not.toContain(
+      withPhoto.photos[0].id,
+    );
     const photo = await getPhoto(targetDb, withPhoto.photos[0].id);
     expect([...new Uint8Array(await photo.blob.arrayBuffer())]).toEqual([1, 2, 3, 4]);
 

@@ -1,8 +1,18 @@
 // Converts a session + its observations into a single-FeatureCollection
-// GeoJSON document: flat properties, simple types, no nesting — openable in
-// QGIS by a non-specialist with no instructions (plan's data-format goal).
+// GeoJSON document: flat properties, simple types — openable in QGIS by a
+// non-specialist with no instructions (plan's data-format goal).
 // Combine with canonical-json.js's canonicalStringify for the actual bytes
 // written to disk/sync.
+//
+// `photos` is the one property that nests: an array of objects, because an
+// observation can hold several photos and each carries its own reference
+// pairing. The flat path still works — `photo`/`ref_photo` keep naming the
+// first photo, so a table-shaped consumer (QGIS's attribute table, a
+// spreadsheet) reads a column it understands and every pre-2026-08-25 file
+// still imports.
+//
+// The `.jpg` in every photo filename is true because photo/encode.js
+// downscales to JPEG on capture — nothing else ever reaches the photo store.
 
 import { lineLengthM } from '../geo/lineMetrics.js';
 

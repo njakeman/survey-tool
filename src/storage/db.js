@@ -44,7 +44,10 @@ export function openDatabase(name = DB_NAME) {
       if (oldVersion < 5) {
         // Voice notes: one recording per observation, ArrayBuffer +
         // contentType exactly like photos (never a Blob — see photoStore.js).
-        // Keyed by the observation's id, same convention as photos.
+        // Keyed by the observation's id, which photos gave up at v8: a
+        // recording stays one per observation, so its id can be the
+        // observation's, while photos deliberately became a list under ids
+        // of their own.
         db.createObjectStore('audio', { keyPath: 'id' });
       }
       if (oldVersion < 6) {
