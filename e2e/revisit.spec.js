@@ -36,6 +36,7 @@ test.describe('revisit flow', () => {
           heading_deg: 38,
           note: 'West stile, west boundary.',
           photo: null,
+          photos: [],
         },
       },
       {
@@ -50,6 +51,7 @@ test.describe('revisit flow', () => {
           gps_accuracy_m: 6.3,
           note: 'Culvert head.',
           photo: null,
+          photos: [],
         },
       },
     ],

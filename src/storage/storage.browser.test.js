@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
-import { openDatabase } from './db.js';
+import { openDB } from 'idb';
+import { openDatabase, DB_VERSION } from './db.js';
 import { putSession, getSession } from './sessionStore.js';
 import { putObservation, listObservationsForSession } from './observationStore.js';
 import { putPhoto, getPhoto } from './photoStore.js';
@@ -50,6 +51,70 @@ describe('storage layer against real IndexedDB', () => {
     expect(stored.blob.type).toBe('image/jpeg');
     expect(await stored.blob.text()).toBe('real browser blob bytes');
 
+    db.close();
+  });
+
+  test('upgrades a v7 database to v8, folding photoId/referencePhoto into photos[] on real IndexedDB', async () => {
+    const name = `browser-contract-upgrade-v8-${Math.random()}`;
+    const v7 = await openDB(name, 7, {
+      upgrade(db) {
+        db.createObjectStore('sessions', { keyPath: 'id' });
+        const observations = db.createObjectStore('observations', { keyPath: 'id' });
+        observations.createIndex('by-session', 'sessionId');
+        db.createObjectStore('photos', { keyPath: 'id' });
+        db.createObjectStore('basemap', { keyPath: 'id' });
+        db.createObjectStore('settings', { keyPath: 'key' });
+        db.createObjectStore('featureLayers', { keyPath: 'id' });
+        db.createObjectStore('audio', { keyPath: 'id' });
+        db.createObjectStore('traceDrafts', { keyPath: 'id' });
+        db.createObjectStore('traceVertices', { keyPath: ['draftId', 'seq'] });
+        db.createObjectStore('revisitReferences', { keyPath: 'sessionId' });
+        db.createObjectStore('revisitStations', { keyPath: ['sessionId', 'refObsId'] });
+      },
+    });
+    await v7.put('observations', {
+      id: 'obs-1',
+      sessionId: 's',
+      photoId: 'obs-1',
+      referencePhoto: null,
+      note: 'a',
+    });
+    await v7.put('observations', {
+      id: 'obs-2',
+      sessionId: 's',
+      photoId: 'p9',
+      referencePhoto: 'ref.jpg',
+      referenceObservationId: 'r1',
+    });
+    await v7.put('observations', {
+      id: 'obs-3',
+      sessionId: 's',
+      photoId: null,
+      referencePhoto: null,
+    });
+    await v7.put('photos', {
+      id: 'obs-1',
+      arrayBuffer: new ArrayBuffer(4),
+      contentType: 'image/jpeg',
+    });
+    v7.close();
+
+    const db = await openDatabase(name);
+
+    expect(db.version).toBe(DB_VERSION);
+    expect(await db.get('observations', 'obs-1')).toEqual({
+      id: 'obs-1',
+      sessionId: 's',
+      note: 'a',
+      photos: [{ id: 'obs-1', referencePhoto: null }],
+    });
+    expect((await db.get('observations', 'obs-2')).photos).toEqual([
+      { id: 'p9', referencePhoto: 'ref.jpg' },
+    ]);
+    expect((await db.get('observations', 'obs-2')).referenceObservationId).toBe('r1');
+    expect((await db.get('observations', 'obs-3')).photos).toEqual([]);
+    expect(await db.get('observations', 'obs-3')).not.toHaveProperty('photoId');
+    expect((await db.get('photos', 'obs-1')).arrayBuffer.byteLength).toBe(4);
     db.close();
   });
 });
