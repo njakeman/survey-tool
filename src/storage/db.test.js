@@ -1,5 +1,5 @@
 import 'fake-indexeddb/auto';
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import { openDB } from 'idb';
 import { openDatabase, DB_VERSION } from './db.js';
 
@@ -242,5 +242,54 @@ describe('openDatabase', () => {
     expect(await db.get('observations', 'obs-3')).not.toHaveProperty('photoId');
     expect((await db.get('photos', 'obs-1')).arrayBuffer.byteLength).toBe(4);
     db.close();
+  });
+
+  test('aborts the v8 upgrade and rejects if a cursor rewrite throws, leaving v7 data intact', async () => {
+    const v7 = await openDB('db-test-upgrade-v8-abort', 7, {
+      upgrade(db) {
+        db.createObjectStore('sessions', { keyPath: 'id' });
+        const observations = db.createObjectStore('observations', { keyPath: 'id' });
+        observations.createIndex('by-session', 'sessionId');
+        db.createObjectStore('photos', { keyPath: 'id' });
+        db.createObjectStore('basemap', { keyPath: 'id' });
+        db.createObjectStore('settings', { keyPath: 'key' });
+        db.createObjectStore('featureLayers', { keyPath: 'id' });
+        db.createObjectStore('audio', { keyPath: 'id' });
+        db.createObjectStore('traceDrafts', { keyPath: 'id' });
+        db.createObjectStore('traceVertices', { keyPath: ['draftId', 'seq'] });
+        db.createObjectStore('revisitReferences', { keyPath: 'sessionId' });
+        db.createObjectStore('revisitStations', { keyPath: ['sessionId', 'refObsId'] });
+      },
+    });
+    await v7.put('observations', { id: 'obs-1', sessionId: 's', photoId: 'obs-1', note: 'a' });
+    v7.close();
+
+    // cursor.value is structured-cloned by real/fake IndexedDB, so stored
+    // data can't carry a throwing getter — force the failure the same way a
+    // real DataError/InvalidStateError would arrive, by making the native
+    // cursor.update() throw.
+    const updateSpy = vi.spyOn(globalThis.IDBCursor.prototype, 'update').mockImplementation(() => {
+      throw new DOMException('forced failure', 'DataError');
+    });
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    await expect(openDatabase('db-test-upgrade-v8-abort')).rejects.toThrow();
+    expect(errorSpy).toHaveBeenCalledWith('DB v8 upgrade failed — rolling back', expect.any(Error));
+
+    updateSpy.mockRestore();
+    errorSpy.mockRestore();
+
+    // The aborted upgrade must not have bumped the on-disk version or kept
+    // any partial rewrite — reopening at v7 (no upgrade needed) proves the
+    // database is still v7 with obs-1 in its original, unmigrated shape.
+    const stillV7 = await openDB('db-test-upgrade-v8-abort', 7);
+    expect(stillV7.version).toBe(7);
+    expect(await stillV7.get('observations', 'obs-1')).toEqual({
+      id: 'obs-1',
+      sessionId: 's',
+      photoId: 'obs-1',
+      note: 'a',
+    });
+    stillV7.close();
   });
 });

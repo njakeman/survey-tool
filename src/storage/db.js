@@ -75,14 +75,37 @@ export function openDatabase(name = DB_NAME) {
         // transaction itself so no record ever exists in both shapes; the
         // photo records are untouched — only the pointer changes shape.
         // Cursor, not getAll: a long-lived device may hold thousands.
+        // idb calls this upgrade callback as a bare statement — it never
+        // awaits or catches whatever this chain returns, and `openDB`
+        // settles from the native open request instead. Without a terminal
+        // .catch, a thrown error here (a cursor.update() DataError, a bug in
+        // the rebuild) would float as an unhandled rejection while the
+        // native versionchange transaction auto-commits whatever it had
+        // already rewritten — openDatabase() would resolve "successfully"
+        // over a half-migrated observations store. Aborting the transaction
+        // instead rolls every rewrite back (the data stays at v7 intact) and
+        // makes openDatabase() reject, so the app's fatal-error banner
+        // surfaces the failure instead of it passing silently.
         const store = transaction.objectStore('observations');
-        store.openCursor().then(function step(cursor) {
-          if (!cursor) return;
-          const { photoId, referencePhoto, ...rest } = cursor.value;
-          const photos = photoId ? [{ id: photoId, referencePhoto: referencePhoto ?? null }] : [];
-          cursor.update({ ...rest, photos });
-          return cursor.continue().then(step);
-        });
+        store
+          .openCursor()
+          .then(function step(cursor) {
+            if (!cursor) return;
+            const { photoId, referencePhoto, ...rest } = cursor.value;
+            const photos = photoId ? [{ id: photoId, referencePhoto: referencePhoto ?? null }] : [];
+            cursor.update({ ...rest, photos });
+            return cursor.continue().then(step);
+          })
+          .catch((error) => {
+            console.error('DB v8 upgrade failed — rolling back', error);
+            transaction.abort();
+            // idb caches its own `transaction.done` promise the moment it
+            // wraps this transaction to hand it to us — abort() rejects
+            // that promise too, and idb never consumes it itself. Left
+            // alone it surfaces as a second, unrelated unhandled rejection
+            // alongside the one openDatabase()'s caller correctly sees.
+            transaction.done.catch(() => {});
+          });
       }
     },
   });
