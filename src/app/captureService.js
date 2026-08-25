@@ -339,10 +339,14 @@ export function createCaptureService({ db, newId, nowIso }) {
   // transaction (photoWrite.js). The service stays permissive like
   // updateNote: read-only surfaces simply aren't handed the callbacks
   // (absence-is-the-flag, as with onEditNote).
+  // `photo` is { blob, referencePhoto? }: framing a reference photo against
+  // an observation already on disk pairs the appended slot the same way a
+  // framed save does. photoWrite refuses the pairing if the observation
+  // names no station — the domain's both-halves rule.
   function addPhoto(observationId, photo) {
     return addObservationPhoto(db, {
       observationId,
-      photo: { id: newId(), blob: photo.blob },
+      photo: { id: newId(), blob: photo.blob, referencePhoto: photo.referencePhoto ?? null },
       changedAt: nowIso(),
     });
   }

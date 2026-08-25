@@ -13,7 +13,7 @@ import { createObservation } from '../domain/observation.js';
 
 const CHANGED_AT = '2026-08-14T10:00:00.000Z';
 
-async function seed(db, { photos = [] } = {}) {
+async function seed(db, { photos = [], referenceObservationId = null } = {}) {
   await putSession(db, {
     id: 'sess-1',
     name: 'Site A',
@@ -30,6 +30,7 @@ async function seed(db, { photos = [] } = {}) {
     lon: -0.14,
     gpsAccuracyM: 8,
     photos: photos.map((id) => ({ id, referencePhoto: null })),
+    referenceObservationId,
   });
   await putObservation(db, observation);
   for (const id of photos) {
@@ -111,6 +112,51 @@ describe('addObservationPhoto', () => {
         changedAt: CHANGED_AT,
       }),
     ).rejects.toThrow(/no observation/);
+    db.close();
+  });
+
+  test('carries a referencePhoto onto the appended slot', async () => {
+    const db = await openDatabase('photo-write-append-paired');
+    await seed(db, { photos: ['a'], referenceObservationId: 'ref-1' });
+
+    await addObservationPhoto(db, {
+      observationId: 'obs-1',
+      photo: {
+        id: 'p2',
+        blob: new Blob(['new jpeg'], { type: 'image/jpeg' }),
+        referencePhoto: 'ref-1.jpg',
+      },
+      changedAt: CHANGED_AT,
+    });
+
+    expect((await getObservation(db, 'obs-1')).photos).toEqual([
+      { id: 'a', referencePhoto: null },
+      { id: 'p2', referencePhoto: 'ref-1.jpg' },
+    ]);
+    db.close();
+  });
+
+  test('refuses a referencePhoto when the observation names no station', async () => {
+    // The domain's both-halves rule, enforced on the post-save path too: a
+    // reference filename on an observation with no referenceObservationId
+    // joins to nothing.
+    const db = await openDatabase('photo-write-append-half-pairing');
+    await seed(db, { photos: ['a'] });
+
+    await expect(
+      addObservationPhoto(db, {
+        observationId: 'obs-1',
+        photo: {
+          id: 'p2',
+          blob: new Blob(['new jpeg'], { type: 'image/jpeg' }),
+          referencePhoto: 'ref-1.jpg',
+        },
+        changedAt: CHANGED_AT,
+      }),
+    ).rejects.toThrow('referencePhoto requires referenceObservationId');
+
+    expect((await getObservation(db, 'obs-1')).photos).toEqual([{ id: 'a', referencePhoto: null }]);
+    expect(await getPhoto(db, 'p2')).toBeUndefined();
     db.close();
   });
 });

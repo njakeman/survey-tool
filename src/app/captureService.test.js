@@ -1248,6 +1248,32 @@ describe('revisit sessions', () => {
     expect(observation.referenceObservationId).toBeNull();
   });
 
+  test('addPhoto can carry the revisit pairing onto a saved observation', async () => {
+    // Framing a reference photo against an observation already on disk: the
+    // appended slot has to name the reference photo it answers, or the
+    // longitudinal join only ever sees the first shot.
+    const service = await makeService('capture-service-revisit-add-photo');
+    const session = await service.startSession('2026-08-21', {
+      reference: REFERENCE,
+      referenceBuffer: BUFFER,
+    });
+    const saved = await service.saveObservation({
+      reading: READING,
+      heading: null,
+      note: '',
+      photos: [],
+      station: { referenceObservationId: 'ref-4' },
+    });
+
+    await service.addPhoto(saved.id, {
+      blob: new Blob(['framed'], { type: 'image/jpeg' }),
+      referencePhoto: 'ref-4.jpg',
+    });
+
+    const [observation] = await service.listObservations(session.id);
+    expect(observation.photos).toEqual([{ id: expect.any(String), referencePhoto: 'ref-4.jpg' }]);
+  });
+
   test('a referencePhoto with no station is refused, by name', async () => {
     // The contract the UI has to respect: half a pairing joins to nothing,
     // so the domain refuses it rather than storing a filename pointing at no

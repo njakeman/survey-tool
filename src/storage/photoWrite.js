@@ -1,7 +1,8 @@
 // The post-save photo edits — add, replace, delete — each in one IndexedDB
 // transaction over observations, photos and sessions, so a kill mid-edit can
 // never leave an observation pointing at a photo record that is gone (or
-// vice versa). An add appends a new slot; a replace writes a NEW record
+// vice versa). An add appends a new slot (carrying a revisit pairing when
+// the framing path supplies one); a replace writes a NEW record
 // under a fresh id in the same slot — the fresh id is what busts a row's
 // cached object URL — and deletes the old record; a delete drops the slot
 // and its record outright.
@@ -30,10 +31,20 @@ export async function addObservationPhoto(db, { observationId, photo, changedAt 
   const tx = db.transaction(['observations', 'photos', 'sessions'], 'readwrite');
   const observations = tx.objectStore('observations');
   const observation = await readObservation(observations, observationId, 'addObservationPhoto');
+  const referencePhoto = photo.referencePhoto ?? null;
+  // The domain's both-halves rule (createObservation), enforced on the
+  // post-save path too: a reference photo filename on an observation that
+  // names no station joins to nothing. Checked before the first put, so a
+  // refused append writes neither the record nor the slot.
+  if (referencePhoto && !observation.referenceObservationId) {
+    throw new Error(
+      `addObservationPhoto: referencePhoto requires referenceObservationId on ${observationId}`,
+    );
+  }
   tx.objectStore('photos').put({ id: photo.id, arrayBuffer, contentType });
   observations.put({
     ...observation,
-    photos: [...(observation.photos ?? []), { id: photo.id, referencePhoto: null }],
+    photos: [...(observation.photos ?? []), { id: photo.id, referencePhoto }],
     changedAt,
   });
   await stampSession(tx, observation.sessionId, changedAt);
