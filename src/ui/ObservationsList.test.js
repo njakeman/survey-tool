@@ -483,6 +483,21 @@ describe('ObservationsList — retake, delete and add photo (design pass 4 §7e)
     expect(screen.getByRole('dialog', { name: /photo/i })).toBeInTheDocument();
   });
 
+  test('a rejecting onSetPhoto on retake resets busy and does not throw out of the handler', async () => {
+    // The parent (CapturePage) surfaces the failure on its own error line;
+    // this handler's job is just to not leave the row stuck on "Retaking…"
+    // and to not turn the rejection into an unhandled one.
+    const onSetPhoto = vi.fn().mockRejectedValue(new Error('no room on the device'));
+    const dialog = await openFullView({ onSetPhoto, onDeletePhoto: vi.fn() });
+
+    const input = dialog.querySelector('input[capture="environment"]');
+    fireEvent.change(input, { target: { files: [FILE] } });
+
+    await waitFor(() => expect(onSetPhoto).toHaveBeenCalledWith('obs-2', 'obs-2', FILE));
+    await waitFor(() => expect(within(dialog).getByText(/^retake$/i)).toBeInTheDocument());
+    expect(input).not.toBeDisabled();
+  });
+
   test('the view survives the repointed id and shows the retaken photo in place', async () => {
     // The parent refresh swaps a fresh photo id into photos[], so the shown
     // photo is momentarily one with no bytes yet. Closing the view there

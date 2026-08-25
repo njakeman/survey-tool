@@ -856,6 +856,44 @@ describe('CapturePage — undo lifecycle', () => {
     await waitFor(() => expect(service.listObservations.mock.calls.length).toBeGreaterThan(1));
   });
 
+  test('a failed retake tells the surveyor on the page’s save-error line', async () => {
+    // Today this fails silently — setRowPhoto has no catch, so a rejected
+    // replacePhoto just leaves the row's busy state hung with nothing shown.
+    vi.stubGlobal('IntersectionObserver', undefined);
+    const observation = {
+      id: 'obs-1',
+      sessionId: 'sess-1',
+      lat: 51.5,
+      lon: -0.14,
+      gpsAccuracyM: 8,
+      note: 'gate post',
+      photos: [{ id: 'obs-1', referencePhoto: null }],
+    };
+    const service = createFakeService({ openSession: OPEN_SESSION, observations: [observation] });
+    service.getPhoto = vi
+      .fn()
+      .mockResolvedValue({ id: 'obs-1', contentType: 'image/jpeg', blob: new Blob(['x']) });
+    service.replacePhoto = vi.fn().mockRejectedValue(new Error('no room on the device'));
+    const downscale = vi
+      .fn()
+      .mockResolvedValue({ blob: new Blob(['downscaled'], { type: 'image/jpeg' }) });
+    const { sensors } = createFakeSensors();
+    render(html`<${CapturePage} service=${service} sensors=${sensors} downscale=${downscale} />`);
+    await screen.findByText('gate post');
+
+    fireEvent.click(await screen.findByRole('img', { name: /photo for this observation/i }));
+    const dialog = screen.getByRole('dialog', { name: /photo/i });
+    const file = new File(['raw'], 'photo.jpg', { type: 'image/jpeg' });
+    fireEvent.change(dialog.querySelector('input[capture="environment"]'), {
+      target: { files: [file] },
+    });
+
+    await waitFor(() => expect(service.replacePhoto).toHaveBeenCalled());
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('no room on the device');
+    expect(alert).toHaveClass('save-error');
+  });
+
   test('adding a photo to a row with none runs the downscale pipeline, addPhoto, and a refresh', async () => {
     const observation = {
       id: 'obs-1',

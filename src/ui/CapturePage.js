@@ -805,18 +805,32 @@ export function CapturePage({
   // 1600px JPEG rule holds and the stored thumbnail stays the only size that
   // exists. History passes neither callback — that absence is the read-only
   // rule, exactly as with onEditNote.
+  // A failure here used to be silent — no catch, so the row's busy state
+  // hung with nothing on screen to explain why. Reusing the save-error line
+  // means one place on the page carries every kind of write failure; the
+  // rethrow is what lets the row's own finally reset its busy state.
   const setRowPhoto = async (id, photoId, file) => {
-    const downscaled = await downscale(file);
-    if (photoId) {
-      await service.replacePhoto(id, photoId, downscaled);
-    } else {
-      await service.addPhoto(id, downscaled);
+    try {
+      const downscaled = await downscale(file);
+      if (photoId) {
+        await service.replacePhoto(id, photoId, downscaled);
+      } else {
+        await service.addPhoto(id, downscaled);
+      }
+      await refreshSession();
+    } catch (error) {
+      setSaveError(error.message || 'Could not update the photo');
+      throw error;
     }
-    await refreshSession();
   };
   const deleteRowPhoto = async (id, photoId) => {
-    await service.deletePhoto(id, photoId);
-    await refreshSession();
+    try {
+      await service.deletePhoto(id, photoId);
+      await refreshSession();
+    } catch (error) {
+      setSaveError(error.message || 'Could not update the photo');
+      throw error;
+    }
   };
   const observationsList = useMemo(
     () =>

@@ -373,6 +373,10 @@ function SavedPhotos({ observation, gridReference, loadPhoto, onSetPhoto, onDele
     setBusy('retake');
     try {
       await onSetPhoto(observation.id, shown.id, file);
+    } catch {
+      // The parent (CapturePage) surfaces the failure on its own
+      // save-error line; this handler's only job is making sure busy
+      // resets below rather than leaving the row stuck on "Retaking…".
     } finally {
       setBusy(null);
     }
@@ -410,7 +414,14 @@ function SavedPhotos({ observation, gridReference, loadPhoto, onSetPhoto, onDele
   }
 
   async function handleDelete() {
-    await onDeletePhoto(observation.id, shown.id);
+    try {
+      await onDeletePhoto(observation.id, shown.id);
+    } catch {
+      // The parent surfaces the failure on its own save-error line; stay on
+      // the confirm so the surveyor can retry rather than silently losing
+      // the tap to an unhandled rejection.
+      return;
+    }
     setConfirmingDelete(false);
     // Stay in the view on the neighbour — the next photo, or the previous
     // when the last one goes — so a run of bad photos can be cleared without
