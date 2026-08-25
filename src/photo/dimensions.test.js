@@ -1,9 +1,13 @@
 import { describe, expect, test } from 'vitest';
-import { computeTargetDimensions, MAX_LONG_EDGE } from './dimensions.js';
+import { computeTargetDimensions, MAX_LONG_EDGE, MAX_PHOTOS } from './dimensions.js';
 
 describe('computeTargetDimensions', () => {
   test('exports 1600 as the default max long edge', () => {
     expect(MAX_LONG_EDGE).toBe(1600);
+  });
+
+  test('exports 10 as the soft cap on photos per observation', () => {
+    expect(MAX_PHOTOS).toBe(10);
   });
 
   test('downscales a landscape image to the max long edge, preserving aspect ratio', () => {
