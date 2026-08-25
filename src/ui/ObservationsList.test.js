@@ -1648,12 +1648,12 @@ describe('ObservationsList — the photo view pages through the photos', () => {
   });
 });
 
-// Task 7: the history page passes loadPhoto alone — no onSetPhoto,
-// no onDeletePhoto (SessionHistoryPage.js needs no change for this; the
+// The history page passes loadPhoto alone — no onSetPhoto, no
+// onDeletePhoto (SessionHistoryPage.js needs no change for this; the
 // component's existing absence-is-the-flag rule already covers it). These
 // tests pin that a read-only row still gets the full strip-and-pager
 // experience, just none of the write actions.
-describe('ObservationsList — the history view pages photos read-only (task 7)', () => {
+describe('ObservationsList — the history view pages photos read-only', () => {
   beforeEach(() => {
     URL.createObjectURL = vi.fn((blob) => `blob:${blob.photoId}`);
     URL.revokeObjectURL = vi.fn();

@@ -15,3 +15,7 @@ public/geodesy/
 dist/
 public/fonts/
 *.geojson
+
+# Session scratch (also gitignored): not product, and `prettier --check .`
+# is a deploy gate — untracked working notes must not fail it.
+.superpowers/

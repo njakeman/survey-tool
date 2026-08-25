@@ -9,3 +9,6 @@ __screenshots__/
 *.local
 .DS_Store
 RESUME.md
+# Working notes and review artifacts from agent-driven sessions. Process
+# scratch, never product — see the no-AI-process-artifacts rule.
+.superpowers/

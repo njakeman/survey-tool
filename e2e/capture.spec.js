@@ -204,20 +204,12 @@ test.describe('capture flow', () => {
     });
     await expect(page.getByRole('button', { name: 'Remove photo 2 of 2' })).toBeVisible();
 
-    await page.screenshot({
-      path: '.superpowers/sdd/i-have-looked-at-cozy-sunbeam/shot-compose-two-thumbs.png',
-    });
-
     await page.getByRole('button', { name: 'Save observation' }).click();
     await expect(page.getByText('1 saved')).toBeVisible();
 
     // Two thumbs land in the row's saved strip on their own — no chip.
     const row = page.locator('li.observations-row').first();
     await expect(row.locator('img.observations-photo-thumb')).toHaveCount(2);
-
-    await page.screenshot({
-      path: '.superpowers/sdd/i-have-looked-at-cozy-sunbeam/shot-row-strip.png',
-    });
 
     // Open the first thumb — the pager shows 1 of 2, Previous disabled.
     await row.locator('img.observations-photo-thumb').first().click();
@@ -227,18 +219,10 @@ test.describe('capture flow', () => {
     await expect(page.getByRole('button', { name: 'Previous photo' })).toBeDisabled();
     await expect(page.getByRole('button', { name: 'Next photo' })).toBeEnabled();
 
-    await page.screenshot({
-      path: '.superpowers/sdd/i-have-looked-at-cozy-sunbeam/shot-lightbox-1of2.png',
-    });
-
     await page.getByRole('button', { name: 'Next photo' }).click();
     await expect(page.locator('.photo-lightbox-caption')).toContainText('2 of 2');
     await expect(page.getByRole('button', { name: 'Next photo' })).toBeDisabled();
     await expect(page.getByRole('button', { name: 'Previous photo' })).toBeEnabled();
-
-    await page.screenshot({
-      path: '.superpowers/sdd/i-have-looked-at-cozy-sunbeam/shot-lightbox-2of2.png',
-    });
 
     // Retake the second photo — the record repoints and the open view swaps
     // the image (poll the src, as the single-photo test does).
@@ -286,56 +270,15 @@ test.describe('capture flow', () => {
       (entry) => entry.name.startsWith('photos/') && entry.name.endsWith('.jpg'),
     );
     expect(photoEntries).toHaveLength(2);
-  });
 
-  test.describe('phone-shaped viewport', () => {
-    test.use({ viewport: { width: 390, height: 844 } });
-
-    test('several photos, screenshots at a phone-shaped viewport', async ({ page, context }) => {
-      await context.grantPermissions(['geolocation']);
-      await context.setGeolocation({ latitude: 51.5, longitude: -0.14, accuracy: 10 });
-
-      await page.goto('/');
-      await page.getByLabel(/session name/i).fill('Phone Viewport Photo Session');
-      await page.getByRole('button', { name: 'Start session' }).click();
-      await expect(page.getByRole('button', { name: 'Save observation' })).toBeEnabled({
-        timeout: 15_000,
-      });
-
-      const composeInput = page.locator('.photo-field input[capture="environment"]');
-      await composeInput.setInputFiles({
-        name: 'first.png',
-        mimeType: 'image/png',
-        buffer: PHOTO,
-      });
-      await composeInput.setInputFiles({
-        name: 'second.png',
-        mimeType: 'image/png',
-        buffer: PHOTO,
-      });
-      await expect(page.getByRole('button', { name: 'Remove photo 2 of 2' })).toBeVisible();
-      await page.screenshot({
-        path: '.superpowers/sdd/i-have-looked-at-cozy-sunbeam/shot-compose-two-thumbs-phone.png',
-      });
-
-      await page.getByRole('button', { name: 'Save observation' }).click();
-      await expect(page.getByText('1 saved')).toBeVisible();
-      const row = page.locator('li.observations-row').first();
-      await expect(row.locator('img.observations-photo-thumb')).toHaveCount(2);
-      await page.screenshot({
-        path: '.superpowers/sdd/i-have-looked-at-cozy-sunbeam/shot-row-strip-phone.png',
-      });
-
-      await row.locator('img.observations-photo-thumb').first().click();
-      await expect(page.getByRole('dialog', { name: /photo/i })).toBeVisible();
-      await page.screenshot({
-        path: '.superpowers/sdd/i-have-looked-at-cozy-sunbeam/shot-lightbox-1of2-phone.png',
-      });
-      await page.getByRole('button', { name: 'Next photo' }).click();
-      await expect(page.locator('.photo-lightbox-caption')).toContainText('2 of 2');
-      await page.screenshot({
-        path: '.superpowers/sdd/i-have-looked-at-cozy-sunbeam/shot-lightbox-2of2-phone.png',
-      });
-    });
+    // Two files in the zip proves the bytes shipped; the feature's photos[]
+    // is what a re-import reads them back through, so assert that too — a
+    // record whose array disagreed with its own attachments would import as
+    // an observation missing a photo.
+    const geojson = JSON.parse(
+      new TextDecoder().decode(entries.find((entry) => entry.name === 'session.geojson').data),
+    );
+    expect(geojson.features).toHaveLength(1);
+    expect(geojson.features[0].properties.photos).toHaveLength(2);
   });
 });
