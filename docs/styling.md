@@ -680,7 +680,8 @@ accent use; every new control reuses the disc/link/outline vocabulary already in
   photo field takes the compose row's full width (`.capture-actions
 .photo-field:has(.photo-field-strip)`) rather than fighting the voice field for half of it —
   the same move the loaded voice transport already makes.
-- **The cap line** (`.photo-field-cap`, "10 photos — the most one record holds") appears only
+- **The cap line** (`.photo-field-cap`, `PHOTO_CAP_MESSAGE`: "10 photos — the most one record
+  holds", built from `MAX_PHOTOS` in `src/ui/format.js`) appears only
   at the cap, left-aligned under the button rather than centred like the export/load hints
   (the field stacks in a column; it isn't a row of its own). The button itself goes dashed and
   muted at the cap (`.photo-field-button-capped`, the save-button-blocked shape) so the field

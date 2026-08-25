@@ -2,6 +2,7 @@ import { describe, expect, test, vi } from 'vitest';
 import { render, screen, within, fireEvent } from '@testing-library/preact';
 import { html } from 'htm/preact';
 import { PhotoField } from './PhotoField.js';
+import { MAX_PHOTOS } from '../photo/dimensions.js';
 
 function photo(key, overrides = {}) {
   return {
@@ -179,7 +180,11 @@ describe('PhotoField', () => {
       expect(label).toHaveAttribute('aria-disabled', 'true');
       expect(label.className).toContain('photo-field-button-capped');
 
-      expect(screen.getByText('10 photos — the most one record holds')).toBeInTheDocument();
+      // Built from MAX_PHOTOS, not typed: the sentence states the cap, so a
+      // hardcoded number is a lie waiting for the cap to move.
+      expect(
+        screen.getByText(`${MAX_PHOTOS} photos — the most one record holds`),
+      ).toBeInTheDocument();
     });
 
     test('does not show the cap message below the cap', () => {

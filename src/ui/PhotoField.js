@@ -1,5 +1,6 @@
 import { html } from 'htm/preact';
 import { useEffect, useState } from 'preact/hooks';
+import { PHOTO_CAP_MESSAGE } from './format.js';
 
 // `capture="environment"` opens the rear camera directly rather than a
 // custom camera UI, per the brief. `photos` is a strip, not a single slot —
@@ -46,7 +47,7 @@ export function PhotoField({
       </label>
       ${busy ? html`<p class="photo-field-busy">Processing photo…</p>` : null}
       ${error ? html`<p class="photo-field-error">${error}</p>` : null}
-      ${atCap ? html`<p class="photo-field-cap">10 photos — the most one record holds</p>` : null}
+      ${atCap ? html`<p class="photo-field-cap">${PHOTO_CAP_MESSAGE}</p>` : null}
       ${
         photos.length > 0
           ? html`

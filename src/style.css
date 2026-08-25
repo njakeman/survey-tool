@@ -2759,10 +2759,11 @@ button {
   color: var(--text-secondary);
 }
 
-/* "10 photos — the most one record holds": states why the button just
-   went dashed, so the surveyor doesn't have to guess from a disabled
-   control. Left-aligned under the button, not centred like the export/
-   load hints — the field stacks in a column, it isn't its own row. */
+/* PHOTO_CAP_MESSAGE ("<n> photos — the most one record holds", built from
+   MAX_PHOTOS in ui/format.js and shared with .photo-lightbox-cap): states
+   why the button just went dashed, so the surveyor doesn't have to guess
+   from a disabled control. Left-aligned under the button, not centred like
+   the export/load hints — the field stacks in a column, not its own row. */
 .photo-field-cap {
   margin: 0;
   font-size: var(--type-small);
