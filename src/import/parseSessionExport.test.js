@@ -93,4 +93,17 @@ describe('parseSessionExport: photos[]', () => {
     expect(parsed.observations[0].photos).toEqual([{ id: 'p1', referencePhoto: null }]);
     expect(parsed.photos.map((p) => p.photoId)).toEqual(['p1']);
   });
+
+  test('a bare ref_photo with no photo at all imports as photos: [], referenceObservationId intact', () => {
+    // A station a surveyor revisited but photographed nothing new at: the
+    // pairing key survives independently of any photo, and the old
+    // ref_photo convenience string has nothing to attach to, so it's
+    // dropped rather than forced onto a photo entry that doesn't exist.
+    const text = collectionWith({ ref_obs_id: 'ref-1', ref_photo: 'old.jpg' });
+
+    const parsed = parseSessionExport([geojsonEntry(text)]);
+
+    expect(parsed.observations[0].photos).toEqual([]);
+    expect(parsed.observations[0].referenceObservationId).toBe('ref-1');
+  });
 });

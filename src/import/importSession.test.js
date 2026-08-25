@@ -698,4 +698,43 @@ describe('traced observations through the round trip', () => {
     expect(observations[0].photos).toHaveLength(1);
     expect(observations[0].photos[0].referencePhoto).toBe('ref-4.jpg');
   });
+
+  test('a bare ref_photo with no photo at all imports as photos: [], pairing key intact', async () => {
+    // A revisited station photographed nothing new at: the pairing key
+    // survives independently of any photo; the old ref_photo string has no
+    // photo entry to attach to, so it's dropped rather than forced onto one.
+    const encoderEntry = (name, text) => ({ name, data: encoder.encode(text) });
+    const text = JSON.stringify({
+      type: 'FeatureCollection',
+      survey_session: { id: 's', name: 'S', started_at: FIXED_NOW, ended_at: FIXED_NOW },
+      features: [
+        {
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [-0.14, 51.5] },
+          properties: {
+            obs_id: 'obs-1',
+            recorded_at: FIXED_NOW,
+            fix_at: FIXED_NOW,
+            lat: 51.5,
+            lon: -0.14,
+            gps_accuracy_m: 5,
+            ref_obs_id: 'ref-1',
+            ref_photo: 'old.jpg',
+          },
+        },
+      ],
+    });
+
+    const parsed = parseSessionExport([encoderEntry('session.geojson', text)]);
+    const db = await openDatabase('import-bare-ref-photo');
+    const { photoCount } = await writeImportedSession(db, parsed, {
+      newId: fakeIdGenerator('bare-ref'),
+    });
+
+    expect(photoCount).toBe(0);
+    const [imported] = await listSessions(db);
+    const [obs] = await listObservationsForSession(db, imported.id);
+    expect(obs.photos).toEqual([]);
+    expect(obs.referenceObservationId).toBe('ref-1');
+  });
 });
