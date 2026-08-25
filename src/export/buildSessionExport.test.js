@@ -152,10 +152,7 @@ describe('buildSessionExport', () => {
     expect(names).not.toContain('photos/p2.jpg');
 
     const geojson = JSON.parse(entries.find((e) => e.name === 'session.geojson').input);
-    expect(geojson.features[0].properties.photos.map((p) => p.photo)).toEqual([
-      'p1.jpg',
-      'p3.jpg',
-    ]);
+    expect(geojson.features[0].properties.photos.map((p) => p.photo)).toEqual(['p1.jpg', 'p3.jpg']);
     expect(geojson.features[0].properties.photo).toBe('p1.jpg');
   });
 });

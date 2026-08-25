@@ -626,9 +626,7 @@ describe('ObservationsList — retake, delete and add photo (design pass 4 §7e)
 
     rerender(
       html`<${ObservationsList}
-        observations=${[
-          { ...OBS_WITH_PHOTO, photos: [{ id: 'photo-2', referencePhoto: null }] },
-        ]}
+        observations=${[{ ...OBS_WITH_PHOTO, photos: [{ id: 'photo-2', referencePhoto: null }] }]}
         loadPhoto=${loadPhoto}
       />`,
     );

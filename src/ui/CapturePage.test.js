@@ -692,7 +692,9 @@ describe('CapturePage — undo lifecycle', () => {
     });
 
     await waitFor(() => expect(downscale).toHaveBeenCalledWith(file));
-    await waitFor(() => expect(service.replacePhoto).toHaveBeenCalledWith('obs-1', 'obs-1', encoded));
+    await waitFor(() =>
+      expect(service.replacePhoto).toHaveBeenCalledWith('obs-1', 'obs-1', encoded),
+    );
     // The refresh is what repoints the row at the new photo id.
     await waitFor(() => expect(service.listObservations.mock.calls.length).toBeGreaterThan(1));
   });
@@ -1970,9 +1972,7 @@ describe('CapturePage — revisit', () => {
     // against.
     const service = revisitService();
     const { sensors, pushPosition } = createFakeSensors();
-    const downscale = vi
-      .fn()
-      .mockResolvedValue({ blob: new Blob(['x'], { type: 'image/jpeg' }) });
+    const downscale = vi.fn().mockResolvedValue({ blob: new Blob(['x'], { type: 'image/jpeg' }) });
     renderPage({ service, sensors, downscale });
     pushPosition(POSITION);
     await screen.findByText('Station 1 of 2');
@@ -2006,9 +2006,7 @@ describe('CapturePage — revisit', () => {
     // surveyor was framing a moment ago.
     const service = revisitService();
     const { sensors, pushPosition } = createFakeSensors();
-    const downscale = vi
-      .fn()
-      .mockResolvedValue({ blob: new Blob(['x'], { type: 'image/jpeg' }) });
+    const downscale = vi.fn().mockResolvedValue({ blob: new Blob(['x'], { type: 'image/jpeg' }) });
     renderPage({ service, sensors, downscale });
     pushPosition(POSITION);
     await screen.findByText('Station 1 of 2');
@@ -2049,9 +2047,7 @@ describe('CapturePage — revisit', () => {
     // mis-pairing no consumer could detect.
     const service = revisitService();
     const { sensors, pushPosition } = createFakeSensors();
-    const downscale = vi
-      .fn()
-      .mockResolvedValue({ blob: new Blob(['x'], { type: 'image/jpeg' }) });
+    const downscale = vi.fn().mockResolvedValue({ blob: new Blob(['x'], { type: 'image/jpeg' }) });
     renderPage({ service, sensors, downscale });
     pushPosition(POSITION);
     await screen.findByText('Station 1 of 2');
