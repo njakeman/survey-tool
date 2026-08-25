@@ -83,7 +83,7 @@ describe('buildSessionExport', () => {
   test('includes a photos/<id>.jpg entry with the real Blob for observations with a photo', async () => {
     const db = await openDatabase('export-with-photo');
     await putSession(db, makeSession());
-    await putObservation(db, makeObservation({ photoId: 'obs-1' }));
+    await putObservation(db, makeObservation({ photos: [{ id: 'obs-1' }] }));
     const blob = new Blob(['fake jpeg bytes'], { type: 'image/jpeg' });
     await putPhoto(db, { id: 'obs-1', blob, contentType: 'image/jpeg' });
 
@@ -97,7 +97,7 @@ describe('buildSessionExport', () => {
   test('omits a photo entry for observations with no photo', async () => {
     const db = await openDatabase('export-no-photo');
     await putSession(db, makeSession());
-    await putObservation(db, makeObservation({ photoId: null }));
+    await putObservation(db, makeObservation({ photos: [] }));
 
     const { entries } = await buildSessionExport(db, { sessionId: 'sess-1', appVersion: '0.1.0' });
 
@@ -107,7 +107,7 @@ describe('buildSessionExport', () => {
   test('skips an observation whose referenced photo record is missing, rather than failing the export', async () => {
     const db = await openDatabase('export-orphan-photo-ref');
     await putSession(db, makeSession());
-    await putObservation(db, makeObservation({ photoId: 'obs-1' })); // no matching putPhoto call
+    await putObservation(db, makeObservation({ photos: [{ id: 'obs-1' }] })); // no matching putPhoto call
 
     const { entries } = await buildSessionExport(db, { sessionId: 'sess-1', appVersion: '0.1.0' });
 
@@ -116,12 +116,13 @@ describe('buildSessionExport', () => {
     // photos/obs-1.jpg reference reads as a broken link in QGIS/downstream.
     const geojson = JSON.parse(entries.find((e) => e.name === 'session.geojson').input);
     expect(geojson.features[0].properties.photo).toBeNull();
+    expect(geojson.features[0].properties.photos).toEqual([]);
   });
 
   test('keeps the geojson photo reference when the photo record is present', async () => {
     const db = await openDatabase('export-photo-ref-present');
     await putSession(db, makeSession());
-    await putObservation(db, makeObservation({ photoId: 'obs-1' }));
+    await putObservation(db, makeObservation({ photos: [{ id: 'obs-1' }] }));
     const blob = new Blob(['fake jpeg bytes'], { type: 'image/jpeg' });
     await putPhoto(db, { id: 'obs-1', blob, contentType: 'image/jpeg' });
 
@@ -129,6 +130,33 @@ describe('buildSessionExport', () => {
 
     const geojson = JSON.parse(entries.find((e) => e.name === 'session.geojson').input);
     expect(geojson.features[0].properties.photo).toBe('obs-1.jpg');
+  });
+
+  test('zips every photo an observation holds and drops only the unbacked entries', async () => {
+    const db = await openDatabase('export-multi-photo');
+    await putSession(db, makeSession());
+    await putObservation(
+      db,
+      makeObservation({ photos: [{ id: 'p1' }, { id: 'p2' }, { id: 'p3' }] }),
+    ); // p2 has no matching putPhoto call — an orphan record
+    const blob1 = new Blob(['bytes p1'], { type: 'image/jpeg' });
+    const blob3 = new Blob(['bytes p3'], { type: 'image/jpeg' });
+    await putPhoto(db, { id: 'p1', blob: blob1, contentType: 'image/jpeg' });
+    await putPhoto(db, { id: 'p3', blob: blob3, contentType: 'image/jpeg' });
+
+    const { entries } = await buildSessionExport(db, { sessionId: 'sess-1', appVersion: '0.1.0' });
+
+    const names = entries.map((e) => e.name);
+    expect(names).toContain('photos/p1.jpg');
+    expect(names).toContain('photos/p3.jpg');
+    expect(names).not.toContain('photos/p2.jpg');
+
+    const geojson = JSON.parse(entries.find((e) => e.name === 'session.geojson').input);
+    expect(geojson.features[0].properties.photos.map((p) => p.photo)).toEqual([
+      'p1.jpg',
+      'p3.jpg',
+    ]);
+    expect(geojson.features[0].properties.photo).toBe('p1.jpg');
   });
 });
 

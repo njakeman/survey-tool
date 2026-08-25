@@ -40,23 +40,23 @@ export async function buildSessionExport(db, { sessionId, appVersion, gridRef })
   }
 
   // Photos are resolved before the GeoJSON is serialised so the two can't
-  // disagree: an orphan photoId (record missing) is skipped rather than
-  // failing the export, and the feature's `photo` property is nulled to
-  // match — the zip must never claim a file it doesn't contain.
+  // disagree: an unbacked entry (record missing) is dropped from `photos`
+  // rather than failing the export — the zip must never claim a file it
+  // doesn't contain.
   // Fetched together rather than one round trip at a time: a long session's
   // photos were read strictly sequentially before the zip could even start,
   // with the surveyor waiting. Order is preserved by mapping, which matters
   // for the zip's contents but never for the fetching.
-  const withPhotos = observations.filter((obs) => obs.photoId);
-  const photos = await Promise.all(withPhotos.map((obs) => getPhoto(db, obs.photoId)));
+  const photoRefs = observations.flatMap((obs) => obs.photos ?? []);
+  const photoRecords = await Promise.all(photoRefs.map((entry) => getPhoto(db, entry.id)));
 
   const photoEntries = [];
   const presentPhotoIds = new Set();
-  withPhotos.forEach((obs, index) => {
-    const photo = photos[index];
-    if (!photo) return;
-    presentPhotoIds.add(obs.photoId);
-    photoEntries.push({ name: `photos/${obs.photoId}.jpg`, input: photo.blob });
+  photoRefs.forEach((entry, index) => {
+    const record = photoRecords[index];
+    if (!record) return;
+    presentPhotoIds.add(entry.id);
+    photoEntries.push({ name: `photos/${entry.id}.jpg`, input: record.blob });
   });
 
   // Voice notes, by the photo rules: resolved before serialisation, orphan
@@ -77,7 +77,7 @@ export async function buildSessionExport(db, { sessionId, appVersion, gridRef })
 
   const exportObservations = observations.map((obs) => ({
     ...obs,
-    photoId: obs.photoId && !presentPhotoIds.has(obs.photoId) ? null : obs.photoId,
+    photos: (obs.photos ?? []).filter((entry) => presentPhotoIds.has(entry.id)),
     audioId: obs.audioId && !audioFilenames.has(obs.audioId) ? null : (obs.audioId ?? null),
   }));
 
