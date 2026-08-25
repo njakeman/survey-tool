@@ -43,8 +43,12 @@ describe('deleteSessionWithData', () => {
     await putSession(db, makeSession());
     const blob = new Blob(['bytes'], { type: 'image/jpeg' });
     await saveObservationWithPhoto(db, {
-      observation: makeObservation({ id: 'obs-1', photoId: 'obs-1', audioId: 'obs-1' }),
-      photo: { id: 'obs-1', blob, contentType: 'image/jpeg' },
+      observation: makeObservation({
+        id: 'obs-1',
+        photos: [{ id: 'obs-1', referencePhoto: null }],
+        audioId: 'obs-1',
+      }),
+      photos: [{ id: 'obs-1', blob, contentType: 'image/jpeg' }],
       audio: { id: 'obs-1', blob, contentType: 'audio/mp4' },
     });
     await saveObservationWithPhoto(db, { observation: makeObservation({ id: 'obs-2' }) });
@@ -55,6 +59,36 @@ describe('deleteSessionWithData', () => {
     expect(await listObservationsForSession(db, 'sess-1')).toEqual([]);
     expect(await getPhoto(db, 'obs-1')).toBeUndefined();
     expect(await getAudio(db, 'obs-1')).toBeUndefined();
+    db.close();
+  });
+
+  test('deletes every photo an observation holds', async () => {
+    const db = await openDatabase('session-delete-two-photos');
+    await putSession(db, makeSession());
+    const blob = new Blob(['bytes'], { type: 'image/jpeg' });
+    await saveObservationWithPhoto(db, {
+      observation: makeObservation({
+        id: 'obs-1',
+        photos: [
+          { id: 'p1', referencePhoto: null },
+          { id: 'p2', referencePhoto: null },
+        ],
+      }),
+      photos: [
+        { id: 'p1', blob, contentType: 'image/jpeg' },
+        { id: 'p2', blob, contentType: 'image/jpeg' },
+      ],
+    });
+    // Prove the fixture actually wrote both photos, so the post-delete
+    // undefined checks below demonstrate the delete did the work rather
+    // than the photos never having existed.
+    expect(await getPhoto(db, 'p1')).toBeDefined();
+    expect(await getPhoto(db, 'p2')).toBeDefined();
+
+    await deleteSessionWithData(db, 'sess-1');
+
+    expect(await getPhoto(db, 'p1')).toBeUndefined();
+    expect(await getPhoto(db, 'p2')).toBeUndefined();
     db.close();
   });
 

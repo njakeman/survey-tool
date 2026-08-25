@@ -3,7 +3,7 @@ import { stationStateRange } from './revisitStore.js';
 
 // Deletes a session and everything that hangs off it — observations (via
 // the by-session index), their photos and voice notes (reachable only
-// through each observation's photoId/audioId, exactly as captureDelete.js
+// through each observation's photos[]/audioId, exactly as captureDelete.js
 // reads them), any stale trace draft still pointing at the session
 // (traceDrafts has no sessionId index, deliberately — one draft exists at a
 // time in practice, so a getAll-and-filter costs nothing and saves a schema
@@ -31,7 +31,7 @@ export async function deleteSessionWithData(db, sessionId) {
   const observations = await tx.objectStore('observations').index('by-session').getAll(sessionId);
   for (const observation of observations) {
     tx.objectStore('observations').delete(observation.id);
-    if (observation.photoId) tx.objectStore('photos').delete(observation.photoId);
+    for (const entry of observation.photos ?? []) tx.objectStore('photos').delete(entry.id);
     if (observation.audioId) tx.objectStore('audio').delete(observation.audioId);
   }
 
