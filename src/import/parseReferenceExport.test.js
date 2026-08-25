@@ -129,6 +129,14 @@ describe('parseReferenceExport', () => {
     expect(stations[0].photos).toEqual([]);
   });
 
+  test('a photo property that is not a filename string fails by name, never as a TypeError', () => {
+    expect(() =>
+      parseReferenceExport(collectionBytes({ features: [feature({ photo: 42 })] }), [
+        'session.geojson',
+      ]),
+    ).toThrow(/photo must be a photo filename string/);
+  });
+
   test('refuses an export with nothing to revisit, by name', () => {
     expect(() =>
       parseReferenceExport(collectionBytes({ features: [] }), ['session.geojson']),

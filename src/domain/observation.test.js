@@ -432,5 +432,17 @@ describe('createObservation', () => {
       expect(obs.photos[0].referencePhoto).toBe('abc.jpg');
       expect(obs.photos[1].referencePhoto).toBeNull();
     });
+
+    test('a referencePhoto must be a string or null', () => {
+      // It names a file inside the reference zip. A number could only ever
+      // be joined by accident, and would ride into the export as one.
+      expect(() =>
+        createObservation({
+          ...baseFields,
+          referenceObservationId: 'ref-1',
+          photos: [{ id: 'p1', referencePhoto: 42 }],
+        }),
+      ).toThrow(/photos\[0\]\.referencePhoto must be a string or null/);
+    });
   });
 });

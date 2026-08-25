@@ -21,16 +21,28 @@ const decoder = new TextDecoder();
 // joined below, in parseSessionExport, and any entry with no matching file
 // in the zip is dropped rather than trusted — the mirror of export's
 // "never claim a file the zip doesn't contain".
+//
+// A claim that isn't a filename at all is a different thing from one the zip
+// cannot back: it fails the import by name. A foreign file's `"photo": 42`
+// reached String.replace and died as "name.replace is not a function", which
+// tells the surveyor nothing about the file they picked.
 const stripJpg = (name) => name.replace(/\.jpg$/i, '');
+function photoFilename(value, where) {
+  if (value === null || value === undefined || value === '') return null;
+  if (typeof value !== 'string') {
+    throw new Error(`${where} must be a photo filename string (got ${value})`);
+  }
+  return value;
+}
 function photosFrom(props) {
   if (Array.isArray(props.photos)) {
-    return props.photos
-      .filter((entry) => typeof entry?.photo === 'string' && entry.photo)
-      .map((entry) => ({ id: stripJpg(entry.photo), referencePhoto: entry.ref_photo ?? null }));
+    return props.photos.flatMap((entry, index) => {
+      const filename = photoFilename(entry?.photo, `photos[${index}].photo`);
+      return filename ? [{ id: stripJpg(filename), referencePhoto: entry.ref_photo ?? null }] : [];
+    });
   }
-  return props.photo
-    ? [{ id: stripJpg(props.photo), referencePhoto: props.ref_photo ?? null }]
-    : [];
+  const filename = photoFilename(props.photo, 'photo');
+  return filename ? [{ id: stripJpg(filename), referencePhoto: props.ref_photo ?? null }] : [];
 }
 
 // Exported for parseReferenceExport.js, which shares this file's whole
@@ -114,10 +126,6 @@ export function observationFrom(feature, index, sessionId) {
       headingDeg: props.heading_deg ?? null,
       headingAccuracyDeg: props.heading_accuracy_deg ?? null,
       note: props.note ?? '',
-      // photos[] since 2026-08-25; earlier exports carried one `photo` (and
-      // `ref_photo`). The bytes are joined below, and any entry with no
-      // matching file in the zip is dropped rather than trusted — the
-      // mirror of export's "never claim a file the zip doesn't contain".
       photos: photosFrom(props),
       audioId: props.audio ? props.audio.replace(/\.(webm|m4a)$/i, '') : null,
       audioDurationMs: props.audio_duration_ms ?? null,

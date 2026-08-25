@@ -94,6 +94,24 @@ describe('parseSessionExport: photos[]', () => {
     expect(parsed.photos.map((p) => p.photoId)).toEqual(['p1']);
   });
 
+  test('a photo property that is not a filename string fails by name', () => {
+    // A foreign file's "photo": 42 used to reach String.replace and die as
+    // "name.replace is not a function" — unreadable on the Import tap.
+    const text = collectionWith({ photo: 42 });
+
+    expect(() => parseSessionExport([geojsonEntry(text)])).toThrow(
+      /Could not import feature 1: photo must be a photo filename string/,
+    );
+  });
+
+  test('a photos[] entry whose photo is not a filename string fails by name', () => {
+    const text = collectionWith({ photos: [{ photo: 42, ref_photo: null }] });
+
+    expect(() => parseSessionExport([geojsonEntry(text)])).toThrow(
+      /Could not import feature 1: photos\[0\]\.photo must be a photo filename string/,
+    );
+  });
+
   test('a bare ref_photo with no photo at all imports as photos: [], referenceObservationId intact', () => {
     // A station a surveyor revisited but photographed nothing new at: the
     // pairing key survives independently of any photo, and the old

@@ -230,6 +230,13 @@ export function createObservation({
     }
     seenPhotoIds.add(id);
     const referencePhoto = entry.referencePhoto ?? null;
+    // It names a file inside the reference zip — anything else could only be
+    // joined by accident, and would ride out into the export as ref_photo.
+    if (referencePhoto !== null && typeof referencePhoto !== 'string') {
+      throw new Error(
+        `createObservation: photos[${index}].referencePhoto must be a string or null (got ${referencePhoto})`,
+      );
+    }
     // Half of both-halves: a reference photo filename without its station
     // id joins to nothing. The id alone IS legal — a station may honestly
     // have no photo, and the pairing is still a pairing.

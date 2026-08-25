@@ -44,11 +44,12 @@ export function parseReferenceExport(geojsonData, entryNames) {
     // filename list below is fine — stations are UI-only objects that never
     // re-enter createObservation.
     const props = feature?.properties ?? {};
-    const claimed = Array.isArray(props.photos)
-      ? props.photos.map((entry) => entry?.photo).filter(Boolean)
-      : props.photo
-        ? [props.photo]
-        : [];
+    // Filenames only. observationFrom above has already refused a claim that
+    // isn't a string, by name — this guard is what keeps that true of the
+    // read here too, rather than trusting the property a second time.
+    const claimed = (
+      Array.isArray(props.photos) ? props.photos.map((entry) => entry?.photo) : [props.photo]
+    ).filter((filename) => typeof filename === 'string' && filename);
     const photos = claimed.flatMap((filename) => {
       const entryName = entryByLowerName.get(`photos/${filename}`.toLowerCase()) ?? null;
       return entryName ? [{ filename, entryName }] : [];
