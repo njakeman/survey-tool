@@ -805,22 +805,17 @@ export function CapturePage({
   // 1600px JPEG rule holds and the stored thumbnail stays the only size that
   // exists. History passes neither callback — that absence is the read-only
   // rule, exactly as with onEditNote.
-  const setRowPhoto = async (id, file) => {
-    const observation = observations.find((obs) => obs.id === id);
-    const existing = observation?.photos?.[0] ?? null;
+  const setRowPhoto = async (id, photoId, file) => {
     const downscaled = await downscale(file);
-    if (existing) {
-      await service.replacePhoto(id, existing.id, downscaled);
+    if (photoId) {
+      await service.replacePhoto(id, photoId, downscaled);
     } else {
       await service.addPhoto(id, downscaled);
     }
     await refreshSession();
   };
-  const deleteRowPhoto = async (id) => {
-    const observation = observations.find((obs) => obs.id === id);
-    const existing = observation?.photos?.[0] ?? null;
-    if (!existing) return;
-    await service.deletePhoto(id, existing.id);
+  const deleteRowPhoto = async (id, photoId) => {
+    await service.deletePhoto(id, photoId);
     await refreshSession();
   };
   const observationsList = useMemo(
@@ -835,11 +830,9 @@ export function CapturePage({
         onDeletePhoto=${deleteRowPhoto}
       />`,
     // The handlers are fresh closures every render, deliberately not
-    // dependencies. Two of them now also close over `observations` (to find
-    // the row's existing photo), so a stale closure would edit the wrong
-    // slot — what keeps them fresh is that decoratedObservations IS a
-    // dependency, and it is derived from the same `observations` array:
-    // every change to it re-runs this memo with the current closures.
+    // dependencies — they no longer close over `observations` (the caller
+    // now names the photoId), so decoratedObservations is the only thing
+    // that needs to invalidate this memo.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [decoratedObservations, gridRef],
   );

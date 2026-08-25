@@ -478,7 +478,7 @@ describe('ObservationsList — retake, delete and add photo (design pass 4 §7e)
     const input = dialog.querySelector('input[capture="environment"]');
     fireEvent.change(input, { target: { files: [FILE] } });
 
-    await waitFor(() => expect(onSetPhoto).toHaveBeenCalledWith('obs-2', FILE));
+    await waitFor(() => expect(onSetPhoto).toHaveBeenCalledWith('obs-2', 'obs-2', FILE));
     // Retaking keeps the view open so the second attempt can be judged.
     expect(screen.getByRole('dialog', { name: /photo/i })).toBeInTheDocument();
   });
@@ -507,7 +507,7 @@ describe('ObservationsList — retake, delete and add photo (design pass 4 §7e)
     fireEvent.click(within(dialog).getByRole('button', { name: /^delete$/i }));
     fireEvent.click(within(dialog).getByRole('button', { name: /delete photo/i }));
 
-    await waitFor(() => expect(onDeletePhoto).toHaveBeenCalledWith('obs-2'));
+    await waitFor(() => expect(onDeletePhoto).toHaveBeenCalledWith('obs-2', 'obs-2'));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
@@ -519,7 +519,7 @@ describe('ObservationsList — retake, delete and add photo (design pass 4 §7e)
     const input = label.querySelector('input[capture="environment"]');
     fireEvent.change(input, { target: { files: [FILE] } });
 
-    expect(onSetPhoto).toHaveBeenCalledWith('obs-1', FILE);
+    expect(onSetPhoto).toHaveBeenCalledWith('obs-1', null, FILE);
   });
 
   test('without onSetPhoto an empty photo slot stays empty — history stays read-only', () => {
@@ -548,7 +548,7 @@ describe('ObservationsList — retake, delete and add photo (design pass 4 §7e)
       .closest('label')
       .querySelector('input');
     fireEvent.change(input, { target: { files: [FILE] } });
-    await waitFor(() => expect(onSetPhoto).toHaveBeenCalledWith('obs-1', FILE));
+    await waitFor(() => expect(onSetPhoto).toHaveBeenCalledWith('obs-1', null, FILE));
 
     // The parent refresh delivers the repointed record.
     rerender(

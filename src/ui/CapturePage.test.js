@@ -852,6 +852,71 @@ describe('CapturePage — undo lifecycle', () => {
     await waitFor(() => expect(service.listObservations.mock.calls.length).toBeGreaterThan(1));
   });
 
+  test('adding a photo to a row with none runs the downscale pipeline, addPhoto, and a refresh', async () => {
+    const observation = {
+      id: 'obs-1',
+      sessionId: 'sess-1',
+      lat: 51.5,
+      lon: -0.14,
+      gpsAccuracyM: 8,
+      note: 'gate post',
+      photos: [],
+    };
+    const service = createFakeService({ openSession: OPEN_SESSION, observations: [observation] });
+    service.addPhoto = vi.fn().mockResolvedValue(undefined);
+    const encoded = { blob: new Blob(['downscaled'], { type: 'image/jpeg' }) };
+    const downscale = vi.fn().mockResolvedValue(encoded);
+    const { sensors } = createFakeSensors();
+    render(html`<${CapturePage} service=${service} sensors=${sensors} downscale=${downscale} />`);
+    await screen.findByText('gate post');
+
+    const [row] = screen.getAllByRole('listitem');
+    const label = within(row)
+      .getByText(/add photo/i)
+      .closest('label');
+    const file = new File(['raw'], 'photo.jpg', { type: 'image/jpeg' });
+    fireEvent.change(label.querySelector('input[capture="environment"]'), {
+      target: { files: [file] },
+    });
+
+    await waitFor(() => expect(downscale).toHaveBeenCalledWith(file));
+    await waitFor(() => expect(service.addPhoto).toHaveBeenCalledWith('obs-1', encoded));
+    // The refresh is what shows the new thumbnail.
+    await waitFor(() => expect(service.listObservations.mock.calls.length).toBeGreaterThan(1));
+  });
+
+  test('confirming Delete on a saved photo goes through service.deletePhoto and a refresh', async () => {
+    const observation = {
+      id: 'obs-1',
+      sessionId: 'sess-1',
+      lat: 51.5,
+      lon: -0.14,
+      gpsAccuracyM: 8,
+      note: 'gate post',
+      photos: [{ id: 'obs-1', referencePhoto: null }],
+    };
+    const service = createFakeService({ openSession: OPEN_SESSION, observations: [observation] });
+    service.getPhoto = vi
+      .fn()
+      .mockResolvedValue({ id: 'obs-1', contentType: 'image/jpeg', blob: new Blob(['x']) });
+    service.deletePhoto = vi.fn().mockResolvedValue(undefined);
+    const { sensors } = createFakeSensors();
+    render(html`<${CapturePage} service=${service} sensors=${sensors} downscale=${vi.fn()} />`);
+    await screen.findByText('gate post');
+
+    const [row] = screen.getAllByRole('listitem');
+    fireEvent.click(within(row).getByRole('button', { name: 'Photo' }));
+    fireEvent.click(await screen.findByRole('img', { name: /photo for this observation/i }));
+
+    const dialog = screen.getByRole('dialog', { name: /photo/i });
+    fireEvent.click(within(dialog).getByRole('button', { name: /^delete$/i }));
+    fireEvent.click(within(dialog).getByRole('button', { name: /delete photo/i }));
+
+    await waitFor(() => expect(service.deletePhoto).toHaveBeenCalledWith('obs-1', 'obs-1'));
+    // The refresh is what returns the row to offering Add photo.
+    await waitFor(() => expect(service.listObservations.mock.calls.length).toBeGreaterThan(1));
+  });
+
   test('a bumped sessionEpoch re-reads the session and clears the Undo affordance', async () => {
     // Load session (history) makes a past session the open one while this
     // page stays mounted-but-hidden — the epoch bump is its explicit signal

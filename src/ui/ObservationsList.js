@@ -157,7 +157,7 @@ function SavedPhoto({ observation, gridReference, loadPhoto, onSetPhoto, onDelet
     if (!file || !onSetPhoto) return;
     setBusy(true);
     try {
-      await onSetPhoto(observation.id, file);
+      await onSetPhoto(observation.id, photoId, file);
     } finally {
       setBusy(false);
     }
@@ -174,7 +174,7 @@ function SavedPhoto({ observation, gridReference, loadPhoto, onSetPhoto, onDelet
     if (!file) return;
     setBusy(true);
     try {
-      await onSetPhoto(observation.id, file);
+      await onSetPhoto(observation.id, null, file);
       setState('thumb');
     } finally {
       setBusy(false);
@@ -203,7 +203,7 @@ function SavedPhoto({ observation, gridReference, loadPhoto, onSetPhoto, onDelet
   }
 
   async function handleDelete() {
-    await onDeletePhoto(observation.id);
+    await onDeletePhoto(observation.id, photoId);
     // Nothing left to look at: the view closes and the row (parent-refreshed
     // to photos: []) returns to offering Add photo.
     if (urlRef.current) {
