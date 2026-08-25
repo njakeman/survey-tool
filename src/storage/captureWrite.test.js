@@ -30,7 +30,7 @@ describe('saveObservationWithPhoto', () => {
     const db = await openDatabase('capture-write-no-photo');
     const observation = makeObservation();
 
-    await saveObservationWithPhoto(db, { observation, photo: null });
+    await saveObservationWithPhoto(db, { observation, photos: [] });
 
     expect(await getObservation(db, 'obs-1')).toEqual(observation);
     expect(await getPhoto(db, 'obs-1')).toBeUndefined();
@@ -39,12 +39,12 @@ describe('saveObservationWithPhoto', () => {
 
   test('writes the observation and photo together, photo stored as arrayBuffer not blob', async () => {
     const db = await openDatabase('capture-write-with-photo');
-    const observation = makeObservation({ photoId: 'obs-1' });
+    const observation = makeObservation({ photos: [{ id: 'obs-1' }] });
     const blob = new Blob(['fake jpeg bytes'], { type: 'image/jpeg' });
 
     await saveObservationWithPhoto(db, {
       observation,
-      photo: { id: 'obs-1', blob, contentType: 'image/jpeg' },
+      photos: [{ id: 'obs-1', blob, contentType: 'image/jpeg' }],
     });
 
     expect(await getObservation(db, 'obs-1')).toEqual(observation);
@@ -56,12 +56,12 @@ describe('saveObservationWithPhoto', () => {
 
   test('reads the photo blob into an ArrayBuffer before opening the transaction, never storing a Blob', async () => {
     const db = await openDatabase('capture-write-arraybuffer-shape');
-    const observation = makeObservation({ photoId: 'obs-1' });
+    const observation = makeObservation({ photos: [{ id: 'obs-1' }] });
     const blob = new Blob(['fake jpeg bytes'], { type: 'image/jpeg' });
 
     await saveObservationWithPhoto(db, {
       observation,
-      photo: { id: 'obs-1', blob, contentType: 'image/jpeg' },
+      photos: [{ id: 'obs-1', blob, contentType: 'image/jpeg' }],
     });
 
     const tx = db.transaction('photos', 'readonly');
@@ -116,18 +116,55 @@ describe('saveObservationWithPhoto', () => {
 
   test('writes nothing when the photo blob fails to read, proving the buffer is read before the transaction opens', async () => {
     const db = await openDatabase('capture-write-failed-blob');
-    const observation = makeObservation({ photoId: 'obs-1' });
+    const observation = makeObservation({ photos: [{ id: 'obs-1' }] });
     const failingBlob = { arrayBuffer: () => Promise.reject(new Error('read failed')) };
 
     await expect(
       saveObservationWithPhoto(db, {
         observation,
-        photo: { id: 'obs-1', blob: failingBlob, contentType: 'image/jpeg' },
+        photos: [{ id: 'obs-1', blob: failingBlob, contentType: 'image/jpeg' }],
       }),
     ).rejects.toThrow('read failed');
 
     expect(await getObservation(db, 'obs-1')).toBeUndefined();
     expect(await getPhoto(db, 'obs-1')).toBeUndefined();
+    db.close();
+  });
+
+  test('writes every photo and the observation in one transaction', async () => {
+    const db = await openDatabase('capture-write-multi');
+    const observation = makeObservation({ photos: [{ id: 'p1' }, { id: 'p2' }] });
+    await saveObservationWithPhoto(db, {
+      observation,
+      photos: [
+        { id: 'p1', blob: new Blob(['one'], { type: 'image/jpeg' }), contentType: 'image/jpeg' },
+        { id: 'p2', blob: new Blob(['two'], { type: 'image/jpeg' }), contentType: 'image/jpeg' },
+      ],
+    });
+    expect(await (await getPhoto(db, 'p1')).blob.text()).toBe('one');
+    expect(await (await getPhoto(db, 'p2')).blob.text()).toBe('two');
+    expect((await db.get('observations', observation.id)).photos).toHaveLength(2);
+    db.close();
+  });
+
+  test('writes nothing when one of several blobs fails to read', async () => {
+    const db = await openDatabase('capture-write-multi-fail');
+    const observation = makeObservation({ photos: [{ id: 'p1' }, { id: 'p2' }] });
+    await expect(
+      saveObservationWithPhoto(db, {
+        observation,
+        photos: [
+          { id: 'p1', blob: new Blob(['one'], { type: 'image/jpeg' }), contentType: 'image/jpeg' },
+          {
+            id: 'p2',
+            blob: { arrayBuffer: () => Promise.reject(new Error('read failed')) },
+            contentType: 'image/jpeg',
+          },
+        ],
+      }),
+    ).rejects.toThrow('read failed');
+    expect(await getPhoto(db, 'p1')).toBeUndefined();
+    expect(await db.get('observations', observation.id)).toBeUndefined();
     db.close();
   });
 });

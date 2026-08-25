@@ -19,13 +19,13 @@ describe('saveObservationWithPhoto against real IndexedDB', () => {
       lat: 51.5,
       lon: -0.14,
       gpsAccuracyM: 8,
-      photoId: 'obs-1',
+      photos: [{ id: 'obs-1' }],
     });
     const blob = new Blob(['real browser blob bytes'], { type: 'image/jpeg' });
 
     await saveObservationWithPhoto(db, {
       observation,
-      photo: { id: 'obs-1', blob, contentType: 'image/jpeg' },
+      photos: [{ id: 'obs-1', blob, contentType: 'image/jpeg' }],
     });
 
     expect(await getObservation(db, 'obs-1')).toEqual(observation);

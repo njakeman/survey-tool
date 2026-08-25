@@ -1,12 +1,13 @@
-// Writes an observation and its optional photo and voice note in one
+// Writes an observation and its optional photos and voice note in one
 // IndexedDB transaction, so a kill mid-save can never leave an observation
 // pointing at media that was never written.
 //
-// The blobs' arrayBuffer()s are awaited BEFORE the transaction opens. Awaiting
-// a non-IndexedDB promise inside a live transaction lets the microtask queue
-// drain and the browser auto-commit the transaction early, throwing
-// InactiveTransactionError on the next store call. And per CLAUDE.md, only
-// the ArrayBuffer is ever stored — never the Blob (see photoStore.js).
+// Every photo blob's arrayBuffer()s — all N of them — are awaited BEFORE the
+// transaction opens. Awaiting a non-IndexedDB promise inside a live
+// transaction lets the microtask queue drain and the browser auto-commit the
+// transaction early, throwing InactiveTransactionError on the next store
+// call. And per CLAUDE.md, only the ArrayBuffer is ever stored — never the
+// Blob (see photoStore.js).
 
 import { draftVertexRange } from './traceDraftStore.js';
 
@@ -16,14 +17,16 @@ import { draftVertexRange } from './traceDraftStore.js';
 // (recoverable) or the observation — never both, never neither.
 export async function saveObservationWithPhoto(
   db,
-  { observation, photo = null, audio = null, traceDraftId = null },
+  { observation, photos = [], audio = null, traceDraftId = null },
 ) {
-  const photoBuffer = photo ? await photo.blob.arrayBuffer() : null;
+  // Every buffer first, then the transaction — one failed read means
+  // nothing is written, not an observation claiming a missing photo.
+  const photoBuffers = await Promise.all(photos.map((photo) => photo.blob.arrayBuffer()));
   const audioBuffer = audio ? await audio.blob.arrayBuffer() : null;
 
   const stores = [
     'observations',
-    ...(photo ? ['photos'] : []),
+    ...(photos.length ? ['photos'] : []),
     ...(audio ? ['audio'] : []),
     ...(traceDraftId ? ['traceDrafts', 'traceVertices'] : []),
   ];
@@ -32,13 +35,13 @@ export async function saveObservationWithPhoto(
     tx.objectStore('traceDrafts').delete(traceDraftId);
     tx.objectStore('traceVertices').delete(draftVertexRange(traceDraftId));
   }
-  if (photo) {
+  photos.forEach((photo, index) => {
     tx.objectStore('photos').put({
       id: photo.id,
-      arrayBuffer: photoBuffer,
+      arrayBuffer: photoBuffers[index],
       contentType: photo.contentType,
     });
-  }
+  });
   if (audio) {
     tx.objectStore('audio').put({
       id: audio.id,
