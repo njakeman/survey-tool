@@ -14,6 +14,7 @@ import { ExportBadge } from './ExportBadge.js';
 import { TraceGlyph } from './traceGlyphs.js';
 import { VoiceTransport } from './VoiceTransport.js';
 import { BodyPortal } from './BodyPortal.js';
+import { ChevronGlyph } from './chevronGlyph.js';
 import { MAX_PHOTOS } from '../photo/dimensions.js';
 
 const cameraGlyph = html`<span class="glyph-camera" aria-hidden="true"></span>`;
@@ -86,22 +87,6 @@ function SavedVoiceNote({ audioId, durationMs, loadAudio }) {
       ${label}
     </button>
   `;
-}
-
-// The pager arrows' chevron. Drawn rather than typed: a glyph font is one
-// more thing to precache, and "‹" renders at wildly different weights across
-// the two platforms.
-function ChevronGlyph({ direction }) {
-  return html`<svg viewBox="0 0 10 16" width="10" height="16" aria-hidden="true">
-    <polyline
-      points=${direction === 'next' ? '2,1 8,8 2,15' : '8,1 2,8 8,15'}
-      fill="none"
-      stroke="currentColor"
-      stroke-width="2"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-    />
-  </svg>`;
 }
 
 // One slot in the strip: a 64px thumbnail once its bytes are in, a dashed
