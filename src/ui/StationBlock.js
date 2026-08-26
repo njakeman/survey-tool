@@ -163,7 +163,7 @@ export function StationBlock({
               disabled=${busy}
               onClick=${() => onFrame?.()}
             >
-              Frame the photo
+              ${(station.photos?.length ?? 0) > 1 ? 'Frame the photos' : 'Frame the photo'}
             </button>
             <div class="station-block-secondary">
               <button

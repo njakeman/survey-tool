@@ -61,9 +61,23 @@ describe('StationBlock', () => {
   test('Frame the photo is the accent action', () => {
     const { onFrame } = renderBlock();
 
-    fireEvent.click(screen.getByRole('button', { name: /frame the photo/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^frame the photo$/i }));
 
     expect(onFrame).toHaveBeenCalled();
+  });
+
+  test('a station with several reference photos says so on the button', () => {
+    renderBlock({
+      station: {
+        ...station,
+        photos: [
+          { filename: 'a.jpg', entryName: 'photos/a.jpg' },
+          { filename: 'b.jpg', entryName: 'photos/b.jpg' },
+        ],
+      },
+    });
+
+    expect(screen.getByRole('button', { name: /^frame the photos$/i })).toBeInTheDocument();
   });
 
   test('Change hands over to the chooser', () => {
