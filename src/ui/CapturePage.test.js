@@ -2216,6 +2216,25 @@ describe('CapturePage — revisit', () => {
     });
   }
 
+  // The same reference with two photos at the first station.
+  function twoPhotoService(overrides = {}) {
+    const parsed = JSON.parse(referenceGeojson);
+    parsed.features[0].properties.photos = [{ photo: 'ref-1.jpg' }, { photo: 'ref-1b.jpg' }];
+    return revisitService({
+      referenceRecord: {
+        sessionId: 'sess-1',
+        arrayBuffer: buildZip([
+          { name: 'session.geojson', data: JSON.stringify(parsed) },
+          { name: 'photos/ref-1.jpg', data: new Uint8Array([0xff, 0xd8]) },
+          { name: 'photos/ref-1b.jpg', data: new Uint8Array([0xff, 0xd8]) },
+        ]),
+        filename: REFERENCE.filename,
+        hash: REFERENCE.hash,
+      },
+      ...overrides,
+    });
+  }
+
   test('loads the reference and guides to the nearest to-do station', async () => {
     const service = revisitService();
     const { sensors, pushPosition } = createFakeSensors();
@@ -2595,6 +2614,98 @@ describe('CapturePage — revisit', () => {
       expect(screen.queryByRole('dialog', { name: /frame the photo/i })).toBeNull(),
     );
     expect(screen.getByText(/revisiting: west stile/i)).toBeInTheDocument();
+  });
+
+  describe('with two reference photos at the station', () => {
+    const framingInput = () => document.querySelector('.framing-screen input[type="file"]');
+    const framingLabel = () => document.querySelector('.framing-screen-label');
+    const FILE = new File([new Uint8Array([1])], 'photo.jpg', { type: 'image/jpeg' });
+
+    async function openFraming() {
+      const service = twoPhotoService();
+      const { sensors, pushPosition } = createFakeSensors();
+      const downscale = vi
+        .fn()
+        .mockResolvedValue({ blob: new Blob(['x'], { type: 'image/jpeg' }) });
+      renderPage({ service, sensors, downscale });
+      pushPosition(POSITION);
+      await screen.findByText('Station 1 of 2');
+      fireEvent.click(screen.getByRole('button', { name: /^frame the photos$/i }));
+      await screen.findByRole('dialog', { name: /frame the photo/i });
+      await waitFor(() => expect(framingLabel()).toHaveTextContent('Reference 1 of 2'));
+      return { service, downscale };
+    }
+
+    test('the shot pairs to the reference on screen, not the first', async () => {
+      const { service, downscale } = await openFraming();
+
+      fireEvent.click(screen.getByRole('button', { name: /next reference/i }));
+      expect(framingLabel()).toHaveTextContent('Reference 2 of 2');
+      fireEvent.change(framingInput(), { target: { files: [FILE] } });
+      await waitFor(() => expect(downscale).toHaveBeenCalledWith(FILE));
+      // One reference still to do: the step stays open, on it.
+      expect(screen.getByRole('dialog', { name: /frame the photo/i })).toBeInTheDocument();
+      expect(framingLabel()).toHaveTextContent('Reference 1 of 2');
+
+      fireEvent.click(screen.getByRole('button', { name: /back to capture/i }));
+      fireEvent.click(screen.getByRole('button', { name: /save observation/i }));
+      await waitFor(() =>
+        expect(service.saveObservation).toHaveBeenCalledWith(
+          expect.objectContaining({
+            photos: [expect.objectContaining({ referencePhoto: 'ref-1b.jpg' })],
+            station: { referenceObservationId: 'ref-1' },
+          }),
+        ),
+      );
+    });
+
+    test('the step closes after the last reference is framed, both shots paired', async () => {
+      const { service, downscale } = await openFraming();
+
+      fireEvent.change(framingInput(), { target: { files: [FILE] } });
+      await waitFor(() => expect(downscale).toHaveBeenCalledTimes(1));
+      expect(framingLabel()).toHaveTextContent('Reference 2 of 2');
+      // The shutter re-arms once the shot is in the strip (busy gates it).
+      await waitFor(() => expect(framingInput()).not.toBeDisabled());
+      fireEvent.change(framingInput(), { target: { files: [FILE] } });
+      await waitFor(() =>
+        expect(screen.queryByRole('dialog', { name: /frame the photo/i })).toBeNull(),
+      );
+      await waitFor(() =>
+        expect(screen.getAllByRole('img', { name: /^photo \d of 2$/i })).toHaveLength(2),
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: /save observation/i }));
+      await waitFor(() =>
+        expect(service.saveObservation).toHaveBeenCalledWith(
+          expect.objectContaining({
+            photos: [
+              expect.objectContaining({ referencePhoto: 'ref-1.jpg' }),
+              expect.objectContaining({ referencePhoto: 'ref-1b.jpg' }),
+            ],
+          }),
+        ),
+      );
+    });
+
+    test('removing a framed shot from the strip re-arms its reference', async () => {
+      const { downscale } = await openFraming();
+
+      fireEvent.change(framingInput(), { target: { files: [FILE] } });
+      await waitFor(() => expect(downscale).toHaveBeenCalledTimes(1));
+      fireEvent.click(screen.getByRole('button', { name: /back to capture/i }));
+      await waitFor(() => expect(screen.getByRole('img', { name: /^photo/i })).toBeInTheDocument());
+
+      // Reopened, it skips the one already done…
+      fireEvent.click(screen.getByRole('button', { name: /^frame the photos$/i }));
+      await waitFor(() => expect(framingLabel()).toHaveTextContent('Reference 2 of 2'));
+      fireEvent.click(screen.getByRole('button', { name: /back to capture/i }));
+
+      // …until that shot is removed from the strip.
+      fireEvent.click(screen.getByRole('button', { name: /^remove photo/i }));
+      fireEvent.click(screen.getByRole('button', { name: /^frame the photos$/i }));
+      await waitFor(() => expect(framingLabel()).toHaveTextContent('Reference 1 of 2'));
+    });
   });
 
   test('a missing reference degrades to a plain session with one honest line', async () => {

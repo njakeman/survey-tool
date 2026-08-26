@@ -690,16 +690,29 @@ export function CapturePage({
     }
   }
 
-  // The framed shot: close the step first, then run the shared append path
-  // — the photo lands in the strip beside anything already composed, with
-  // the station still armed for Save.
-  async function handleFramedPhoto(file) {
-    setFraming(false);
-    // Paired to the current station's photo right here, at composition —
-    // handleSave re-validates this against the current station before save,
-    // so a later station switch degrades to unpaired rather than
-    // mis-paired.
-    await appendPhoto(file, currentStation?.photos?.[0]?.filename ?? null);
+  // Which of the current station's reference photos the compose strip has
+  // already re-framed — what the framing screen opens on and ticks "done".
+  // Derived from the strip, so Save, Undo and a removed thumb all keep it
+  // honest with no state of their own.
+  const framedReferences = useMemo(
+    () => new Set(photos.map((entry) => entry.referencePhoto).filter(Boolean)),
+    [photos],
+  );
+
+  // The framed shot: the screen names the reference it framed, and stays
+  // open (already advanced to the next one) while the station has
+  // references still to do; it closes after the last. Then the shared
+  // append path — the photo lands in the strip beside anything already
+  // composed, with the station still armed for Save. handleSave re-validates
+  // the pairing against the current station, so a later station switch
+  // degrades to unpaired rather than mis-paired.
+  async function handleFramedPhoto(file, referencePhoto) {
+    const remaining = (currentStation?.photos ?? []).filter(
+      (stationPhoto) =>
+        !framedReferences.has(stationPhoto.filename) && stationPhoto.filename !== referencePhoto,
+    );
+    if (!remaining.length) setFraming(false);
+    await appendPhoto(file, referencePhoto ?? null);
   }
 
   async function handleNoAccess(reason) {
@@ -1114,6 +1127,8 @@ export function CapturePage({
               referenceStartedAt=${session?.reference?.startedAt}
               readPhoto=${referenceState.readPhoto}
               busy=${photoBusy}
+              atCap=${photos.length >= MAX_PHOTOS}
+              framed=${framedReferences}
               onPhoto=${handleFramedPhoto}
               onClose=${() => setFraming(false)}
             />`
