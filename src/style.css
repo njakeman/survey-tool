@@ -3383,13 +3383,31 @@ button {
   gap: var(--space-2);
 }
 
-.framing-screen-photo {
-  max-width: 100%;
+/* The pager's stage: the box the ‹ › arrows hang in and the swipe is read
+   on. It takes the reference's height budget (the dvh calc that used to sit
+   on the image, so the photo is no larger than before) and lets the page
+   scroll vertically through it — a horizontal swipe is a page turn, a
+   vertical one is not. */
+.framing-screen-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
   max-height: calc(
     100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 12rem
   );
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: pan-y;
+}
+
+.framing-screen-photo {
+  max-width: 100%;
+  max-height: 100%;
   object-fit: contain;
   border-radius: var(--radius);
+  -webkit-user-drag: none;
 }
 
 .framing-screen-caption {
@@ -3503,7 +3521,8 @@ button {
   border-radius: var(--radius);
 }
 
-/* Only shown with more than one photo (ObservationsList.js). Absolute
+/* Only shown with more than one photo (ObservationsList.js; the revisit
+   framing screen shares the treatment for its reference pager). Absolute
    against the STAGE, not the fixed .photo-lightbox: against the backdrop
    their top: 50% was the viewport's centre, which is exactly where the
    actions row rises to when the photo is short — the arrows would sit on
@@ -3511,6 +3530,7 @@ button {
    (left/right at --space-2; deliberately not anchored to the image, whose
    aspect ratio changes shot to shot) and can never reach Close, the
    caption or the actions. The same translucent-disc treatment as Close. */
+.framing-screen-nav,
 .photo-lightbox-nav {
   position: absolute;
   top: 50%;
@@ -3526,14 +3546,17 @@ button {
   border-radius: var(--radius);
 }
 
+.framing-screen-nav:disabled,
 .photo-lightbox-nav:disabled {
   opacity: 0.3;
 }
 
+.framing-screen-nav-prev,
 .photo-lightbox-nav-prev {
   left: var(--space-2);
 }
 
+.framing-screen-nav-next,
 .photo-lightbox-nav-next {
   right: var(--space-2);
 }
