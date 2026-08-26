@@ -1,7 +1,10 @@
 import { test, expect } from '@playwright/test';
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { buildZip } from '../src/import/fixtures/buildZip.js';
 import { readZip } from '../src/import/zipReader.js';
+
+const PHOTO = readFileSync(fileURLToPath(new URL('./fixtures/test-photo.png', import.meta.url)));
 
 // The revisit flow end to end against the built app and real IndexedDB:
 // load a reference zip before the session opens, follow the guidance,
@@ -130,5 +133,95 @@ test.describe('revisit flow', () => {
       { ref_obs_id: 'ref-2', state: 'skipped', reason: null },
     ]);
     expect(geojson.features[0].properties.ref_obs_id).toBe('ref-1');
+  });
+
+  test('a station with two reference photos is framed one at a time, each shot paired', async ({
+    page,
+    context,
+  }) => {
+    // The same reference with two photos at the first station, both backed
+    // by an entry in the zip.
+    const parsed = JSON.parse(referenceGeojson);
+    parsed.features[0].properties.photo = 'a.jpg';
+    parsed.features[0].properties.photos = [
+      { photo: 'a.jpg', ref_photo: null },
+      { photo: 'b.jpg', ref_photo: null },
+    ];
+
+    await context.grantPermissions(['geolocation']);
+    await context.setGeolocation({ latitude: 51.5, longitude: -0.14, accuracy: 5 });
+    await page.goto('/');
+
+    await page.getByRole('button', { name: /revisit a survey/i }).click();
+    await page.locator('.revisit-setup input[type="file"]').setInputFiles({
+      name: 'long-barrow-2025-04-12.zip',
+      mimeType: 'application/zip',
+      buffer: Buffer.from(
+        new Uint8Array(
+          buildZip([
+            { name: 'session.geojson', data: JSON.stringify(parsed) },
+            { name: 'photos/a.jpg', data: new Uint8Array(PHOTO) },
+            { name: 'photos/b.jpg', data: new Uint8Array(PHOTO) },
+          ]),
+        ),
+      ),
+    });
+    await expect(page.getByText(/2 stations · 2 photos · 12 Apr 2025/)).toBeVisible();
+    await expect(page.getByText('Nearest stations')).toBeVisible({ timeout: 15_000 });
+    await page.getByLabel(/session name/i).fill('E2E Two Refs');
+    await page.getByRole('button', { name: 'Start revisit session' }).click();
+    await expect(page.getByText('Station 1 of 2')).toBeVisible();
+
+    // The button says there are several; the step opens on the first and
+    // pages to the second.
+    await page.getByRole('button', { name: 'Frame the photos' }).click();
+    const label = page.locator('.framing-screen-label');
+    await expect(label).toHaveText(/^Reference 1 of 2/);
+    await expect(page.locator('.framing-screen-photo')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Previous reference' })).toBeDisabled();
+    await page.getByRole('button', { name: 'Next reference' }).click();
+    await expect(label).toHaveText(/^Reference 2 of 2/);
+    await expect(page.getByRole('button', { name: 'Next reference' })).toBeDisabled();
+
+    // A shot on the second: the step stays open, wrapped round to the first,
+    // which is still to do.
+    const shutter = page.locator('.framing-screen input[type="file"]');
+    await shutter.setInputFiles({ name: 'second.png', mimeType: 'image/png', buffer: PHOTO });
+    await expect(label).toHaveText(/^Reference 1 of 2/);
+    await expect(page.getByRole('button', { name: 'Take photo' })).toBeVisible();
+
+    // The last one closes the step; both shots sit in the compose strip.
+    await shutter.setInputFiles({ name: 'first.png', mimeType: 'image/png', buffer: PHOTO });
+    await expect(page.locator('.framing-screen')).toHaveCount(0);
+    await expect(page.getByRole('img', { name: /^Photo \d of 2$/ })).toHaveCount(2);
+
+    await page.getByRole('button', { name: 'Save observation' }).click();
+    await expect(page.getByText('1 of 2 stations')).toBeVisible();
+
+    await page.getByRole('button', { name: 'End session' }).click();
+    await page.getByRole('button', { name: 'Confirm end session' }).click();
+    await page.getByRole('button', { name: 'Session history' }).click();
+    await page.getByRole('button', { name: /E2E Two Refs/ }).click();
+
+    const downloadPromise = page.waitForEvent('download');
+    await page.getByRole('button', { name: /^export$/i }).click();
+    const download = await downloadPromise;
+    const bytes = readFileSync(await download.path());
+    const entries = await readZip(
+      bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+    );
+    const geojson = JSON.parse(
+      new TextDecoder().decode(entries.find((entry) => entry.name === 'session.geojson').data),
+    );
+
+    // Shot order, each paired to the reference it framed — b first.
+    expect(geojson.features[0].properties.ref_obs_id).toBe('ref-1');
+    expect(geojson.features[0].properties.photos.map((entry) => entry.ref_photo)).toEqual([
+      'b.jpg',
+      'a.jpg',
+    ]);
+    expect(
+      entries.filter((entry) => entry.name.startsWith('photos/') && entry.name.endsWith('.jpg')),
+    ).toHaveLength(2);
   });
 });
