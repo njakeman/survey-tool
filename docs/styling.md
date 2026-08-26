@@ -648,6 +648,8 @@ colour tokens** (nothing to keep in lockstep across the two dark blocks):
   photo takes the whole middle: that _is_ the "at size" the step exists for. The shutter is a
   label wearing `.button-primary` at 64px — the one control the step exists for. The line
   "Close enough is your call. The app measures, it does not gate." is load-bearing copy.
+  Since 2026-08-26 the screen pages through a station's reference photos — "Framing pages"
+  under Multiple photos below.
 - **Pairing strip**: the linked-feature strip verbatim ("Revisiting: West stile" · "Record
   something new instead") — same placement above Save, same reversibility rule.
 - **End summary** (`.session-revisit-summary`, shown with the End confirm): segmented bar where
@@ -798,9 +800,8 @@ ${n > 1 ? 'attachment-strip-multi' : ''}"` on one element), so a descendant rule
 
 - **No reordering.** Photos file in the order they were taken; there is no drag-to-reorder and
   no "make this the cover photo." Nothing in the surfaced field reports asked for it.
-- **The framing screen (revisit mode) does not page.** It still shows the reference photo as a
-  single image with no gallery, even where a reference station carries several — this pass
-  touched capture and the saved view, not the revisit framing skeleton.
+- **The framing screen (revisit mode) did not page** in this pass — see "Framing pages
+  (2026-08-26)" below, which added it.
 - **Off-screen strip rows keep their `IntersectionObserver` running and their object URLs
   live.** A thumb that scrolls out of view is neither unobserved nor revoked; only the row's own
   unmount, or the id leaving `photos[]`, frees it. A long session's worth of scrolled-past rows
@@ -809,3 +810,47 @@ ${n > 1 ? 'attachment-strip-multi' : ''}"` on one element), so a descendant rule
 - **No richer pager semantics.** The caption's live region (above) is the whole of what a
   screen-reader user gets on a page turn: no roving focus, no `aria-roledescription` carousel
   wrapper, and nothing that describes the photograph itself.
+
+## Framing pages (2026-08-26)
+
+A reference station can carry several photos since the multi-photo pass, and the framing screen
+was still showing its first with no way to reach the others — on the phone that read as "a random
+photo". The screen now pages.
+
+- **The stage** (`.framing-screen-stage`): a positioned box inside `.framing-screen-reference`
+  that takes the reference's height budget (the dvh calc moved off the image, so the photo is no
+  larger than before), `touch-action: pan-y`, and the swipe is read on it — the lightbox's rule,
+  raw `pointerdown`/`pointerup`, ≥40px and more across than down, no `pointermove`, no transform.
+  The image is `-webkit-user-drag: none` and `draggable="false"` so a swipe never lifts it.
+- **The arrows** (`.framing-screen-nav`, `-prev`/`-next`) share every declaration with
+  `.photo-lightbox-nav` — one selector list, one treatment (44px translucent disc at the stage's
+  edges, `opacity: 0.3` disabled at the ends, no wrap). Rendered only with more than one photo.
+  `aria-label`s are "Previous reference"/"Next reference", not "photo": the surveyor is choosing
+  what to frame against, not browsing.
+- **The label line** does the counting: `Reference 2 of 3 · 12 Apr 2025`, a polite live region
+  (a page turn is announced without moving focus). With one photo it reads as before. The
+  bearing/accuracy caption under the photo gains ` · done` for a reference already re-framed
+  into the compose strip — plain text, no tick glyph, the same "state is a word" rule as the
+  station chips.
+- **Advance, then close.** The screen opens on the first reference not yet re-framed and, after
+  a shot, moves to the next one (wrapping); the shot reports which reference it framed
+  (`onPhoto(file, filename)`) and CapturePage pairs to that, never re-deriving `[0]`. "Done"
+  derives from the compose strip's `referencePhoto`s plus the screen's own shots since it
+  opened — a quick second press must not wrap back to the reference just framed while its
+  downscale is still landing. CapturePage closes the step only when that shot was the last
+  reference outstanding; paging back and reshooting is allowed and appends.
+- **The shutter respects the cap**: at `MAX_PHOTOS` it disables and the hint line becomes the
+  shared `PHOTO_CAP_MESSAGE` — the third place the sentence appears, still from one constant.
+- **`StationBlock`'s button** reads "Frame the photos" when the station holds several. Nothing
+  else on the station card changed — no thumbnails, no per-photo count; the framing screen is
+  where the photos are.
+- One-accent rule: unchanged — the shutter is the surface's only accent-filled control.
+
+### What this pass did not do
+
+- **No filmstrip** of the station's references under the stage, and no jump-to-N — ‹ ›, swipe
+  and the count are the whole pager, as in the lightbox.
+- **No reordering** of what a shot pairs to after the fact; the pairing is fixed at composition
+  (remove the thumb and reshoot).
+- **Reference traces are still not drawn** on the map, and history is still not offered as a
+  reference source — the deferrals from the revisit pass stand.
