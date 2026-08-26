@@ -2244,7 +2244,7 @@ describe('CapturePage — revisit', () => {
     // ref-1 is nearest and first in reference order.
     await screen.findByText('Station 1 of 2');
     expect(screen.getByText('West stile')).toBeInTheDocument();
-    expect(screen.getByText(/22 m/)).toBeInTheDocument();
+    expect(screen.getByText('22 m', { selector: '.station-block-distance' })).toBeInTheDocument();
     expect(screen.getByText(/West stile, west boundary/)).toBeInTheDocument();
   });
 
