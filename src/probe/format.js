@@ -54,7 +54,7 @@ export function describeCameraExif({ file, camera, segments = null }) {
     parts.push('no camera EXIF found');
     // Only when nothing was found does the segment map matter: it says
     // whether there was nothing to find, or something the reader missed.
-    if (segments) parts.push(...describeSegments(segments));
+    if (segments) parts.push(...describeSegments(segments, camera.exifBlock === true));
     return parts.join(' · ');
   }
   parts.push(
@@ -68,13 +68,16 @@ export function describeCameraExif({ file, camera, segments = null }) {
   return parts.join(' · ');
 }
 
-function describeSegments({ jpeg, segments, exifString }) {
+// Three findings, three lines: a parsed block with nothing in it (WebKit's
+// re-encode — the file's fault), "Exif" bytes with no parsed block (the
+// reader's fault), or no such bytes at all (stripped outright).
+function describeSegments({ jpeg, segments, exifString }, exifBlock) {
   if (!jpeg) return ['not a JPEG'];
   const list = segments.map((s) => `${s.marker} ${s.length}`).join(', ');
-  return [
-    `segments ${list || 'none'}`,
-    exifString
-      ? '"Exif" bytes PRESENT — the reader missed them'
-      : 'no "Exif" bytes in the first 256 KiB',
-  ];
+  const verdict = exifBlock
+    ? 'Exif block present, no camera tags'
+    : exifString
+      ? '"Exif" bytes PRESENT but no Exif block parsed — the reader missed them'
+      : 'no "Exif" bytes in the first 256 KiB';
+  return [`segments ${list || 'none'}`, verdict];
 }

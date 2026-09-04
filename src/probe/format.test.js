@@ -151,7 +151,37 @@ describe('describeCameraExif — the file and its segments', () => {
     );
   });
 
-  test('flags "Exif" bytes present when the reader still found nothing — that is a reader bug', () => {
+  test('an Exif block that parsed but held no camera tags says so — the WebKit re-encode', () => {
+    // The live finding (2026-09-04): image.jpg with a 140-byte APP1 holding
+    // orientation/resolution only. Not a reader miss — there was nothing
+    // there — and the line must not claim otherwise.
+    const line = describeCameraExif({
+      file: { name: 'image.jpg', type: 'image/jpeg', size: 2_800_000 },
+      camera: {
+        make: null,
+        model: null,
+        focalLengthMm: null,
+        focalLength35mm: null,
+        lensModel: null,
+        exifBlock: true,
+      },
+      segments: {
+        jpeg: true,
+        segments: [
+          { marker: 'APP0', length: 16 },
+          { marker: 'APP1', length: 140 },
+          { marker: 'SOS', length: 12 },
+        ],
+        exifString: true,
+      },
+    });
+
+    expect(line).toContain('segments APP0 16, APP1 140, SOS 12');
+    expect(line).toContain('Exif block present, no camera tags');
+    expect(line).not.toContain('reader missed');
+  });
+
+  test('"Exif" bytes with no parsed block is the one case that is a reader bug', () => {
     const line = describeCameraExif({
       file: { name: 'IMG_0007.jpeg', type: 'image/jpeg', size: 2_400_000 },
       camera: {
@@ -160,6 +190,7 @@ describe('describeCameraExif — the file and its segments', () => {
         focalLengthMm: null,
         focalLength35mm: null,
         lensModel: null,
+        exifBlock: false,
       },
       segments: {
         jpeg: true,
@@ -171,8 +202,9 @@ describe('describeCameraExif — the file and its segments', () => {
       },
     });
 
-    expect(line).toContain('segments APP1 4096, SOS 12');
-    expect(line).toContain('"Exif" bytes PRESENT — the reader missed them');
+    expect(line).toContain(
+      '"Exif" bytes PRESENT but no Exif block parsed — the reader missed them',
+    );
   });
 
   test('a non-JPEG says so', () => {

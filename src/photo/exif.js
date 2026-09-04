@@ -32,12 +32,18 @@ const TYPE_RATIONAL = 5;
 // need not be copied into memory to find it.
 const HEAD_BYTES = 256 * 1024;
 
+// `exifBlock` says whether an APP1 Exif segment was found and its TIFF
+// header parsed — separate from whether it held any camera tag. WebKit's
+// camera UI re-encodes a direct capture with a 140-byte block carrying
+// orientation and resolution only (live finding, 2026-09-04): block true,
+// every lens field null, and that is a fact about the file, not a miss.
 const EMPTY = Object.freeze({
   make: null,
   model: null,
   focalLengthMm: null,
   focalLength35mm: null,
   lensModel: null,
+  exifBlock: false,
 });
 
 // 35 mm-equivalent focal length → the lens a phone surveyor would name.
@@ -158,6 +164,7 @@ export function parseCameraExif(arrayBuffer) {
       focalLengthMm: focalLengthMm === null ? null : Math.round(focalLengthMm * 100) / 100,
       focalLength35mm: positiveOrNull(exif.get(TAG_FOCAL_35MM)),
       lensModel: exif.get(TAG_LENS_MODEL) ?? null,
+      exifBlock: true,
     };
   } catch {
     return { ...EMPTY };

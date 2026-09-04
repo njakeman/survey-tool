@@ -172,7 +172,21 @@ describe('parseCameraExif', () => {
       focalLengthMm: 2.22,
       focalLength35mm: 13,
       lensModel: 'iPhone 15 Pro back triple camera 2.22mm f/2.2',
+      exifBlock: true,
     });
+  });
+
+  test('a WebKit camera-UI re-encode: an Exif block with only orientation is "block, no tags"', () => {
+    // The live finding (2026-09-04): image.jpg, APP1 of 140 bytes holding
+    // orientation/resolution and nothing about the camera. The block parsed;
+    // the lens is simply not there — and the probe must say exactly that.
+    const result = parseCameraExif(
+      buildJpeg({ ifd0: [{ tag: TAG.ORIENTATION, type: TYPE.SHORT, value: 6 }], exif: [] }),
+    );
+
+    expect(result.exifBlock).toBe(true);
+    expect(result.focalLength35mm).toBeNull();
+    expect(result.lensModel).toBeNull();
   });
 
   test('reads the same tags in big-endian (Motorola) byte order', () => {
@@ -219,6 +233,7 @@ describe('parseCameraExif', () => {
       focalLengthMm: null,
       focalLength35mm: null,
       lensModel: null,
+      exifBlock: true,
     });
   });
 
@@ -229,6 +244,7 @@ describe('parseCameraExif', () => {
       focalLengthMm: null,
       focalLength35mm: null,
       lensModel: null,
+      exifBlock: false,
     });
   });
 
@@ -280,6 +296,7 @@ describe('readCameraExif', () => {
       focalLengthMm: null,
       focalLength35mm: null,
       lensModel: null,
+      exifBlock: false,
     });
   });
 });
