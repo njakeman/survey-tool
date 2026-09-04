@@ -121,3 +121,73 @@ describe('describeCameraExif', () => {
     expect(line).toBe('image/heic · 1.0 KB · no camera EXIF found');
   });
 });
+
+describe('describeCameraExif — the file and its segments', () => {
+  // Read on the phone, so the name (image.jpg = WebKit's own camera UI,
+  // IMG_1234.jpeg = a library pick) and the segment map ride on the line.
+  test('names the file and lists the segments when no EXIF was found', () => {
+    const line = describeCameraExif({
+      file: { name: 'image.jpg', type: 'image/jpeg', size: 2_400_000 },
+      camera: {
+        make: null,
+        model: null,
+        focalLengthMm: null,
+        focalLength35mm: null,
+        lensModel: null,
+      },
+      segments: {
+        jpeg: true,
+        segments: [
+          { marker: 'DQT', length: 67 },
+          { marker: 'SOF0', length: 17 },
+          { marker: 'SOS', length: 12 },
+        ],
+        exifString: false,
+      },
+    });
+
+    expect(line).toBe(
+      'image.jpg · image/jpeg · 2.3 MB · no camera EXIF found · segments DQT 67, SOF0 17, SOS 12 · no "Exif" bytes in the first 256 KiB',
+    );
+  });
+
+  test('flags "Exif" bytes present when the reader still found nothing — that is a reader bug', () => {
+    const line = describeCameraExif({
+      file: { name: 'IMG_0007.jpeg', type: 'image/jpeg', size: 2_400_000 },
+      camera: {
+        make: null,
+        model: null,
+        focalLengthMm: null,
+        focalLength35mm: null,
+        lensModel: null,
+      },
+      segments: {
+        jpeg: true,
+        segments: [
+          { marker: 'APP1', length: 4096 },
+          { marker: 'SOS', length: 12 },
+        ],
+        exifString: true,
+      },
+    });
+
+    expect(line).toContain('segments APP1 4096, SOS 12');
+    expect(line).toContain('"Exif" bytes PRESENT — the reader missed them');
+  });
+
+  test('a non-JPEG says so', () => {
+    const line = describeCameraExif({
+      file: { name: 'IMG_0007.heic', type: 'image/heic', size: 1024 },
+      camera: {
+        make: null,
+        model: null,
+        focalLengthMm: null,
+        focalLength35mm: null,
+        lensModel: null,
+      },
+      segments: { jpeg: false, segments: [], exifString: false },
+    });
+
+    expect(line).toBe('IMG_0007.heic · image/heic · 1.0 KB · no camera EXIF found · not a JPEG');
+  });
+});

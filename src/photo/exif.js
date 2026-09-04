@@ -175,3 +175,41 @@ export async function readCameraExif(blob) {
     return { ...EMPTY };
   }
 }
+
+const MARKER_NAMES = {
+  0xc0: 'SOF0',
+  0xc2: 'SOF2',
+  0xc4: 'DHT',
+  0xda: 'SOS',
+  0xdb: 'DQT',
+  0xdd: 'DRI',
+  0xfe: 'COM',
+};
+
+function markerName(marker) {
+  if (marker >= 0xe0 && marker <= 0xef) return `APP${marker - 0xe0}`;
+  return MARKER_NAMES[marker] ?? `0x${marker.toString(16).toUpperCase()}`;
+}
+
+// The diagnostic behind the probe row: every segment the head of the file
+// actually has, in order, with its declared length, plus whether the ASCII
+// bytes "Exif" occur anywhere in the head. On the phone this is the only
+// way to tell "the file has no EXIF" from "the EXIF is there and the reader
+// missed it" — the two findings lead to opposite next steps. Stops at SOS
+// like the reader; never throws.
+export function jpegSegmentMap(arrayBuffer) {
+  const bytes = new Uint8Array(arrayBuffer);
+  const empty = { jpeg: false, segments: [], exifString: false };
+  if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== SOI) return empty;
+  const segments = [];
+  let at = 2;
+  while (at + 4 <= bytes.length && bytes[at] === 0xff) {
+    const marker = bytes[at + 1];
+    const length = (bytes[at + 2] << 8) | bytes[at + 3];
+    segments.push({ marker: markerName(marker), length });
+    if (marker === SOS || marker === EOI || length < 2) break;
+    at += 2 + length;
+  }
+  const text = new TextDecoder('latin1').decode(bytes);
+  return { jpeg: true, segments, exifString: text.includes('Exif') };
+}

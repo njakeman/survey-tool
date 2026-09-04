@@ -11,7 +11,7 @@ import { benchmarkPbkdf2 } from './pbkdf2-benchmark.js';
 import { readOfflineStatus } from '../app/offlineStatus.js';
 import { isStandalone } from '../app/standalone.js';
 import { RECORDING_MIME_CANDIDATES } from '../audio/recordingTypes.js';
-import { readCameraExif } from '../photo/exif.js';
+import { jpegSegmentMap, parseCameraExif } from '../photo/exif.js';
 
 // The on-device diagnostic page, reachable from the capture footer. Built in
 // Phase 1 to answer whether this architecture was viable on the maintainer's
@@ -51,15 +51,40 @@ export function ProbePage() {
   // iOS Safari keeps FocalLength / FocalLengthIn35mmFilm / LensModel on a
   // camera capture is a device fact, not a documented one. Same input
   // attributes as the real shutter, so the finding is the finding.
-  async function checkCameraExif(event) {
+  //
+  // First live result (2026-09-04): a direct capture came back as a 2.3 MB
+  // JPEG with no Exif block found. Two readings of that — WebKit's camera UI
+  // re-encodes and strips, or the reader missed a real file's layout — so
+  // the row now logs the file name (image.jpg is the camera UI, IMG_nnnn a
+  // library pick), the segment map of the head, and offers a library pick
+  // alongside the capture to compare the two paths on the same phone.
+  async function checkCameraExif(event, check) {
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
     setCameraExifResult('reading…');
-    const camera = await readCameraExif(file);
-    const result = describeCameraExif({ file, camera });
+    let head;
+    try {
+      head = await file.slice(0, 256 * 1024).arrayBuffer();
+    } catch (error) {
+      const result = `could not read the file: ${error.name} — ${error.message}`;
+      setCameraExifResult(result);
+      record(check, result);
+      return;
+    }
+    const camera = parseCameraExif(head);
+    const segments = jpegSegmentMap(head);
+    const result = describeCameraExif({ file, camera, segments });
     setCameraExifResult(result);
-    record('camera-exif', { type: file.type, size: file.size, ...camera });
+    record(check, {
+      name: file.name,
+      type: file.type,
+      size: file.size,
+      lastModified: file.lastModified,
+      ...camera,
+      segments: segments.segments.map((s) => `${s.marker} ${s.length}`),
+      exifString: segments.exifString,
+    });
   }
 
   function refreshLog() {
@@ -347,13 +372,27 @@ export function ProbePage() {
 
       <${ResultRow} label="Camera EXIF (lens per photo)">
         <label class="probe-file">
-          <input type="file" accept="image/*" capture="environment" onChange=${checkCameraExif} />
+          <input
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange=${(event) => checkCameraExif(event, 'camera-exif')}
+          />
           Take a photo
+        </label>
+        ${' '}
+        <label class="probe-file">
+          <input
+            type="file"
+            accept="image/*"
+            onChange=${(event) => checkCameraExif(event, 'camera-exif-library')}
+          />
+          Choose from library
         </label>
         ${
           cameraExifResult
             ? ` ${cameraExifResult}`
-            : ' one shot on each lens — 0.5×, 1×, and the longest — and read the mm figure'
+            : ' take one directly, then pick one shot in the Camera app on the same lens — compare the two lines'
         }
       <//>
 

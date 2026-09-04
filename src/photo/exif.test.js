@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { lensBand, parseCameraExif, readCameraExif } from './exif.js';
+import { jpegSegmentMap, lensBand, parseCameraExif, readCameraExif } from './exif.js';
 
 // A synthetic JPEG with a real APP1/EXIF segment, built byte by byte so the
 // reader is tested against the format, not against a camera's habits. Shape:
@@ -305,5 +305,48 @@ describe('lensBand', () => {
     expect(lensBand(undefined)).toBeNull();
     expect(lensBand(0)).toBeNull();
     expect(lensBand(NaN)).toBeNull();
+  });
+});
+
+describe('jpegSegmentMap', () => {
+  // The diagnostic behind the probe row: which segments a file actually has,
+  // so "no EXIF found" can be told apart from "EXIF present but the reader
+  // missed it" on the phone, where there is no other way to look inside.
+  test('lists the markers in order with their lengths, and whether "Exif" occurs at all', () => {
+    const map = jpegSegmentMap(buildJpeg({ ...IPHONE_ULTRAWIDE, jfifFirst: true }));
+
+    expect(map.segments.map((s) => s.marker)).toEqual(['APP0', 'APP1', 'SOS']);
+    expect(map.segments[0].length).toBe(16);
+    expect(map.segments[1].length).toBeGreaterThan(40);
+    expect(map.exifString).toBe(true);
+  });
+
+  test('a stripped file shows no APP segments and no Exif string', () => {
+    const map = jpegSegmentMap(buildJpeg({ noApp1: true }));
+
+    expect(map.segments.map((s) => s.marker)).toEqual(['SOS']);
+    expect(map.exifString).toBe(false);
+  });
+
+  test('a non-JPEG is an empty map, not a throw', () => {
+    expect(jpegSegmentMap(new TextEncoder().encode('nope').buffer)).toEqual({
+      jpeg: false,
+      segments: [],
+      exifString: false,
+    });
+  });
+
+  test('unknown markers are named by their hex code', () => {
+    const bytes = new Uint8Array(buildJpeg({ noApp1: true }));
+    // Splice an APP13 (Photoshop IRB) segment after SOI.
+    const app13 = new Uint8Array([0xff, 0xed, 0x00, 0x04, 0x00, 0x00]);
+    const spliced = new Uint8Array(bytes.length + app13.length);
+    spliced.set(bytes.subarray(0, 2), 0);
+    spliced.set(app13, 2);
+    spliced.set(bytes.subarray(2), 2 + app13.length);
+
+    const map = jpegSegmentMap(spliced.buffer);
+
+    expect(map.segments.map((s) => s.marker)).toEqual(['APP13', 'SOS']);
   });
 });

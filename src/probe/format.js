@@ -43,11 +43,18 @@ export function describeRecording({ mimeType, bytes, ms }) {
 // missing tag is named rather than dropped. `size` and `type` come from
 // the File the camera input handed over: they say whether iOS gave a JPEG
 // or an HEIC, which decides where the tags could even be.
-export function describeCameraExif({ file, camera }) {
-  const parts = [file.type || 'unknown type', formatBytes(file.size)];
+export function describeCameraExif({ file, camera, segments = null }) {
+  // The name first: `image.jpg` is WebKit's own camera UI, `IMG_1234.jpeg`
+  // a library pick — the two paths are the whole question.
+  const parts = [];
+  if (file.name) parts.push(file.name);
+  parts.push(file.type || 'unknown type', formatBytes(file.size));
   const { focalLengthMm, focalLength35mm, lensModel, make, model } = camera;
   if (focalLengthMm == null && focalLength35mm == null && !lensModel && !make && !model) {
     parts.push('no camera EXIF found');
+    // Only when nothing was found does the segment map matter: it says
+    // whether there was nothing to find, or something the reader missed.
+    if (segments) parts.push(...describeSegments(segments));
     return parts.join(' · ');
   }
   parts.push(
@@ -59,4 +66,15 @@ export function describeCameraExif({ file, camera }) {
   parts.push(lensModel ?? 'no lens model');
   if (make || model) parts.push([make, model].filter(Boolean).join(' '));
   return parts.join(' · ');
+}
+
+function describeSegments({ jpeg, segments, exifString }) {
+  if (!jpeg) return ['not a JPEG'];
+  const list = segments.map((s) => `${s.marker} ${s.length}`).join(', ');
+  return [
+    `segments ${list || 'none'}`,
+    exifString
+      ? '"Exif" bytes PRESENT — the reader missed them'
+      : 'no "Exif" bytes in the first 256 KiB',
+  ];
 }
