@@ -595,3 +595,113 @@ describe('CaptureMap — revisit stations', () => {
     expect(screen.queryByText(/Stations ·/)).toBeNull();
   });
 });
+
+describe('CaptureMap — maximised (field to-do 2026-09-04)', () => {
+  // Navigating to a station needs more map than a 300px panel. The maximise
+  // is a state attribute on the SAME panel node plus one resize — never a
+  // portal or a second container: the map is built once per region against
+  // the container ref, and a new node would destroy it mid-survey.
+  const STATION = {
+    id: 's1',
+    index: 2,
+    name: 'Gate post',
+    lat: 51.5002,
+    lon: -0.14,
+    state: 'todo',
+  };
+
+  async function renderReady(overrides = {}) {
+    const adapter = fakeAdapter();
+    const createMap = vi.fn().mockResolvedValue(adapter);
+    const rendered = renderMap({ createMap, ...overrides });
+    await waitFor(() => expect(createMap).toHaveBeenCalled());
+    await waitFor(() => expect(adapter.resize).toHaveBeenCalled());
+    adapter.resize.mockClear();
+    return { ...rendered, adapter, createMap };
+  }
+
+  test('Expand map maximises the panel in place and remeasures the map; Close map restores it', async () => {
+    const { adapter, container } = await renderReady();
+    const panel = container.querySelector('.capture-map');
+    const canvasNode = container.querySelector('.capture-map-canvas');
+    expect(panel.dataset.maximised).toBeUndefined();
+
+    fireEvent.click(screen.getByRole('button', { name: /expand map/i }));
+
+    expect(panel.dataset.maximised).toBe('true');
+    await waitFor(() => expect(adapter.resize).toHaveBeenCalledTimes(1));
+    // Same node, same map: nothing was torn down.
+    expect(container.querySelector('.capture-map-canvas')).toBe(canvasNode);
+    expect(adapter.destroy).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: /close map/i }));
+
+    expect(panel.dataset.maximised).toBeUndefined();
+    await waitFor(() => expect(adapter.resize).toHaveBeenCalledTimes(2));
+    expect(screen.getByRole('button', { name: /expand map/i })).toBeInTheDocument();
+  });
+
+  test("the current station's walk readout rides over the maximised map, and only there", async () => {
+    const { container } = await renderReady({
+      position: POSITION,
+      stations: [STATION],
+      currentStationId: 's1',
+      guidanceHeadingDeg: 90,
+    });
+    expect(container.querySelector('.capture-map-walk')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /expand map/i }));
+
+    const walk = container.querySelector('.capture-map-walk');
+    expect(walk).not.toBeNull();
+    expect(walk.textContent).toContain('Station 3');
+    expect(walk.textContent).toContain('Gate post');
+    expect(walk.querySelector('.station-block-distance').textContent).toBe('22 m');
+    expect(walk.querySelector('.station-block-arrow').style.transform).toBe('rotate(270deg)');
+  });
+
+  test('no readout without a current station or a fix', async () => {
+    const { container, rerender } = await renderReady({
+      stations: [STATION],
+      currentStationId: null,
+    });
+    fireEvent.click(screen.getByRole('button', { name: /expand map/i }));
+    expect(container.querySelector('.capture-map-walk')).toBeNull();
+
+    rerender({ currentStationId: 's1', position: null });
+    expect(container.querySelector('.capture-map-walk')).toBeNull();
+  });
+
+  test('a feature tap collapses the map — its sheet opens on the page beneath', async () => {
+    const onFeatureTap = vi.fn();
+    const { container, createMap } = await renderReady({ onFeatureTap });
+    fireEvent.click(screen.getByRole('button', { name: /expand map/i }));
+    const panel = container.querySelector('.capture-map');
+    expect(panel.dataset.maximised).toBe('true');
+
+    createMap.mock.calls[0][0].onFeatureTap({ layerId: 'parcels', featureId: 'p1' });
+
+    expect(onFeatureTap).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(panel.dataset.maximised).toBeUndefined());
+  });
+
+  test('confirming a marked point collapses the map — the point arms Save on the page beneath', async () => {
+    const onPickPoint = vi.fn();
+    const adapter = fakeAdapter();
+    adapter.getPointAtFraction = vi.fn(() => ({ lat: 51.6, lon: -0.2 }));
+    adapter.getZoom = vi.fn(() => 17);
+    adapter.onMove = vi.fn(() => () => {});
+    const createMap = vi.fn().mockResolvedValue(adapter);
+    const { container } = renderMap({ createMap, onPickPoint });
+    await waitFor(() => expect(createMap).toHaveBeenCalled());
+    const panel = container.querySelector('.capture-map');
+
+    fireEvent.click(screen.getByRole('button', { name: /expand map/i }));
+    fireEvent.click(screen.getByRole('button', { name: /mark a distant point/i }));
+    await screen.findByRole('button', { name: /use this point/i });
+    fireEvent.click(screen.getByRole('button', { name: /use this point/i }));
+
+    expect(onPickPoint).toHaveBeenCalledTimes(1);
+    expect(panel.dataset.maximised).toBeUndefined();
+  });
+});

@@ -982,6 +982,7 @@ export function CapturePage({
         visible=${visible}
         night=${displayMode === 'night'}
         heading=${heading}
+        guidanceHeadingDeg=${guidanceHeadingDeg}
         positionStale=${
           /* Computed at render like the readings panel's own stale line —
              the GPS watch re-renders this page ~1Hz while it is alive, and

@@ -1416,16 +1416,87 @@ button {
    One row rather than three boxes pinned to left, centre and right: pinned,
    "Change map" + "Mark a distant point" + "Re-centre" came to roughly 380px
    across a 320px map and overlapped. This wraps instead of colliding. */
-.capture-map-controls {
+.capture-map-foot {
   position: absolute;
   left: var(--space-2);
   right: var(--space-2);
   bottom: var(--space-2);
   z-index: 1;
   display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.capture-map-controls {
+  display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
   gap: var(--space-2);
+}
+
+/* Expand / Close map — its own corner, top-right, rather than a fourth
+   button in the control row (which already wraps once Re-centre appears).
+   The glyph-only expand still meets the 44px target. */
+.capture-map-expand {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  z-index: 1;
+  min-width: 44px;
+  min-height: 44px;
+}
+
+/* Maximised: the panel becomes the screen, on the SAME node — position
+   alone changes, so the map underneath is never rebuilt (see CaptureMap.js).
+   Attribute selectors outrank the landscape cap above whatever the order.
+   z-index 5: above the picking confirm panel (3), below the lightbox tier
+   (10) so the framing screen and the photo view still win. touch-action
+   none on the panel so nothing inside can scroll the page beneath it. The
+   night-mode red multiply is inset:0 on the panel and follows it. */
+.capture-map[data-maximised='true'] {
+  position: fixed;
+  inset: 0;
+  height: auto;
+  margin: 0;
+  border-bottom: 0;
+  z-index: 5;
+  touch-action: none;
+}
+
+/* Only the maximised state reaches the screen edges, so only it pads the
+   overlays by the safe-area insets (the framing screen's rule). */
+.capture-map[data-maximised='true'] .capture-map-expand,
+.capture-map[data-maximised='true'] .capture-map-region {
+  top: calc(env(safe-area-inset-top, 0px) + var(--space-2));
+}
+
+.capture-map[data-maximised='true'] .capture-map-stations {
+  top: calc(env(safe-area-inset-top, 0px) + var(--space-2) + 1.65rem);
+}
+
+.capture-map[data-maximised='true'] .capture-map-foot,
+.capture-map[data-maximised='true'] .capture-map-picking {
+  bottom: calc(env(safe-area-inset-bottom, 0px) + var(--space-2));
+}
+
+/* The station readout over the maximised map: the walking instruction the
+   map now covers, in the station block's own type (StationWalk), on a
+   near-opaque paper card so the numbers hold over any ground. */
+.capture-map-walk {
+  padding: var(--space-2) var(--space-3);
+  border-radius: 6px;
+  border: 1px solid var(--control-rule);
+  background: color-mix(in srgb, var(--paper) 88%, transparent);
+}
+
+.capture-map-walk-label {
+  margin: 0;
+  font-size: var(--type-badge);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+  color: color-mix(in srgb, var(--ink) 72%, transparent);
 }
 
 .capture-map-error {
