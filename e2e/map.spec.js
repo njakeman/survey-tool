@@ -170,6 +170,44 @@ test.describe('offline basemap', () => {
     await expect(page.locator('.capture-map canvas')).toBeVisible();
   });
 
+  test('Expand map makes the panel the screen on the same map, and Close map puts the page back', async ({
+    page,
+    context,
+  }) => {
+    await serveRegions(context);
+    await page.goto('/');
+    await openPicker(page);
+    await downloadRegion(page, 'Test South');
+    await page.getByRole('button', { name: /back to capture/i }).click();
+    await expect(page.locator('[data-map-loaded="true"]')).toBeAttached({ timeout: 20_000 });
+
+    // Tag the live container so a rebuild (a new node) would be caught.
+    await page.evaluate(() => {
+      document.querySelector('[data-map-loaded="true"]').dataset.sameMap = 'yes';
+      window.scrollTo(0, 120);
+    });
+    const before = await page.locator('.capture-map').boundingBox();
+    expect(before.height).toBeLessThan(400);
+
+    await page.getByRole('button', { name: /expand map/i }).click();
+
+    const viewport = page.viewportSize();
+    const box = await page.locator('.capture-map').boundingBox();
+    expect(box.x).toBe(0);
+    expect(box.y).toBe(0);
+    expect(box.width).toBe(viewport.width);
+    expect(box.height).toBe(viewport.height);
+    await expect(page.locator('[data-map-loaded="true"][data-same-map="yes"]')).toBeAttached();
+    await expect(page.locator('.capture-map canvas')).toBeVisible();
+
+    await page.getByRole('button', { name: /close map/i }).click();
+
+    const after = await page.locator('.capture-map').boundingBox();
+    expect(after.height).toBe(before.height);
+    await expect(page.locator('[data-map-loaded="true"][data-same-map="yes"]')).toBeAttached();
+    expect(await page.evaluate(() => window.scrollY)).toBe(120);
+  });
+
   test('an install with no region says so instead of showing a broken map', async ({
     page,
     context,

@@ -672,3 +672,28 @@ export zip in the Files app.
 - [ ] Export the revisit; re-import the export elsewhere: it arrives as an ordinary session
       whose observations still carry ref_obs_id; history names the referenced survey
 - [ ] Sunlight: the segmented summary bar's three textures are distinguishable outdoors
+
+## The maximised map (2026-09-04)
+
+Run against `https://survey.field.works/`, installed to the home screen.
+
+- [ ] **Expand map** (top-right ⤢) fills the screen on the same map — no flash, no reload, the
+      view and zoom exactly where they were; **Close map** puts the panel back at 300px with the
+      page scrolled to where it was
+- [ ] Mid-note: type in the note, expand, pan about, close — the note is intact and the
+      keyboard did not reappear
+- [ ] Mid-trace: expand while a path is recording — the live dashed line keeps drawing, the
+      strip resumes on the page after Close, and no vertex was lost
+- [ ] Mid-revisit: with a current station, the readout card sits over the bottom of the map —
+      arrow, distance, compass point and `Station N of M · name` — and the arrow turns live as
+      you rotate; without a fix there is no card
+- [ ] On the installed PWA, the corner button and the foot clear the notch and the home
+      indicator (safe-area insets); in the browser they sit at the plain edge
+- [ ] Nothing scrolls the page under the maximised map — drag on the readout card, the pills
+      and the control row, not just the map
+- [ ] Landscape: the maximised map still fills the screen (the 180px landscape cap applies only
+      to the panel)
+- [ ] Tapping a feature-layer polygon while maximised closes the map and opens its sheet;
+      "Mark a distant point" → "Use this point" closes the map with the point armed
+- [ ] Night mode: the red multiply still covers the whole maximised map, and the readout card
+      follows the night palette

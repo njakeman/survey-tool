@@ -9,6 +9,7 @@ import {
 } from '../map/followMode.js';
 import { bearingDeg, distanceM, pickAccuracyM } from '../geo/distance.js';
 import { compassPoint, formatDistance } from '../sensors/format.js';
+import { StationWalk } from './StationWalk.js';
 
 // Where the picking crosshair sits, as a fraction down the map panel. A third
 // rather than the middle because the confirm panel covers the bottom ~94px:
@@ -54,12 +55,27 @@ export function CaptureMap({
   night = false,
   heading = null,
   positionStale = false,
+  // The effective device heading for the station readout — CapturePage owns
+  // the compass→course fallback chain, exactly as it does for StationBlock.
+  guidanceHeadingDeg = null,
 }) {
   const containerRef = useRef(null);
   const adapterRef = useRef(null);
   const [adapterReady, setAdapterReady] = useState(false);
   const [follow, setFollow] = useState(createFollowState);
   const [error, setError] = useState(null);
+
+  // Maximised: the panel becomes the screen (field to-do 2026-09-04 —
+  // navigating to a station needs more map than 300px). A state attribute
+  // on the SAME node plus a resize, never a portal or a second container:
+  // the map is built once per region against containerRef, and a new node
+  // would destroy it mid-survey. Nothing outside the panel changes, so the
+  // GPS watch, a recording trace, the sticky station and the composed
+  // observation are untouched by construction. Taking 300px out of flow
+  // lets the browser clamp the scroll position, so it is stashed on the way
+  // in and restored on the way out — the page must be exactly where it was.
+  const [maximised, setMaximised] = useState(false);
+  const scrollBeforeRef = useRef(0);
 
   // Where the outgoing map was looking, stashed in the build effect's
   // cleanup so a region switch reopens on the same ground instead of the
@@ -105,6 +121,9 @@ export function CaptureMap({
       // predictably.
       onFeatureTap: (result) => {
         if (pickingRef.current) return;
+        // The feature's sheet opens on the page beneath a maximised map, so
+        // the map gives way — the tap's result must be visible.
+        setMaximised(false);
         featureTapRef.current?.(result);
       },
     })
@@ -194,9 +213,21 @@ export function CaptureMap({
 
   useEffect(() => {
     // CapturePage stays mounted while another view shows, so the map was
-    // laid out at zero size and needs measuring again on the way back.
+    // laid out at zero size and needs measuring again on the way back — and
+    // maximising changes the box the same way. The attribute is committed
+    // before this runs, so resize() measures the new size; MapLibre's own
+    // trackResize observer is belt-and-braces.
     if (visible) guarded(() => adapterRef.current?.resize());
-  }, [visible, adapterReady]);
+  }, [visible, maximised, adapterReady]);
+
+  useEffect(() => {
+    if (!maximised) return undefined;
+    // Cleanup runs once the collapsed layout is committed — the page is its
+    // full height again, so the stashed offset is reachable.
+    return () => {
+      if (typeof window.scrollTo === 'function') window.scrollTo(0, scrollBeforeRef.current);
+    };
+  }, [maximised]);
 
   useEffect(() => {
     guarded(() => adapterRef.current?.setPickedPoint(pickedPoint ?? null));
@@ -272,6 +303,15 @@ export function CaptureMap({
       accuracyM: pickAccuracyM(crosshair.lat, crosshair.zoom),
     });
     setPicking(false);
+    // The picked point arms Save on the page beneath — the map gives way.
+    setMaximised(false);
+  }
+
+  function expandMap() {
+    // Read before the state commits: once the panel leaves the flow the
+    // browser may already have clamped the scroll position.
+    scrollBeforeRef.current = window.scrollY ?? 0;
+    setMaximised(true);
   }
 
   function handleRecentre() {
@@ -314,9 +354,38 @@ export function CaptureMap({
     `;
   }
 
+  // The readout over the maximised map: the current station's walking
+  // instruction, which the map covers when it is the screen. Only there —
+  // on the page, StationBlock already shows it directly beneath the panel.
+  const currentStation =
+    maximised && stations
+      ? (stations.find((station) => station.id === currentStationId) ?? null)
+      : null;
+
   return html`
-    <div class="capture-map">
+    <div class="capture-map" data-maximised=${maximised ? 'true' : undefined}>
       <div class="capture-map-canvas" ref=${containerRef}></div>
+      ${
+        // Its own corner rather than a fourth button in the control row,
+        // which already wraps once Re-centre appears. Visible text while
+        // maximised: the way back has to be legible in sun, through gloves.
+        maximised
+          ? html`<button
+              type="button"
+              class="button-surface capture-map-expand"
+              onClick=${() => setMaximised(false)}
+            >
+              Close map
+            </button>`
+          : html`<button
+              type="button"
+              class="button-surface capture-map-expand"
+              aria-label="Expand map"
+              onClick=${expandMap}
+            >
+              <span aria-hidden="true">⤢</span>
+            </button>`
+      }
       ${
         // Which archive you are looking at. Regions can overlap and several
         // can be on the device at once; without this the only way to tell is
@@ -392,27 +461,44 @@ export function CaptureMap({
         // would undo the aiming.
         picking
           ? null
-          : html`<div class="capture-map-controls">
-              <button type="button" class="button-surface" onClick=${onOpenPicker}>
-                Change map
-              </button>
+          : html`<div class="capture-map-foot">
               ${
-                // Withheld while a trace is pending: marking a point and the
-                // pending trace would arm the same Save with two different
-                // provisional positions.
-                canPick
-                  ? html`<button type="button" class="button-surface" onClick=${startPicking}>
-                      Mark a distant point
-                    </button>`
+                currentStation && position
+                  ? html`<div class="capture-map-walk">
+                      <p class="capture-map-walk-label">
+                        Station ${currentStation.index + 1} of ${stations.length} ·
+                        ${' '}${currentStation.name}
+                      </p>
+                      <${StationWalk}
+                        position=${position}
+                        station=${currentStation}
+                        guidanceHeadingDeg=${guidanceHeadingDeg}
+                      />
+                    </div>`
                   : null
               }
-              ${
-                showsRecentre(follow)
-                  ? html`<button type="button" class="button-surface" onClick=${handleRecentre}>
-                      Re-centre
-                    </button>`
-                  : null
-              }
+              <div class="capture-map-controls">
+                <button type="button" class="button-surface" onClick=${onOpenPicker}>
+                  Change map
+                </button>
+                ${
+                  // Withheld while a trace is pending: marking a point and the
+                  // pending trace would arm the same Save with two different
+                  // provisional positions.
+                  canPick
+                    ? html`<button type="button" class="button-surface" onClick=${startPicking}>
+                        Mark a distant point
+                      </button>`
+                    : null
+                }
+                ${
+                  showsRecentre(follow)
+                    ? html`<button type="button" class="button-surface" onClick=${handleRecentre}>
+                        Re-centre
+                      </button>`
+                    : null
+                }
+              </div>
             </div>`
       }
       ${error ? html`<p class="capture-map-error" role="alert">${error}</p>` : null}

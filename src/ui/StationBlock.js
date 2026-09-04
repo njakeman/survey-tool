@@ -1,8 +1,8 @@
 import { html } from 'htm/preact';
-import { useRef, useState } from 'preact/hooks';
+import { useState } from 'preact/hooks';
 import { distanceM, bearingDeg } from '../geo/distance.js';
-import { accumulateRotation } from '../map/locator.js';
-import { compassPoint, formatDateLong, formatDistance } from '../sensors/format.js';
+import { formatDateLong } from '../sensors/format.js';
+import { StationWalk } from './StationWalk.js';
 
 // The station block (design 8b, revised 2026-08-24): what a revisit puts
 // where a new survey has a blank note. Two guidance devices, one job each —
@@ -20,22 +20,8 @@ import { compassPoint, formatDateLong, formatDistance } from '../sensors/format.
 
 const pad3 = (deg) => String(Math.round(deg)).padStart(3, '0');
 
-// The walking arrow. Rotated by a CUMULATIVE angle (the locator beam's own
-// unwrap) so the CSS transition turns 2° across the 359→1 wrap instead of
-// spinning the long way round.
-function BearingArrow({ rotationDeg }) {
-  return html`<svg
-    class="station-block-arrow"
-    viewBox="0 0 32 32"
-    style=${`transform: rotate(${Math.round(rotationDeg)}deg)`}
-    aria-hidden="true"
-  >
-    <g fill="none" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
-      <line x1="16" y1="28" x2="16" y2="7" />
-      <polyline points="8.5,14.5 16,6 23.5,14.5" />
-    </g>
-  </svg>`;
-}
+// The walking arrow, distance and compass point are StationWalk — shared
+// with the maximised map's readout, which covers this block.
 
 export function StationBlock({
   station,
@@ -56,19 +42,9 @@ export function StationBlock({
 }) {
   const [confirmingNoAccess, setConfirmingNoAccess] = useState(false);
   const [reason, setReason] = useState('');
-  const rotationRef = useRef(null);
 
   const away = distanceM(position, station);
   const bearing = bearingDeg(position, station);
-  // Screen-relative when a heading drives it (up = where the device points),
-  // true bearing otherwise. Accumulated across renders for the short turn;
-  // accumulateRotation is idempotent for a repeated target, so a re-render
-  // without a new reading cannot drift the arrow.
-  if (bearing != null) {
-    const screenDeg =
-      guidanceHeadingDeg != null ? (bearing - guidanceHeadingDeg + 360) % 360 : bearing;
-    rotationRef.current = accumulateRotation(rotationRef.current, screenDeg);
-  }
   const note = (station.note ?? '').trim();
   // Built in JS, not across htm line breaks — htm trims whitespace between
   // expressions and would eat the separators (the describeCrosshair rule).
@@ -98,11 +74,11 @@ export function StationBlock({
         <p class="station-block-name">${station.name}</p>
         ${
           away != null && bearing != null
-            ? html`<p class="station-block-walk">
-                  <${BearingArrow} rotationDeg=${rotationRef.current} />
-                  <span class="station-block-distance">${formatDistance(away)}</span>
-                  <span class="station-block-compass">${compassPoint(bearing)}</span>
-                </p>
+            ? html`<${StationWalk}
+                  position=${position}
+                  station=${station}
+                  guidanceHeadingDeg=${guidanceHeadingDeg}
+                />
                 <p class="station-block-meta">${bearingMeta}</p>`
             : html`<p class="station-block-meta">waiting for GPS fix</p>`
         }
