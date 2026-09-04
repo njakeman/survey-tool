@@ -5,12 +5,13 @@ import {
   canShareFiles,
   supportedRecordingTypes,
 } from './capabilities.js';
-import { formatBytes, formatDuration, describeRecording } from './format.js';
+import { formatBytes, formatDuration, describeRecording, describeCameraExif } from './format.js';
 import { appendLogEntry, readLog, clearLog } from './log.js';
 import { benchmarkPbkdf2 } from './pbkdf2-benchmark.js';
 import { readOfflineStatus } from '../app/offlineStatus.js';
 import { isStandalone } from '../app/standalone.js';
 import { RECORDING_MIME_CANDIDATES } from '../audio/recordingTypes.js';
+import { readCameraExif } from '../photo/exif.js';
 
 // The on-device diagnostic page, reachable from the capture footer. Built in
 // Phase 1 to answer whether this architecture was viable on the maintainer's
@@ -41,7 +42,25 @@ export function ProbePage() {
   const [pbkdf2Result, setPbkdf2Result] = useState(null);
   const [micResult, setMicResult] = useState(null);
   const [offlineStatusResult, setOfflineStatusResult] = useState(null);
+  const [cameraExifResult, setCameraExifResult] = useState(null);
   const [entries, setEntries] = useState(() => readLog(localStorage));
+
+  // Does this device's camera input hand over the lens tags? The photo
+  // pipeline strips every byte of EXIF on the canvas re-encode, so the lens
+  // per photo (2026-09) can only come from the original File — and whether
+  // iOS Safari keeps FocalLength / FocalLengthIn35mmFilm / LensModel on a
+  // camera capture is a device fact, not a documented one. Same input
+  // attributes as the real shutter, so the finding is the finding.
+  async function checkCameraExif(event) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    setCameraExifResult('reading…');
+    const camera = await readCameraExif(file);
+    const result = describeCameraExif({ file, camera });
+    setCameraExifResult(result);
+    record('camera-exif', { type: file.type, size: file.size, ...camera });
+  }
 
   function refreshLog() {
     setEntries(readLog(localStorage));
@@ -324,6 +343,18 @@ export function ProbePage() {
       <${ResultRow} label="Microphone (voice notes)">
         <button onClick=${checkMicrophone}>Record 3 s</button>
         ${micResult ? ` ${micResult}` : ' run it twice — working once then failing is the bug'}
+      <//>
+
+      <${ResultRow} label="Camera EXIF (lens per photo)">
+        <label class="probe-file">
+          <input type="file" accept="image/*" capture="environment" onChange=${checkCameraExif} />
+          Take a photo
+        </label>
+        ${
+          cameraExifResult
+            ? ` ${cameraExifResult}`
+            : ' one shot on each lens — 0.5×, 1×, and the longest — and read the mm figure'
+        }
       <//>
 
       <h2>Log (survives relaunch)</h2>

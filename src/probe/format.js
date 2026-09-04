@@ -1,3 +1,5 @@
+import { lensBand } from '../photo/exif.js';
+
 const UNITS = ['B', 'KB', 'MB', 'GB', 'TB'];
 
 export function formatBytes(bytes) {
@@ -33,4 +35,28 @@ export function describeRecording({ mimeType, bytes, ms }) {
 
   const mbPerMinute = (bytes / 1024 / 1024 / (ms / 1000)) * 60;
   return `${mimeType} · ${size} ≈ ${mbPerMinute.toFixed(1)} MB/min`;
+}
+
+// The camera-EXIF probe row, in one line the phone can show. "Nothing" and
+// "no 35 mm figure but a physical focal length" are different findings —
+// the lens feature can fall back on the second, not the first — so each
+// missing tag is named rather than dropped. `size` and `type` come from
+// the File the camera input handed over: they say whether iOS gave a JPEG
+// or an HEIC, which decides where the tags could even be.
+export function describeCameraExif({ file, camera }) {
+  const parts = [file.type || 'unknown type', formatBytes(file.size)];
+  const { focalLengthMm, focalLength35mm, lensModel, make, model } = camera;
+  if (focalLengthMm == null && focalLength35mm == null && !lensModel && !make && !model) {
+    parts.push('no camera EXIF found');
+    return parts.join(' · ');
+  }
+  parts.push(
+    focalLength35mm != null
+      ? `${focalLength35mm} mm eq. (${lensBand(focalLength35mm)})`
+      : 'no 35 mm equivalent',
+  );
+  if (focalLengthMm != null) parts.push(`${focalLengthMm} mm`);
+  parts.push(lensModel ?? 'no lens model');
+  if (make || model) parts.push([make, model].filter(Boolean).join(' '));
+  return parts.join(' · ');
 }

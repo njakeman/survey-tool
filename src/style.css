@@ -2947,6 +2947,22 @@ button {
   overflow-wrap: anywhere;
 }
 
+/* The probe's camera shutter: a label wrapping the same file input the real
+   PhotoField uses (the input itself is visually hidden by the shared rule
+   below), styled as the probe's plain buttons are so the row reads like its
+   neighbours. */
+.probe-file {
+  display: inline-block;
+  position: relative;
+  padding: 1px 6px;
+  border: 1px solid var(--control-rule);
+  border-radius: 3px;
+  background: var(--surface);
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
 /* Available to assistive tech, absent from the visual layout. */
 .visually-hidden {
   position: absolute;
@@ -3055,7 +3071,8 @@ button {
   cursor: pointer;
 }
 
-.photo-field-button input[type='file'] {
+.photo-field-button input[type='file'],
+.probe-file input[type='file'] {
   position: absolute;
   width: 1px;
   height: 1px;
