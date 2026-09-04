@@ -45,6 +45,23 @@ export function PhotoField({
           onChange=${handleChange}
         />
       </label>
+      ${
+        // The same input without `capture`, so iOS offers the library. An
+        // option, never a step: WebKit's camera UI re-encodes a direct
+        // capture and strips the lens tags (photo/exif.js), while a photo
+        // taken in the Camera app and picked here keeps them. Second in the
+        // DOM, so "the" file input is still the camera.
+        html`<label class="photo-field-library link" aria-disabled=${disabled ? 'true' : undefined}>
+          From library
+          <input
+            type="file"
+            accept="image/*"
+            class="visually-hidden"
+            disabled=${disabled}
+            onChange=${handleChange}
+          />
+        </label>`
+      }
       ${busy ? html`<p class="photo-field-busy">Processing photo…</p>` : null}
       ${error ? html`<p class="photo-field-error">${error}</p>` : null}
       ${atCap ? html`<p class="photo-field-cap">${PHOTO_CAP_MESSAGE}</p>` : null}

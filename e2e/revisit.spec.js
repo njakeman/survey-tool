@@ -185,7 +185,7 @@ test.describe('revisit flow', () => {
 
     // A shot on the second: the step stays open, wrapped round to the first,
     // which is still to do.
-    const shutter = page.locator('.framing-screen input[type="file"]');
+    const shutter = page.locator('.framing-screen input[capture="environment"]');
     await shutter.setInputFiles({ name: 'second.png', mimeType: 'image/png', buffer: PHOTO });
     await expect(label).toHaveText(/^Reference 1 of 2/);
     await expect(page.getByRole('button', { name: 'Take photo' })).toBeVisible();

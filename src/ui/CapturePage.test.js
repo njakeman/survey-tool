@@ -2333,7 +2333,7 @@ describe('CapturePage — revisit', () => {
     fireEvent.click(screen.getByRole('button', { name: /frame the photo/i }));
     await screen.findByRole('dialog', { name: /frame the photo/i });
     const file = new File([new Uint8Array([1])], 'photo.jpg', { type: 'image/jpeg' });
-    fireEvent.change(document.querySelector('.framing-screen input[type="file"]'), {
+    fireEvent.change(document.querySelector('.framing-screen input[capture="environment"]'), {
       target: { files: [file] },
     });
     await waitFor(() => expect(downscale).toHaveBeenCalledWith(file));
@@ -2369,7 +2369,7 @@ describe('CapturePage — revisit', () => {
     fireEvent.click(screen.getByRole('button', { name: /frame the photo/i }));
     await screen.findByRole('dialog', { name: /frame the photo/i });
     const framed = new File([new Uint8Array([1])], 'framed.jpg', { type: 'image/jpeg' });
-    fireEvent.change(document.querySelector('.framing-screen input[type="file"]'), {
+    fireEvent.change(document.querySelector('.framing-screen input[capture="environment"]'), {
       target: { files: [framed] },
     });
     await waitFor(() => expect(downscale).toHaveBeenCalledWith(framed));
@@ -2419,7 +2419,7 @@ describe('CapturePage — revisit', () => {
     fireEvent.click(screen.getByRole('button', { name: /frame the photo/i }));
     await screen.findByRole('dialog', { name: /frame the photo/i });
     const framed = new File([new Uint8Array([1])], 'framed.jpg', { type: 'image/jpeg' });
-    fireEvent.change(document.querySelector('.framing-screen input[type="file"]'), {
+    fireEvent.change(document.querySelector('.framing-screen input[capture="environment"]'), {
       target: { files: [framed] },
     });
     await waitFor(() => expect(downscale).toHaveBeenCalledWith(framed));
@@ -2456,7 +2456,7 @@ describe('CapturePage — revisit', () => {
     fireEvent.click(screen.getByRole('button', { name: /frame the photo/i }));
     await screen.findByRole('dialog', { name: /frame the photo/i });
     const framed = new File([new Uint8Array([1])], 'framed.jpg', { type: 'image/jpeg' });
-    fireEvent.change(document.querySelector('.framing-screen input[type="file"]'), {
+    fireEvent.change(document.querySelector('.framing-screen input[capture="environment"]'), {
       target: { files: [framed] },
     });
     await waitFor(() => expect(downscale).toHaveBeenCalledWith(framed));
@@ -2512,7 +2512,7 @@ describe('CapturePage — revisit', () => {
     fireEvent.click(screen.getByRole('button', { name: /frame the photo/i }));
     await screen.findByRole('dialog', { name: /frame the photo/i });
     const framed = new File([new Uint8Array([1])], 'framed.jpg', { type: 'image/jpeg' });
-    fireEvent.change(document.querySelector('.framing-screen input[type="file"]'), {
+    fireEvent.change(document.querySelector('.framing-screen input[capture="environment"]'), {
       target: { files: [framed] },
     });
     await waitFor(() => expect(downscale).toHaveBeenCalledWith(framed));
@@ -2603,7 +2603,7 @@ describe('CapturePage — revisit', () => {
     await screen.findByRole('dialog', { name: /frame the photo/i });
 
     const file = new File([new Uint8Array([1])], 'photo.jpg', { type: 'image/jpeg' });
-    fireEvent.change(document.querySelector('.framing-screen input[type="file"]'), {
+    fireEvent.change(document.querySelector('.framing-screen input[capture="environment"]'), {
       target: { files: [file] },
     });
 
@@ -2617,7 +2617,8 @@ describe('CapturePage — revisit', () => {
   });
 
   describe('with two reference photos at the station', () => {
-    const framingInput = () => document.querySelector('.framing-screen input[type="file"]');
+    const framingInput = () =>
+      document.querySelector('.framing-screen input[capture="environment"]');
     const framingLabel = () => document.querySelector('.framing-screen-label');
     const FILE = new File([new Uint8Array([1])], 'photo.jpg', { type: 'image/jpeg' });
 

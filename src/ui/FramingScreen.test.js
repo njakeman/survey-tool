@@ -91,6 +91,26 @@ describe('FramingScreen', () => {
     expect(onPhoto).toHaveBeenCalledWith(file, 'ref-2.jpg');
   });
 
+  test('From library hands a Camera-app shot over on the same path, paired to the reference', () => {
+    // The lens survives only on a library pick (WebKit's camera UI strips
+    // it), so the step offers one as an option under the shutter. The
+    // shutter stays first in the DOM and stays the accent control.
+    const { onPhoto } = renderScreen();
+
+    const library = screen.getByLabelText('From library');
+    expect(library).toHaveAttribute('accept', 'image/*');
+    expect(library).not.toHaveAttribute('capture');
+    expect(document.querySelector('.framing-screen input[type="file"]')).toHaveAttribute(
+      'capture',
+      'environment',
+    );
+
+    const file = new File([new Uint8Array([1])], 'IMG_0007.jpeg', { type: 'image/jpeg' });
+    fireEvent.change(library, { target: { files: [file] } });
+
+    expect(onPhoto).toHaveBeenCalledWith(file, 'ref-2.jpg');
+  });
+
   test('one reference photo: no pager, the label reads as before', async () => {
     renderScreen();
 

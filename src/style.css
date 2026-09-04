@@ -346,7 +346,16 @@ body {
 /* The largest gap in the previous sheet: there was no focus styling at all.
    :focus-visible rather than :focus, so a gloved tap does not leave a ring
    behind on a touch-only device. */
-:where(button, [href], input, textarea, select, label.photo-field-button):focus-visible {
+:where(
+  button,
+  [href],
+  input,
+  textarea,
+  select,
+  label.photo-field-button,
+  label.photo-field-library,
+  label.framing-screen-library
+):focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
   border-radius: var(--radius);
@@ -354,7 +363,12 @@ body {
 
 /* There is no hover on touch. Press feedback is the whole interaction
    vocabulary, and 92% opacity is all of it. */
-:where(button, label.photo-field-button):active {
+:where(
+  button,
+  label.photo-field-button,
+  label.photo-field-library,
+  label.framing-screen-library
+):active {
   opacity: 0.92;
 }
 
@@ -367,6 +381,8 @@ body {
 :where(
   button,
   label.photo-field-button,
+  label.photo-field-library,
+  label.framing-screen-library,
   label.attachment-add-photo,
   label.photo-lightbox-retake,
   label.photo-lightbox-add
@@ -2839,6 +2855,23 @@ button {
   align-items: flex-start;
 }
 
+/* The library pick under the Photo button: the link vocabulary, no new
+   accent, a glove-sized hit area. A label wrapping a visually-hidden input
+   (the photo-field-button rule) — do not flatten it. Greyed with the
+   camera at the cap, the same 0.55 the lightbox's Add uses. */
+.photo-field-library {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--touch-target);
+  cursor: pointer;
+  font-size: var(--type-control);
+}
+
+.photo-field-library[aria-disabled='true'] {
+  opacity: 0.55;
+  cursor: default;
+}
+
 .photo-field-error {
   margin: 0;
   color: var(--danger-strong);
@@ -3555,6 +3588,18 @@ button {
   font-size: var(--type-title);
   font-weight: 700;
   cursor: pointer;
+}
+
+/* Under the shutter, above the hint: the library pick as a link, centred
+   like the shutter, the same glove-sized floor. The shutter stays the only
+   accent control on the screen. */
+.framing-screen-library {
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--touch-target);
+  cursor: pointer;
+  color: inherit;
 }
 
 .framing-screen-hint {

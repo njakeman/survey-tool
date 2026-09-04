@@ -63,10 +63,43 @@ describe('PhotoField', () => {
     expect(screen.getByText('could not process that photo')).toBeInTheDocument();
   });
 
-  test('no input inside the strip — compose still finds the picker via input[type=file]', () => {
+  test('no input inside the strip — compose still finds the camera via input[capture]', () => {
     render(html`<${PhotoField} photos=${[photo('a'), photo('b')]} />`);
-    expect(document.querySelectorAll('input[type="file"]')).toHaveLength(1);
+    expect(document.querySelectorAll('input[capture="environment"]')).toHaveLength(1);
     expect(document.querySelector('.photo-field-strip input')).toBeNull();
+  });
+
+  describe('From library (lens per photo, 2026-09-04)', () => {
+    // WebKit's camera UI re-encodes a direct capture and strips the lens
+    // tags; a photo taken in the Camera app and picked from the library
+    // keeps them. So a second way in — the same input without `capture` —
+    // as an option, never a step: the camera control is unchanged and comes
+    // first in the DOM, so nothing that finds "the" file input moves.
+    test('offers a library pick beside the camera, reaching the same onSelect', () => {
+      const onSelect = vi.fn();
+      render(html`<${PhotoField} onSelect=${onSelect} />`);
+      const library = screen.getByLabelText('From library');
+      expect(library).toHaveAttribute('type', 'file');
+      expect(library).toHaveAttribute('accept', 'image/*');
+      expect(library).not.toHaveAttribute('capture');
+      // The camera input is still "the" first file input on the page.
+      expect(document.querySelector('input[type="file"]')).toHaveAttribute(
+        'capture',
+        'environment',
+      );
+      expect(screen.getByLabelText('Photo')).toHaveAttribute('capture', 'environment');
+
+      const file = new File(['bytes'], 'IMG_0007.jpeg', { type: 'image/jpeg' });
+      fireEvent.change(library, { target: { files: [file] } });
+
+      expect(onSelect).toHaveBeenCalledWith(file);
+      expect(library.value).toBe('');
+    });
+
+    test('the library pick is disabled with the camera — busy or at the cap', () => {
+      render(html`<${PhotoField} atCap=${true} />`);
+      expect(screen.getByLabelText('From library')).toBeDisabled();
+    });
   });
 
   describe('with one photo', () => {

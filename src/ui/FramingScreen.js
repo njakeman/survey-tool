@@ -276,6 +276,22 @@ export function FramingScreen({
             onChange=${handleShot}
           />
         </label>
+        ${
+          // A Camera-app shot picked from the library pairs to the reference
+          // exactly like a direct one — same handler — and, unlike the direct
+          // one, carries its lens (photo/exif.js). An option under the
+          // shutter, which stays the surface's only accent control.
+          html`<label class="framing-screen-library link">
+            From library
+            <input
+              type="file"
+              accept="image/*"
+              class="visually-hidden"
+              disabled=${busy || atCap}
+              onChange=${handleShot}
+            />
+          </label>`
+        }
         <p class="framing-screen-hint">
           ${
             atCap
