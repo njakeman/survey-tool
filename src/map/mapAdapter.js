@@ -393,9 +393,12 @@ export async function createMapAdapter({
       // circle layer: it needs a dashed stale ring, a rotating gradient
       // beam and per-mode CSS tokens, none of which a circle layer can
       // express. As a DOM element it sits above every canvas layer — the
-      // "nothing may ever cover the fix" guarantee holds by construction —
-      // and outside the night-mode canvas filter, so it takes night tokens
-      // directly. Created on the first fix, in setPosition below.
+      // "nothing may ever cover the fix" guarantee holds by construction.
+      // It takes the night tokens directly only because style.css puts the
+      // night filter on the canvas element itself: Marker.addTo appends
+      // into the canvas container, so a filter on that container would
+      // dim the marker with the tiles. Created on the first fix, in
+      // setPosition below.
 
       // Set before the replays below, so each setter takes its normal path.
       styleLoaded = true;

@@ -2,17 +2,20 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" width="160" height="160" aria-hidden="true">
   <defs>
     <radialGradient id="locator-cone" gradientUnits="userSpaceOnUse" cx="80" cy="80" r="62">
-      <stop offset="0%" stop-color="#c2611f" stop-opacity=".5"></stop>
-      <stop offset="100%" stop-color="#c2611f" stop-opacity="0"></stop>
+      <stop offset="0%" stop-color="#c2611f" stop-opacity=".6"></stop>
+      <stop offset="100%" stop-color="#c2611f" stop-opacity=".28"></stop>
     </radialGradient>
+    <path id="locator-beam-path" d="M80,80 L49,26.3 A62,62 0 0,1 111,26.3 Z"></path>
   </defs>
 
-  
+
   <circle id="locator-accuracy" cx="80" cy="80" r="56" fill="#c2611f" fill-opacity=".1" stroke="#c2611f" stroke-opacity=".55" stroke-width="2" stroke-dasharray="5 5"></circle>
 
-  
+
   <g id="locator-beam">
-    <path d="M80,80 L49,26.3 A62,62 0 0,1 111,26.3 Z" fill="url(#locator-cone)"></path>
+    <use href="#locator-beam-path" fill="url(#locator-cone)"></use>
+    <use href="#locator-beam-path" fill="none" stroke="#1e2433" stroke-opacity=".5" stroke-width="6" stroke-linejoin="round"></use>
+    <use href="#locator-beam-path" fill="none" stroke="#f4f0e8" stroke-width="3" stroke-linejoin="round"></use>
   </g>
 
   

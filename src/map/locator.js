@@ -29,7 +29,10 @@ export const BEAM_MIN_DEG = 60;
 export const BEAM_MAX_DEG = 120;
 const TRUSTED_ACCURACY_DEG = 15;
 const DEGRADED_ACCURACY_DEG = 60;
-const BEAM_MIN_OPACITY = 0.35;
+// Half, not a third: the faintest beam still has to read in direct sunlight
+// (field report 2026-09-04). The fade itself stays — a confident narrow beam
+// on a bad compass would be a lie — it just bottoms out higher.
+const BEAM_MIN_OPACITY = 0.5;
 
 function round1(value) {
   return Math.round(value * 10) / 10;
@@ -88,16 +91,29 @@ export function locatorView({ heading, stale }) {
 // The static mark. Order matters: beam beneath everything, then every
 // casing, then every stroke, then the fix — so the crosshair silhouette
 // always reads over the beam and the casing never overpaints a stroke.
+//
+// The beam is one geometry drawn three times — fill, then its own casing,
+// then its own stroke — so the wedge has a silhouette, not just a wash. A
+// gradient fill alone vanished in sunlight (field report 2026-09-04); an
+// edge survives on pale vector, dark aerial and glare alike, the same
+// reason the ring and ticks ride casings. The geometry lives once in
+// <defs> so the adapter still updates a single `d`, and the three <use>s
+// sit inside #locator-beam so they rotate with it. The fill's rim stop is
+// deliberately not zero: the outline needs fill behind it, or the wedge
+// reads hollow.
 export const LOCATOR_SVG = `
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" width="160" height="160" aria-hidden="true">
   <defs>
     <radialGradient id="locator-cone" gradientUnits="userSpaceOnUse" cx="80" cy="80" r="62">
-      <stop offset="0%" style="stop-color: var(--accent, #c2611f)" stop-opacity=".5"></stop>
-      <stop offset="100%" style="stop-color: var(--accent, #c2611f)" stop-opacity="0"></stop>
+      <stop offset="0%" style="stop-color: var(--accent, #c2611f)" stop-opacity=".6"></stop>
+      <stop offset="100%" style="stop-color: var(--accent, #c2611f)" stop-opacity=".28"></stop>
     </radialGradient>
+    <path id="locator-beam-path" d="${beamPath(BEAM_MIN_DEG)}"></path>
   </defs>
   <g id="locator-beam" class="locator-beam">
-    <path id="locator-beam-path" d="${beamPath(BEAM_MIN_DEG)}" fill="url(#locator-cone)"></path>
+    <use href="#locator-beam-path" fill="url(#locator-cone)"></use>
+    <use href="#locator-beam-path" class="locator-beam-casing" fill="none" stroke-width="6" stroke-opacity=".5" stroke-linejoin="round"></use>
+    <use href="#locator-beam-path" class="locator-beam-stroke" fill="none" stroke-width="3" stroke-linejoin="round"></use>
   </g>
   <g class="locator-casing" stroke-width="6" stroke-opacity=".5" stroke-linecap="round" fill="none">
     <line x1="80" y1="45" x2="80" y2="54"></line>

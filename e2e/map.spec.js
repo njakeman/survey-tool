@@ -106,6 +106,43 @@ test.describe('offline basemap', () => {
     await expect(page.locator('.capture-map canvas')).toBeVisible();
   });
 
+  test('night mode dims the tiles but leaves the locator marker unfiltered', async ({
+    page,
+    context,
+  }) => {
+    // The locator is a DOM marker precisely so it can take the night tokens
+    // directly instead of being greyscaled and dimmed with the tiles — but
+    // MapLibre appends markers INSIDE the canvas container, so the filter has
+    // to target the canvas element itself, not the container. A filter on
+    // any ancestor would silently apply to the marker (it did, for a while).
+    await serveRegions(context);
+    await context.grantPermissions(['geolocation']);
+    await context.setGeolocation({ latitude: 51.5, longitude: -0.5, accuracy: 10 });
+    await page.goto('/');
+
+    await openPicker(page);
+    await downloadRegion(page, 'Test South');
+    await page.getByRole('button', { name: /back to capture/i }).click();
+    await expect(page.locator('[data-map-loaded="true"]')).toBeAttached({ timeout: 20_000 });
+    await expect(page.locator('.capture-map .locator')).toBeAttached({ timeout: 20_000 });
+
+    await page.getByRole('radio', { name: 'Night' }).click();
+
+    const filters = await page.evaluate(() => {
+      const canvas = document.querySelector('.capture-map .maplibregl-canvas');
+      let node = document.querySelector('.capture-map .locator');
+      const ancestors = [];
+      while (node) {
+        ancestors.push(getComputedStyle(node).filter);
+        node = node.parentElement;
+      }
+      return { canvas: getComputedStyle(canvas).filter, locatorChain: ancestors };
+    });
+
+    expect(filters.canvas).not.toBe('none');
+    expect(filters.locatorChain.every((filter) => filter === 'none')).toBe(true);
+  });
+
   test('holds two regions and switches between them with no network', async ({ page, context }) => {
     await serveRegions(context);
     await page.goto('/');

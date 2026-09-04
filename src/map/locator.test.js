@@ -77,6 +77,9 @@ describe('locatorView', () => {
 
     expect(view.beam.arcDeg).toBe(BEAM_MAX_DEG);
     expect(view.beam.opacity).toBeLessThan(1);
+    // Faintest still has to be legible in sunlight: the floor is half, not
+    // a third (field report 2026-09-04).
+    expect(view.beam.opacity).toBeCloseTo(0.5);
   });
 
   test('staleness travels with the view', () => {
@@ -118,5 +121,29 @@ describe('LOCATOR_SVG', () => {
     // No N label: the map never rotates, so the top of the screen already is
     // north — the four ticks carry the station reading.
     expect(LOCATOR_SVG).not.toMatch(/>N</);
+  });
+
+  test('the beam carries its own casing and stroke, inside the rotating group', () => {
+    // Field report 2026-09-04: a soft gradient fill vanishes in sunlight, an
+    // edge survives. So the wedge gets the ring's own treatment — a dark
+    // casing then a pale stroke — and both must rotate with the fill, which
+    // means living inside #locator-beam, not the static casing/stroke groups.
+    const group = LOCATOR_SVG.indexOf('id="locator-beam"');
+    const casing = LOCATOR_SVG.indexOf('locator-beam-casing');
+    const stroke = LOCATOR_SVG.indexOf('locator-beam-stroke');
+    const staticCasing = LOCATOR_SVG.indexOf('class="locator-casing"');
+    expect(group).toBeGreaterThan(-1);
+    expect(casing).toBeGreaterThan(group);
+    expect(stroke).toBeGreaterThan(casing);
+    expect(staticCasing).toBeGreaterThan(stroke);
+  });
+
+  test('the beam fill never fades to nothing at the rim', () => {
+    // The rim is where the outline sits; zero fill behind it reads as a
+    // hollow wedge, not a beam.
+    const stops = [...LOCATOR_SVG.matchAll(/stop-opacity="([^"]+)"/g)].map((m) => Number(m[1]));
+    expect(stops).toHaveLength(2);
+    expect(stops[1]).toBeGreaterThan(0.2);
+    expect(stops[0]).toBeGreaterThan(stops[1]);
   });
 });

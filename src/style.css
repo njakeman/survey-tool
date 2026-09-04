@@ -283,9 +283,17 @@
    no second archive. The overlay is z-index auto: over the canvas, under
    every z-indexed control. Canvas-drawn overlays (trace lines, markers)
    are dimmed with the tiles — the casings' night colour is what keeps the
-   lines legible (map/overlays.js traceCasingColor). */
-[data-mode='night'] .capture-map-canvas,
-[data-mode='night'] .history-map-canvas {
+   lines legible (map/overlays.js traceCasingColor).
+
+   The filter targets the WebGL canvas ELEMENT, not the container div:
+   MapLibre appends DOM markers (the locator) inside that container, and a
+   filter on an ancestor applies to every descendant — so on the container
+   it greyscaled and dimmed the locator too, and the night tokens it was
+   given never showed (field fixes 3, 2026-09). The red multiply below is a
+   sibling overlay and still covers the marker, which is what keeps it
+   red-only at night. */
+[data-mode='night'] .capture-map-canvas .maplibregl-canvas,
+[data-mode='night'] .history-map-canvas .maplibregl-canvas {
   filter: grayscale(1) contrast(0.85) brightness(0.42);
 }
 
@@ -1435,8 +1443,10 @@ button {
 /* The locator: the live fix as a station mark — ring, cardinal ticks, fix
    at the centre, and a beam whose width is the compass's uncertainty
    (map/locator.js builds it; the adapter feeds it). A DOM marker, so it
-   rides above every canvas layer, escapes the night-mode canvas filter,
-   and takes the per-mode tokens above directly. */
+   rides above every canvas layer and takes the per-mode tokens above
+   directly — provided the night filter stays on the canvas element (see
+   the night rules above), since MapLibre parents markers inside the same
+   container as the canvas. */
 .locator {
   pointer-events: none;
 }
@@ -1451,6 +1461,19 @@ button {
 
 .locator .locator-fix {
   fill: var(--accent);
+  stroke: var(--locator-stroke);
+}
+
+/* The beam's own silhouette — the ring's casing-then-stroke pair on the
+   wedge, so it reads as an edge in sunlight, not only as a wash of accent.
+   Their own classes, not .locator-casing/.locator-stroke: the stale rule
+   below quiets those, and staleness is the POSITION ageing, which the beam
+   has never reflected — the compass is a separate sensor. */
+.locator .locator-beam-casing {
+  stroke: var(--locator-casing);
+}
+
+.locator .locator-beam-stroke {
   stroke: var(--locator-stroke);
 }
 
