@@ -61,7 +61,25 @@ happened — and each is still binding on anything added later.
 
    **Every control on the map lives in one flex row.** Pinned individually to left, centre and
    right, "Change map", "Mark a distant point" and "Re-centre" came to roughly 380px across a
-   320px map and overlapped.
+   320px map and overlapped. The row now sits inside `.capture-map-foot`, the bottom-anchored
+   column that also holds the station readout when the map is maximised.
+
+   **Amended 2026-09-04: a panel by default, the screen on one tap.** Field use asked for a
+   bigger map to navigate to a station by, switchable without disturbing the survey. "Expand
+   map" (`.capture-map-expand`, top-right, its own corner rather than a fourth button in the
+   row) sets `data-maximised="true"` on the **same** `.capture-map` node, which goes
+   `position: fixed; inset: 0` at `z-index` 5 — above the picking confirm panel (3), below the
+   lightbox tier (10) so the framing screen and the photo view still win — and the map is
+   resized in place. Never a portal: the map is built once per region against its container
+   ref, and re-parenting would destroy it mid-survey; a state attribute on the existing node
+   leaves the GPS watch, a recording trace, the sticky station and the composed observation
+   untouched by construction. The way back is visible text, "Close map", legible in sun through
+   gloves. Two results collapse the map on their own because they land on the page beneath it: a
+   feature tap (its sheet) and a confirmed "Use this point" (it arms Save). Only the maximised
+   state pads its overlays by the safe-area insets; the scroll offset is stashed on the way in
+   and restored on the way out, since taking 300px out of flow lets the browser clamp it. The
+   history map keeps the 300px footprint — it has nothing to navigate to. See "The maximised
+   map" below.
 
 ## The colour system
 
@@ -178,7 +196,7 @@ rendered case.
 | Feature sheet   | `.feature-sheet` + `-header`, `-heading`, `-title`, `-fields`, `-field`, `-empty`, `-record`; the strip above Save is `.linked-feature` + `-label`                                                                                                                                       | A panel in the flow under the map, deliberately not a modal. Added after the design pass.                                                                                                                                                                                                     |
 | Picking         | `.capture-map-crosshair` (CSS arms with a centre gap, `pointer-events: none`, positioned from an inline `--crosshair-y`), `.capture-map-picking` + `-readout`, `-actions`                                                                                                                | The crosshair belongs to the viewport, not the ground, so it is CSS rather than a map layer. `--crosshair-y` comes from `CROSSHAIR_Y_FRACTION` in `CaptureMap.js`, which is also what the adapter unprojects — do not set it in CSS alone or the mark and the saved coordinates part company. |
 | Grid references | `.readings-gridref`, `.observations-gridref`; the OS notice is `.attribution`                                                                                                                                                                                                            | Monospaced, letter-spaced, tabular: this is the line that gets read aloud a digit at a time.                                                                                                                                                                                                  |
-| Map controls    | `.capture-map-controls`                                                                                                                                                                                                                                                                  | One wrapping flex row; the buttons carry no positioning of their own.                                                                                                                                                                                                                         |
+| Map controls    | `.capture-map-foot` > `.capture-map-controls`; `.capture-map-expand`; `.capture-map-walk` + `-label`                                                                                                                                                                                     | One wrapping flex row inside the bottom-anchored foot; the buttons carry no positioning of their own. Expand/Close map is the top-right corner. The walk readout (`StationWalk`) appears in the foot only while maximised.                                                                    |
 | Shared header   | `.page-header`                                                                                                                                                                                                                                                                           | Back control + title over a rule, on both list screens.                                                                                                                                                                                                                                       |
 | Update banner   | `.update-banner`                                                                                                                                                                                                                                                                         | Rendered above every view; a waiting service worker never activates without this tap.                                                                                                                                                                                                         |
 | Probe page      | `.probe` + `-row`, `-label`, `-result`, `-log`                                                                                                                                                                                                                                           | Developer diagnostics. Tokenised but not designed — see below.                                                                                                                                                                                                                                |
@@ -854,3 +872,42 @@ photo". The screen now pages.
   (remove the thumb and reshoot).
 - **Reference traces are still not drawn** on the map, and history is still not offered as a
   reference source — the deferrals from the revisit pass stand.
+
+## The maximised map (2026-09-04)
+
+Field report: navigating to a station needs more map than the 300px panel, and switching to a
+bigger one must not interrupt the survey. Constraint 7 is amended above; this records the parts.
+
+- **One node, one attribute.** `data-maximised="true"` on `.capture-map` is the whole state;
+  CSS makes it `position: fixed; inset: 0` and `CaptureMap` calls `resize()` once the attribute
+  is committed (the same effect that remeasures on return from Session history). The map is
+  never rebuilt — `BodyPortal`, the app's full-screen idiom, re-parents into a fresh div and
+  would destroy it, so it is the wrong tool here. Not persisted; survives a view switch because
+  CapturePage stays mounted and a `hidden` ancestor hides a fixed child too.
+- **`.capture-map-expand`**: top-right, `button-surface`, 44px. Collapsed it is the ⤢ glyph
+  with `aria-label="Expand map"`; maximised it reads **Close map** in words. Available while
+  picking — the crosshair is a fraction of the panel's height and stays right at any size.
+- **`.capture-map-foot`** is the bottom-anchored column that the control row already lived in
+  spirit; it now holds the row and, while maximised, **`.capture-map-walk`**: the current
+  station's `StationWalk` (arrow, distance, compass point — extracted from `StationBlock`, which
+  renders the same component) under a small uppercase label, `Station 3 of 8 · <name>`, on a
+  near-opaque paper card. Hidden while picking, when the confirm panel owns the bottom. This is
+  not the dropped plan diagram: that was a second map beside the instruction; this is the
+  instruction over the map that now covers it.
+- **Collapses on a result that lands beneath it**: a feature tap (the sheet is in the page) and
+  a confirmed "Use this point" (it arms Save). Region suggestion and Re-centre are inside the
+  panel and need nothing.
+- **Safe areas** are padded only in the maximised state — the in-flow panel never reaches the
+  screen edges, and `env()` would push its controls up for nothing. `touch-action: none` on the
+  maximised panel so no overlay can scroll the page beneath; the scroll offset is stashed before
+  the state commits (the browser may clamp it as soon as the panel leaves the flow) and restored
+  in the effect cleanup, once the collapsed layout is back.
+- **z-index 5**, in the tier list under constraint 7.
+
+### What this pass did not do
+
+- **No fit-to-station or zoom-to-me-and-the-target** — follow mode and Re-centre are the whole
+  viewport control, and the adapter gained no method.
+- **No trace readout** over the maximised map; `TraceStrip` stays on the page, the live line keeps
+  drawing on the map.
+- **The history map does not maximise.**
