@@ -3590,6 +3590,15 @@ button {
   cursor: pointer;
 }
 
+/* The lens-mismatch line under the caption: words, not colour, and never
+   a gate — the same quiet type as the caption, on the scrim. */
+.framing-screen-lens-hint {
+  margin: 0;
+  font-size: var(--type-fine);
+  text-align: center;
+  opacity: 0.85;
+}
+
 /* Under the shutter, above the hint: the library pick as a link, centred
    like the shutter, the same glove-sized floor. The shutter stays the only
    accent control on the screen. */

@@ -293,3 +293,72 @@ describe('FramingScreen', () => {
     });
   });
 });
+
+describe('the lens per photo (2026-09-04)', () => {
+  const lensStation = {
+    ...station,
+    photos: [
+      {
+        filename: 'ref-2.jpg',
+        entryName: 'photos/ref-2.jpg',
+        focalLength35mm: 14,
+        focalLengthMm: 2.22,
+        lensModel: 'iPhone 17 Pro Max back triple camera 2.22mm f/2.2',
+      },
+    ],
+  };
+
+  test('the caption names the lens the reference was shot on', async () => {
+    renderScreen({ station: lensStation });
+
+    await waitFor(() =>
+      expect(screen.getByText('038° · ±4 m · 14 mm ultra-wide')).toBeInTheDocument(),
+    );
+  });
+
+  test('a reference with no lens keeps the caption as it was', async () => {
+    renderScreen();
+
+    await waitFor(() => expect(screen.getByText('038° · ±4 m')).toBeInTheDocument());
+    expect(screen.queryByText(/mm/)).toBeNull();
+  });
+
+  test('after a shot on a different lens, a one-line hint names both — never a gate', async () => {
+    // framedLens: the shot's 35 mm figure per reference filename, from the
+    // compose strip. Plain words, no colour; the shutter stays enabled.
+    renderScreen({
+      station: lensStation,
+      framed: new Set(['ref-2.jpg']),
+      framedLens: new Map([['ref-2.jpg', 24]]),
+    });
+
+    await waitFor(() =>
+      expect(screen.getByText('038° · ±4 m · 14 mm ultra-wide · done')).toBeInTheDocument(),
+    );
+    expect(
+      screen.getByText('Your shot: 24 mm wide — the reference was 14 mm ultra-wide'),
+    ).toBeInTheDocument();
+    expect(
+      document.querySelector('.framing-screen input[capture="environment"]'),
+    ).not.toBeDisabled();
+  });
+
+  test('no hint when the shot matches the band, or when either lens is unknown', async () => {
+    const { unmount } = renderScreen({
+      station: lensStation,
+      framed: new Set(['ref-2.jpg']),
+      framedLens: new Map([['ref-2.jpg', 13]]),
+    });
+    await waitFor(() => expect(screen.getByText(/· done/)).toBeInTheDocument());
+    expect(screen.queryByText(/Your shot/)).toBeNull();
+    unmount();
+
+    renderScreen({
+      station: lensStation,
+      framed: new Set(['ref-2.jpg']),
+      framedLens: new Map([['ref-2.jpg', null]]),
+    });
+    await waitFor(() => expect(screen.getByText(/· done/)).toBeInTheDocument());
+    expect(screen.queryByText(/Your shot/)).toBeNull();
+  });
+});

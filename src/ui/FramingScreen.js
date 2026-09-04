@@ -1,4 +1,5 @@
 import { html } from 'htm/preact';
+import { lensBand } from '../photo/exif.js';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { BodyPortal } from './BodyPortal.js';
 import { ChevronGlyph } from './chevronGlyph.js';
@@ -27,14 +28,42 @@ const SWIPE_MIN_PX = 40;
 // bearing and accuracy are station facts, so every reference photo of the
 // station carries them; "done" is per photo — this one has already been
 // re-framed into the compose strip.
-function captionFor(station, done) {
+function captionFor(station, photo, done) {
   const parts = [];
   if (station.headingDeg != null) {
     parts.push(`${String(Math.round(station.headingDeg)).padStart(3, '0')}°`);
   }
   if (station.gpsAccuracyM != null) parts.push(`±${Math.round(station.gpsAccuracyM)} m`);
+  // The lens the reference was shot on — per photo, and only when the
+  // reference carried it (a library pick; a direct capture never does).
+  const lens = describeLens(photo);
+  if (lens) parts.push(lens);
   if (done) parts.push('done');
   return parts.join(' · ');
+}
+
+// "14 mm ultra-wide": the 35 mm-equivalent with its band; the physical
+// focal length alone when that is all the file had. Null when unknown.
+function describeLens(photo) {
+  if (!photo) return null;
+  if (photo.focalLength35mm != null) {
+    const band = lensBand(photo.focalLength35mm);
+    return `${Math.round(photo.focalLength35mm)} mm${band ? ` ${band}` : ''}`;
+  }
+  if (photo.focalLengthMm != null) return `${photo.focalLengthMm} mm`;
+  return null;
+}
+
+// After a shot on a different lens than the reference: one plain line
+// naming both, so the surveyor can reshoot on the matching lens if they
+// want to. Words, not colour, and never a gate — the app measures, it does
+// not gate. Only when both lenses are known and their bands differ.
+function lensMismatch(photo, shotFocalLength35mm) {
+  if (!photo || photo.focalLength35mm == null || shotFocalLength35mm == null) return null;
+  const referenceBand = lensBand(photo.focalLength35mm);
+  const shotBand = lensBand(shotFocalLength35mm);
+  if (!referenceBand || !shotBand || referenceBand === shotBand) return null;
+  return `Your shot: ${Math.round(shotFocalLength35mm)} mm ${shotBand} — the reference was ${Math.round(photo.focalLength35mm)} mm ${referenceBand}`;
 }
 
 function walkLine(position, station) {
@@ -68,6 +97,10 @@ export function FramingScreen({
   busy = false,
   atCap = false,
   framed = new Set(),
+  // The shot's 35 mm-equivalent per reference filename it framed (from the
+  // compose strip), for the lens-mismatch line. Null entries mean the shot
+  // carried no lens — a direct capture — and draw no line.
+  framedLens = new Map(),
 }) {
   // The station's reference photos, in export order; one on screen at a time.
   // "Done" is the parent's `framed` (what the compose strip holds) plus the
@@ -166,7 +199,9 @@ export function FramingScreen({
   }
 
   const walk = walkLine(position, station);
-  const caption = captionFor(station, Boolean(shown && done.has(shown.filename)));
+  const shownDone = Boolean(shown && done.has(shown.filename));
+  const caption = captionFor(station, shown, shownDone);
+  const mismatch = shownDone ? lensMismatch(shown, framedLens.get(shown.filename) ?? null) : null;
   const paged = photos.length > 1;
   const label = paged ? `Reference ${index + 1} of ${photos.length}` : 'Reference';
 
@@ -263,6 +298,7 @@ export function FramingScreen({
             ? html`<p class="framing-screen-caption">${caption}</p>`
             : null
         }
+        ${mismatch ? html`<p class="framing-screen-lens-hint">${mismatch}</p>` : null}
       </div>
       <div class="framing-screen-foot">
         <label class="framing-screen-shutter button-primary">
