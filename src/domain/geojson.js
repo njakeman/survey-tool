@@ -53,6 +53,13 @@ function observationToFeature(obs, session, appVersion, gridRef, audioFilename) 
       photos: (obs.photos ?? []).map((entry) => ({
         photo: `${entry.id}.jpg`,
         ref_photo: entry.referencePhoto ?? null,
+        // The lens the shot was taken on (photo/exif.js), every key on every
+        // entry — the column-set rule again. Null for a direct capture
+        // (WebKit's camera UI strips it) and for older records. Adding these
+        // changed every export's bytes once (2026-09-04).
+        focal_length_35mm: entry.focalLength35mm ?? null,
+        focal_length_mm: entry.focalLengthMm ?? null,
+        lens: entry.lensModel ?? null,
       })),
       // The first photo, kept so consumers and builds that predate photos[]
       // still read one filename per row. Null where there are none.

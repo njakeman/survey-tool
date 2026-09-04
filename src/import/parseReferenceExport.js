@@ -7,7 +7,7 @@
 // construction: nothing here can write, and nothing downstream ever writes
 // to the reference.
 
-import { parseCollection, sessionFrom, observationFrom } from './parseSessionExport.js';
+import { parseCollection, sessionFrom, observationFrom, lensFrom } from './parseSessionExport.js';
 
 const decoder = new TextDecoder();
 
@@ -48,11 +48,15 @@ export function parseReferenceExport(geojsonData, entryNames) {
     // isn't a string, by name — this guard is what keeps that true of the
     // read here too, rather than trusting the property a second time.
     const claimed = (
-      Array.isArray(props.photos) ? props.photos.map((entry) => entry?.photo) : [props.photo]
-    ).filter((filename) => typeof filename === 'string' && filename);
-    const photos = claimed.flatMap((filename) => {
+      Array.isArray(props.photos)
+        ? props.photos.map((entry) => ({ filename: entry?.photo, entry }))
+        : [{ filename: props.photo, entry: null }]
+    ).filter(({ filename }) => typeof filename === 'string' && filename);
+    // Each filename keeps the lens the reference was shot on (the framing
+    // caption's "14 mm · ultra-wide"), null when the reference has none.
+    const photos = claimed.flatMap(({ filename, entry }) => {
       const entryName = entryByLowerName.get(`photos/${filename}`.toLowerCase()) ?? null;
-      return entryName ? [{ filename, entryName }] : [];
+      return entryName ? [{ filename, entryName, ...lensFrom(entry) }] : [];
     });
     return { ...observation, photos };
   });

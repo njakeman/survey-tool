@@ -38,11 +38,26 @@ function photosFrom(props) {
   if (Array.isArray(props.photos)) {
     return props.photos.flatMap((entry, index) => {
       const filename = photoFilename(entry?.photo, `photos[${index}].photo`);
-      return filename ? [{ id: stripJpg(filename), referencePhoto: entry.ref_photo ?? null }] : [];
+      return filename
+        ? [{ id: stripJpg(filename), referencePhoto: entry.ref_photo ?? null, ...lensFrom(entry) }]
+        : [];
     });
   }
   const filename = photoFilename(props.photo, 'photo');
   return filename ? [{ id: stripJpg(filename), referencePhoto: props.ref_photo ?? null }] : [];
+}
+
+// The lens per photo (2026-09-04), `?? null` for exports from before it
+// existed; createObservation validates the values, so a hand-edited "14"
+// fails by name rather than reaching the caption as text. Exported for
+// parseReferenceExport.js, which reads the same keys onto a station's
+// photo filenames.
+export function lensFrom(entry) {
+  return {
+    focalLength35mm: entry?.focal_length_35mm ?? null,
+    focalLengthMm: entry?.focal_length_mm ?? null,
+    lensModel: entry?.lens ?? null,
+  };
 }
 
 // Exported for parseReferenceExport.js, which shares this file's whole

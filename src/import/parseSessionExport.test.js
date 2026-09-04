@@ -49,7 +49,15 @@ describe('parseSessionExport: photos[]', () => {
 
     const parsed = parseSessionExport([geojsonEntry(text), photoEntry('p1.jpg', [1, 2, 3])]);
 
-    expect(parsed.observations[0].photos).toEqual([{ id: 'p1', referencePhoto: 'r.jpg' }]);
+    expect(parsed.observations[0].photos).toEqual([
+      {
+        id: 'p1',
+        referencePhoto: 'r.jpg',
+        focalLength35mm: null,
+        focalLengthMm: null,
+        lensModel: null,
+      },
+    ]);
     expect(parsed.photos.map((p) => p.photoId)).toEqual(['p1']);
   });
 
@@ -58,7 +66,15 @@ describe('parseSessionExport: photos[]', () => {
 
     const parsed = parseSessionExport([geojsonEntry(text), photoEntry('obs-1.jpg', [4, 5, 6])]);
 
-    expect(parsed.observations[0].photos).toEqual([{ id: 'obs-1', referencePhoto: 'r.jpg' }]);
+    expect(parsed.observations[0].photos).toEqual([
+      {
+        id: 'obs-1',
+        referencePhoto: 'r.jpg',
+        focalLength35mm: null,
+        focalLengthMm: null,
+        lensModel: null,
+      },
+    ]);
   });
 
   test('photos[] wins over a legacy photo prop when both are present', () => {
@@ -69,7 +85,15 @@ describe('parseSessionExport: photos[]', () => {
 
     const parsed = parseSessionExport([geojsonEntry(text), photoEntry('p1.jpg', [1])]);
 
-    expect(parsed.observations[0].photos).toEqual([{ id: 'p1', referencePhoto: null }]);
+    expect(parsed.observations[0].photos).toEqual([
+      {
+        id: 'p1',
+        referencePhoto: null,
+        focalLength35mm: null,
+        focalLengthMm: null,
+        lensModel: null,
+      },
+    ]);
   });
 
   test('neither photos nor a legacy photo leaves an empty array, not null', () => {
@@ -90,7 +114,15 @@ describe('parseSessionExport: photos[]', () => {
 
     const parsed = parseSessionExport([geojsonEntry(text), photoEntry('p1.jpg', [1])]);
 
-    expect(parsed.observations[0].photos).toEqual([{ id: 'p1', referencePhoto: null }]);
+    expect(parsed.observations[0].photos).toEqual([
+      {
+        id: 'p1',
+        referencePhoto: null,
+        focalLength35mm: null,
+        focalLengthMm: null,
+        lensModel: null,
+      },
+    ]);
     expect(parsed.photos.map((p) => p.photoId)).toEqual(['p1']);
   });
 
@@ -123,5 +155,43 @@ describe('parseSessionExport: photos[]', () => {
 
     expect(parsed.observations[0].photos).toEqual([]);
     expect(parsed.observations[0].referenceObservationId).toBe('ref-1');
+  });
+});
+
+describe('parseSessionExport: the lens per photo (2026-09-04)', () => {
+  test('reads focal_length_35mm, focal_length_mm and lens back onto each photo', () => {
+    const text = collectionWith({
+      photos: [
+        {
+          photo: 'p1.jpg',
+          ref_photo: null,
+          focal_length_35mm: 14,
+          focal_length_mm: 2.22,
+          lens: 'uw',
+        },
+      ],
+      photo: 'p1.jpg',
+    });
+
+    const parsed = parseSessionExport([geojsonEntry(text), photoEntry('p1.jpg', [1])]);
+
+    expect(parsed.observations[0].photos).toEqual([
+      { id: 'p1', referencePhoto: null, focalLength35mm: 14, focalLengthMm: 2.22, lensModel: 'uw' },
+    ]);
+  });
+
+  test('an export from before the lens existed imports with nulls', () => {
+    const text = collectionWith({
+      photos: [{ photo: 'p1.jpg', ref_photo: null }],
+      photo: 'p1.jpg',
+    });
+
+    const parsed = parseSessionExport([geojsonEntry(text), photoEntry('p1.jpg', [1])]);
+
+    expect(parsed.observations[0].photos[0]).toMatchObject({
+      focalLength35mm: null,
+      focalLengthMm: null,
+      lensModel: null,
+    });
   });
 });

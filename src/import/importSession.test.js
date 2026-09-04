@@ -633,7 +633,15 @@ describe('traced observations through the round trip', () => {
     ]);
 
     expect(parsed.observations[0].referenceObservationId).toBe('ref-4');
-    expect(parsed.observations[0].photos).toEqual([{ id: 'obs-1', referencePhoto: 'ref-4.jpg' }]);
+    expect(parsed.observations[0].photos).toEqual([
+      {
+        id: 'obs-1',
+        referencePhoto: 'ref-4.jpg',
+        focalLength35mm: null,
+        focalLengthMm: null,
+        lensModel: null,
+      },
+    ]);
     expect(parsed.observations[1].referenceObservationId).toBeNull();
     expect(parsed.observations[1].photos).toEqual([]);
   });

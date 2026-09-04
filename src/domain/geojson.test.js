@@ -71,7 +71,15 @@ describe('sessionToFeatureCollection', () => {
           heading_deg: 271.5,
           heading_accuracy_deg: null,
           note: 'gate post',
-          photos: [{ photo: 'obs-1.jpg', ref_photo: null }],
+          photos: [
+            {
+              photo: 'obs-1.jpg',
+              ref_photo: null,
+              focal_length_35mm: null,
+              focal_length_mm: null,
+              lens: null,
+            },
+          ],
           photo: 'obs-1.jpg',
           audio: null,
           audio_duration_ms: null,
@@ -329,8 +337,20 @@ describe('sessionToFeatureCollection', () => {
     expect(a.photo).toBeNull();
     expect(a.ref_photo).toBeNull();
     expect(b.photos).toEqual([
-      { photo: 'p1.jpg', ref_photo: 'old.jpg' },
-      { photo: 'p2.jpg', ref_photo: null },
+      {
+        photo: 'p1.jpg',
+        ref_photo: 'old.jpg',
+        focal_length_35mm: null,
+        focal_length_mm: null,
+        lens: null,
+      },
+      {
+        photo: 'p2.jpg',
+        ref_photo: null,
+        focal_length_35mm: null,
+        focal_length_mm: null,
+        lens: null,
+      },
     ]);
     expect(b.photo).toBe('p1.jpg');
     expect(b.ref_photo).toBe('old.jpg');
@@ -625,5 +645,49 @@ describe('revisit exports', () => {
         'app_version',
       ].sort(),
     );
+  });
+});
+
+describe('the lens per photo in the export (2026-09-04)', () => {
+  test('emits focal_length_35mm, focal_length_mm and lens on every photos[] entry', () => {
+    const base = {
+      sessionId: 'sess-1',
+      recordedAt: '2026-08-06T10:00:00.000Z',
+      fixAt: '2026-08-06T09:59:20.000Z',
+      lat: 51.5,
+      lon: -0.14,
+      gpsAccuracyM: 8.2,
+    };
+    const fc = sessionToFeatureCollection(
+      session,
+      [
+        createObservation({
+          ...base,
+          id: 'a',
+          photos: [
+            { id: 'p1', focalLength35mm: 14, focalLengthMm: 2.22, lensModel: 'ultra wide' },
+            { id: 'p2' },
+          ],
+        }),
+      ],
+      { appVersion: 'test' },
+    );
+
+    expect(fc.features[0].properties.photos).toEqual([
+      {
+        photo: 'p1.jpg',
+        ref_photo: null,
+        focal_length_35mm: 14,
+        focal_length_mm: 2.22,
+        lens: 'ultra wide',
+      },
+      {
+        photo: 'p2.jpg',
+        ref_photo: null,
+        focal_length_35mm: null,
+        focal_length_mm: null,
+        lens: null,
+      },
+    ]);
   });
 });

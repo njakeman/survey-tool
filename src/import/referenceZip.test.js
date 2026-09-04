@@ -106,7 +106,13 @@ describe('openReference', () => {
     const opened = await openReference(referenceZip());
 
     expect(opened.stations[0].photos).toEqual([
-      { filename: 'ref-1.jpg', entryName: 'photos/ref-1.jpg' },
+      {
+        filename: 'ref-1.jpg',
+        entryName: 'photos/ref-1.jpg',
+        focalLength35mm: null,
+        focalLengthMm: null,
+        lensModel: null,
+      },
     ]);
     expect(opened.stations[1].photos).toEqual([]);
   });

@@ -77,7 +77,15 @@ describe('parseReferenceExport', () => {
     expect(stations[0].lat).toBe(51.5);
     expect(stations[0].headingDeg).toBe(38);
     expect(stations[0].note).toBe('Stone stile, west boundary.');
-    expect(stations[0].photos).toEqual([{ filename: 'ref-1.jpg', entryName: 'photos/ref-1.jpg' }]);
+    expect(stations[0].photos).toEqual([
+      {
+        filename: 'ref-1.jpg',
+        entryName: 'photos/ref-1.jpg',
+        focalLength35mm: null,
+        focalLengthMm: null,
+        lensModel: null,
+      },
+    ]);
   });
 
   test('lists every backed reference photo per station in order, ignoring unbacked claims', () => {
@@ -97,8 +105,20 @@ describe('parseReferenceExport', () => {
     ]);
 
     expect(stations[0].photos).toEqual([
-      { filename: 'a.jpg', entryName: 'photos/a.jpg' },
-      { filename: 'B.JPG', entryName: 'photos/b.jpg' },
+      {
+        filename: 'a.jpg',
+        entryName: 'photos/a.jpg',
+        focalLength35mm: null,
+        focalLengthMm: null,
+        lensModel: null,
+      },
+      {
+        filename: 'B.JPG',
+        entryName: 'photos/b.jpg',
+        focalLength35mm: null,
+        focalLengthMm: null,
+        lensModel: null,
+      },
     ]);
     expect(stations[0]).not.toHaveProperty('photoFilename');
     expect(stations[0]).not.toHaveProperty('photoEntryName');
@@ -109,7 +129,15 @@ describe('parseReferenceExport', () => {
 
     const { stations } = parseReferenceExport(bytes, ['session.geojson', 'photos/ref-1.jpg']);
 
-    expect(stations[0].photos).toEqual([{ filename: 'ref-1.jpg', entryName: 'photos/ref-1.jpg' }]);
+    expect(stations[0].photos).toEqual([
+      {
+        filename: 'ref-1.jpg',
+        entryName: 'photos/ref-1.jpg',
+        focalLength35mm: null,
+        focalLengthMm: null,
+        lensModel: null,
+      },
+    ]);
   });
 
   test('a photo claim the zip cannot back is dropped, not trusted', () => {
@@ -161,5 +189,49 @@ describe('parseReferenceExport', () => {
         'session.geojson',
       ]),
     ).toThrow(/feature 1.*lat/i);
+  });
+});
+
+describe('the lens per photo on a station (2026-09-04)', () => {
+  test('each station photo carries the lens the reference was shot on, null when unknown', () => {
+    const bytes = collectionBytes({
+      features: [
+        feature({
+          photos: [
+            {
+              photo: 'ref-1.jpg',
+              ref_photo: null,
+              focal_length_35mm: 14,
+              focal_length_mm: 2.22,
+              lens: 'uw',
+            },
+            { photo: 'ref-1b.jpg', ref_photo: null },
+          ],
+        }),
+      ],
+    });
+
+    const { stations } = parseReferenceExport(bytes, [
+      'session.geojson',
+      'photos/ref-1.jpg',
+      'photos/ref-1b.jpg',
+    ]);
+
+    expect(stations[0].photos).toEqual([
+      {
+        filename: 'ref-1.jpg',
+        entryName: 'photos/ref-1.jpg',
+        focalLength35mm: 14,
+        focalLengthMm: 2.22,
+        lensModel: 'uw',
+      },
+      {
+        filename: 'ref-1b.jpg',
+        entryName: 'photos/ref-1b.jpg',
+        focalLength35mm: null,
+        focalLengthMm: null,
+        lensModel: null,
+      },
+    ]);
   });
 });
