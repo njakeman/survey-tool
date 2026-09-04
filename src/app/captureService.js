@@ -171,6 +171,11 @@ export function createCaptureService({ db, newId, nowIso }) {
     const photoEntries = photos.map((photo) => ({
       id: newId(),
       referencePhoto: photo.referencePhoto ?? null,
+      // The lens, read off the original file at capture (photo/exif.js);
+      // null for a direct capture, which WebKit strips.
+      focalLength35mm: photo.focalLength35mm ?? null,
+      focalLengthMm: photo.focalLengthMm ?? null,
+      lensModel: photo.lensModel ?? null,
     }));
     const observation = createObservation({
       id,
@@ -346,7 +351,12 @@ export function createCaptureService({ db, newId, nowIso }) {
   function addPhoto(observationId, photo) {
     return addObservationPhoto(db, {
       observationId,
-      photo: { id: newId(), blob: photo.blob, referencePhoto: photo.referencePhoto ?? null },
+      photo: {
+        id: newId(),
+        blob: photo.blob,
+        referencePhoto: photo.referencePhoto ?? null,
+        ...lensOf(photo),
+      },
       changedAt: nowIso(),
     });
   }
@@ -355,9 +365,20 @@ export function createCaptureService({ db, newId, nowIso }) {
     return replaceObservationPhoto(db, {
       observationId,
       photoId,
-      photo: { id: newId(), blob: photo.blob },
+      photo: { id: newId(), blob: photo.blob, ...lensOf(photo) },
       changedAt: nowIso(),
     });
+  }
+
+  // The lens the shot was taken on, as photo/exif.js read it off the
+  // original file; every field present, null when unknown, so the slot
+  // always carries the same three keys.
+  function lensOf(photo) {
+    return {
+      focalLength35mm: photo.focalLength35mm ?? null,
+      focalLengthMm: photo.focalLengthMm ?? null,
+      lensModel: photo.lensModel ?? null,
+    };
   }
 
   function deletePhoto(observationId, photoId) {

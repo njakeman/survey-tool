@@ -29,7 +29,13 @@ async function seed(db, { photos = [], referenceObservationId = null } = {}) {
     lat: 51.5,
     lon: -0.14,
     gpsAccuracyM: 8,
-    photos: photos.map((id) => ({ id, referencePhoto: null })),
+    photos: photos.map((id) => ({
+      id,
+      referencePhoto: null,
+      focalLength35mm: null,
+      focalLengthMm: null,
+      lensModel: null,
+    })),
     referenceObservationId,
   });
   await putObservation(db, observation);
@@ -56,8 +62,20 @@ describe('addObservationPhoto', () => {
 
     const obs = await getObservation(db, 'obs-1');
     expect(obs.photos).toEqual([
-      { id: 'a', referencePhoto: null },
-      { id: 'p2', referencePhoto: null },
+      {
+        id: 'a',
+        referencePhoto: null,
+        focalLength35mm: null,
+        focalLengthMm: null,
+        lensModel: null,
+      },
+      {
+        id: 'p2',
+        referencePhoto: null,
+        focalLength35mm: null,
+        focalLengthMm: null,
+        lensModel: null,
+      },
     ]);
     expect(obs.changedAt).toBe(CHANGED_AT);
     expect((await getSession(db, 'sess-1')).changedSinceExportAt).toBe(CHANGED_AT);
@@ -96,7 +114,15 @@ describe('addObservationPhoto', () => {
       }),
     ).rejects.toThrow('read failed');
 
-    expect((await getObservation(db, 'obs-1')).photos).toEqual([{ id: 'a', referencePhoto: null }]);
+    expect((await getObservation(db, 'obs-1')).photos).toEqual([
+      {
+        id: 'a',
+        referencePhoto: null,
+        focalLength35mm: null,
+        focalLengthMm: null,
+        lensModel: null,
+      },
+    ]);
     expect((await getSession(db, 'sess-1')).changedSinceExportAt).toBeUndefined();
     db.close();
   });
@@ -130,8 +156,20 @@ describe('addObservationPhoto', () => {
     });
 
     expect((await getObservation(db, 'obs-1')).photos).toEqual([
-      { id: 'a', referencePhoto: null },
-      { id: 'p2', referencePhoto: 'ref-1.jpg' },
+      {
+        id: 'a',
+        referencePhoto: null,
+        focalLength35mm: null,
+        focalLengthMm: null,
+        lensModel: null,
+      },
+      {
+        id: 'p2',
+        referencePhoto: 'ref-1.jpg',
+        focalLength35mm: null,
+        focalLengthMm: null,
+        lensModel: null,
+      },
     ]);
     db.close();
   });
@@ -155,7 +193,15 @@ describe('addObservationPhoto', () => {
       }),
     ).rejects.toThrow('referencePhoto requires referenceObservationId');
 
-    expect((await getObservation(db, 'obs-1')).photos).toEqual([{ id: 'a', referencePhoto: null }]);
+    expect((await getObservation(db, 'obs-1')).photos).toEqual([
+      {
+        id: 'a',
+        referencePhoto: null,
+        focalLength35mm: null,
+        focalLengthMm: null,
+        lensModel: null,
+      },
+    ]);
     expect(await getPhoto(db, 'p2')).toBeUndefined();
     db.close();
   });
@@ -180,8 +226,20 @@ describe('replaceObservationPhoto', () => {
       lon: -0.14,
       gpsAccuracyM: 8,
       photos: [
-        { id: 'a', referencePhoto: 'r.jpg' },
-        { id: 'b', referencePhoto: null },
+        {
+          id: 'a',
+          referencePhoto: 'r.jpg',
+          focalLength35mm: null,
+          focalLengthMm: null,
+          lensModel: null,
+        },
+        {
+          id: 'b',
+          referencePhoto: null,
+          focalLength35mm: null,
+          focalLengthMm: null,
+          lensModel: null,
+        },
       ],
       referenceObservationId: 'ref-1',
     });
@@ -206,8 +264,20 @@ describe('replaceObservationPhoto', () => {
 
     const obs = await getObservation(db, 'obs-1');
     expect(obs.photos).toEqual([
-      { id: 'p2', referencePhoto: 'r.jpg' },
-      { id: 'b', referencePhoto: null },
+      {
+        id: 'p2',
+        referencePhoto: 'r.jpg',
+        focalLength35mm: null,
+        focalLengthMm: null,
+        lensModel: null,
+      },
+      {
+        id: 'b',
+        referencePhoto: null,
+        focalLength35mm: null,
+        focalLengthMm: null,
+        lensModel: null,
+      },
     ]);
     expect(obs.changedAt).toBe(CHANGED_AT);
     expect((await getSession(db, 'sess-1')).changedSinceExportAt).toBe(CHANGED_AT);
@@ -244,7 +314,15 @@ describe('deleteObservationPhoto', () => {
     });
 
     const obs = await getObservation(db, 'obs-1');
-    expect(obs.photos).toEqual([{ id: 'b', referencePhoto: null }]);
+    expect(obs.photos).toEqual([
+      {
+        id: 'b',
+        referencePhoto: null,
+        focalLength35mm: null,
+        focalLengthMm: null,
+        lensModel: null,
+      },
+    ]);
     expect(obs.changedAt).toBe(CHANGED_AT);
     expect((await getSession(db, 'sess-1')).changedSinceExportAt).toBe(CHANGED_AT);
     expect(await getPhoto(db, 'a')).toBeUndefined();
@@ -277,6 +355,63 @@ describe('deleteObservationPhoto', () => {
         changedAt: CHANGED_AT,
       }),
     ).rejects.toThrow(/not attached/);
+    db.close();
+  });
+});
+
+describe('the lens per photo rides the post-save paths (2026-09-04)', () => {
+  const LENS = {
+    focalLength35mm: 14,
+    focalLengthMm: 2.22,
+    lensModel: 'iPhone 17 Pro Max back triple camera 2.22mm f/2.2',
+  };
+
+  test('addObservationPhoto carries the lens onto the appended slot', async () => {
+    const db = await openDatabase('photo-write-append-lens');
+    await seed(db, { photos: ['a'] });
+
+    await addObservationPhoto(db, {
+      observationId: 'obs-1',
+      photo: { id: 'p2', blob: new Blob(['new jpeg'], { type: 'image/jpeg' }), ...LENS },
+      changedAt: CHANGED_AT,
+    });
+
+    expect((await getObservation(db, 'obs-1')).photos[1]).toEqual({
+      id: 'p2',
+      referencePhoto: null,
+      ...LENS,
+    });
+    db.close();
+  });
+
+  test('replaceObservationPhoto swaps the lens with the shot, keeping the pairing', async () => {
+    const db = await openDatabase('photo-write-replace-lens');
+    await seed(db, { photos: ['a'], referenceObservationId: 'ref-1' });
+    await addObservationPhoto(db, {
+      observationId: 'obs-1',
+      photo: {
+        id: 'p2',
+        blob: new Blob(['x'], { type: 'image/jpeg' }),
+        referencePhoto: 'ref-1.jpg',
+        ...LENS,
+      },
+      changedAt: CHANGED_AT,
+    });
+
+    await replaceObservationPhoto(db, {
+      observationId: 'obs-1',
+      photoId: 'p2',
+      photo: { id: 'p3', blob: new Blob(['y'], { type: 'image/jpeg' }), focalLength35mm: 24 },
+      changedAt: CHANGED_AT,
+    });
+
+    expect((await getObservation(db, 'obs-1')).photos[1]).toEqual({
+      id: 'p3',
+      referencePhoto: 'ref-1.jpg',
+      focalLength35mm: 24,
+      focalLengthMm: null,
+      lensModel: null,
+    });
     db.close();
   });
 });

@@ -1271,7 +1271,15 @@ describe('revisit sessions', () => {
     });
 
     const [observation] = await service.listObservations(session.id);
-    expect(observation.photos).toEqual([{ id: expect.any(String), referencePhoto: 'ref-4.jpg' }]);
+    expect(observation.photos).toEqual([
+      {
+        id: expect.any(String),
+        referencePhoto: 'ref-4.jpg',
+        focalLength35mm: null,
+        focalLengthMm: null,
+        lensModel: null,
+      },
+    ]);
   });
 
   test('a referencePhoto with no station is refused, by name', async () => {
@@ -1329,5 +1337,56 @@ describe('revisit sessions', () => {
     const service = await makeService('capture-service-revisit-claims-closed');
 
     await expect(service.setStationState('ref-2', 'skipped')).rejects.toThrow(/no open session/);
+  });
+});
+
+describe('the lens per photo (2026-09-04)', () => {
+  const LENS = {
+    focalLength35mm: 14,
+    focalLengthMm: 2.22,
+    lensModel: 'iPhone 17 Pro Max back triple camera 2.22mm f/2.2',
+  };
+
+  test("saveObservation stores each photo's lens fields, null where the shot had none", async () => {
+    const service = await makeService('capture-service-lens-save');
+    await service.startSession('Ashton Keynes');
+
+    const saved = await service.saveObservation({
+      reading: READING,
+      heading: null,
+      note: '',
+      photos: [
+        { blob: new Blob(['a'], { type: 'image/jpeg' }), ...LENS },
+        { blob: new Blob(['b'], { type: 'image/jpeg' }) },
+      ],
+    });
+
+    expect(saved.photos[0]).toMatchObject(LENS);
+    expect(saved.photos[1]).toMatchObject({
+      focalLength35mm: null,
+      focalLengthMm: null,
+      lensModel: null,
+    });
+  });
+
+  test('addPhoto and replacePhoto carry the lens too', async () => {
+    const service = await makeService('capture-service-lens-edit');
+    const session = await service.startSession('Ashton Keynes');
+    const saved = await service.saveObservation({
+      reading: READING,
+      heading: null,
+      note: '',
+      photos: [{ blob: new Blob(['a'], { type: 'image/jpeg' }) }],
+    });
+
+    await service.addPhoto(saved.id, { blob: new Blob(['b'], { type: 'image/jpeg' }), ...LENS });
+    await service.replacePhoto(saved.id, saved.photos[0].id, {
+      blob: new Blob(['c'], { type: 'image/jpeg' }),
+      focalLength35mm: 24,
+    });
+
+    const [observation] = await service.listObservations(session.id);
+    expect(observation.photos[0]).toMatchObject({ focalLength35mm: 24, focalLengthMm: null });
+    expect(observation.photos[1]).toMatchObject(LENS);
   });
 });

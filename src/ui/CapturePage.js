@@ -512,6 +512,12 @@ export function CapturePage({
           referencePhoto: allowedReferencePhotos.has(entry.referencePhoto)
             ? entry.referencePhoto
             : null,
+          // The lens the downscale read off the original file (main.js —
+          // photo/exif.js); null for a direct capture. Named here rather
+          // than spread, the way width/height are deliberately NOT carried.
+          focalLength35mm: entry.focalLength35mm ?? null,
+          focalLengthMm: entry.focalLengthMm ?? null,
+          lensModel: entry.lensModel ?? null,
         })),
         audio,
         feature: linkedFeature,
@@ -696,6 +702,17 @@ export function CapturePage({
   // honest with no state of their own.
   const framedReferences = useMemo(
     () => new Set(photos.map((entry) => entry.referencePhoto).filter(Boolean)),
+    [photos],
+  );
+  // The lens each framed shot was taken on, by the reference it framed —
+  // the framing screen's mismatch line. Null when the shot had none.
+  const framedLens = useMemo(
+    () =>
+      new Map(
+        photos
+          .filter((entry) => entry.referencePhoto)
+          .map((entry) => [entry.referencePhoto, entry.focalLength35mm ?? null]),
+      ),
     [photos],
   );
 
@@ -1130,6 +1147,7 @@ export function CapturePage({
               busy=${photoBusy}
               atCap=${photos.length >= MAX_PHOTOS}
               framed=${framedReferences}
+              framedLens=${framedLens}
               onPhoto=${handleFramedPhoto}
               onClose=${() => setFraming(false)}
             />`

@@ -11,6 +11,7 @@ import { watchPosition } from './sensors/position.js';
 import { watchHeading, requestHeadingPermission } from './sensors/heading.js';
 import { createWakeLockHolder } from './sensors/wakeLock.js';
 import { downscaleImageBlob } from './photo/encode.js';
+import { readCameraExif } from './photo/exif.js';
 import { startRecording } from './audio/record.js';
 import { buildSessionExport } from './export/buildSessionExport.js';
 import { zipEntries } from './export/zip.js';
@@ -85,7 +86,22 @@ async function main() {
     wakeLock: createWakeLockHolder({ wakeLock: navigator.wakeLock, documentRef: document }),
   };
 
-  const downscale = (file) => downscaleImageBlob(file);
+  // The resize and the lens read, off the same original file, side by side:
+  // the canvas re-encode strips every byte of metadata, so photo/exif.js
+  // has to see the file first. Neither waits on the other, and a failed
+  // read is nulls, never a lost photo (the compass degradation rule). A
+  // direct capture comes back null anyway — WebKit's camera UI re-encodes
+  // it without the camera tags — which is why the shutters offer "From
+  // library" as an option.
+  const downscale = async (file) => {
+    const [image, camera] = await Promise.all([downscaleImageBlob(file), readCameraExif(file)]);
+    return {
+      ...image,
+      focalLength35mm: camera.focalLength35mm,
+      focalLengthMm: camera.focalLengthMm,
+      lensModel: camera.lensModel,
+    };
+  };
 
   // Voice notes. Browser-only module, main.js-only import — the same rule as
   // photo/encode.js — with the real recorder bound here and a fake handed in

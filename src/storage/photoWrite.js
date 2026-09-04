@@ -44,7 +44,7 @@ export async function addObservationPhoto(db, { observationId, photo, changedAt 
   tx.objectStore('photos').put({ id: photo.id, arrayBuffer, contentType });
   observations.put({
     ...observation,
-    photos: [...(observation.photos ?? []), { id: photo.id, referencePhoto }],
+    photos: [...(observation.photos ?? []), { id: photo.id, referencePhoto, ...lensFields(photo) }],
     changedAt,
   });
   await stampSession(tx, observation.sessionId, changedAt);
@@ -68,7 +68,10 @@ export async function replaceObservationPhoto(db, { observationId, photoId, phot
   tx.objectStore('photos').delete(photoId);
   tx.objectStore('photos').put({ id: photo.id, arrayBuffer, contentType });
   const nextPhotos = photos.slice();
-  nextPhotos[index] = { ...photos[index], id: photo.id };
+  // The slot keeps its pairing (a retake still stands for the same
+  // reference) but takes the new shot's lens — the old lens described bytes
+  // that no longer exist.
+  nextPhotos[index] = { ...photos[index], id: photo.id, ...lensFields(photo) };
   observations.put({ ...observation, photos: nextPhotos, changedAt });
   await stampSession(tx, observation.sessionId, changedAt);
   await tx.done;
@@ -100,4 +103,14 @@ async function stampSession(tx, sessionId, changedAt) {
   if (session) {
     sessions.put({ ...session, changedSinceExportAt: changedAt });
   }
+}
+
+// The lens the shot was taken on (photo/exif.js), every key present so a
+// slot always carries the same shape whether or not the shot had one.
+function lensFields(photo) {
+  return {
+    focalLength35mm: photo.focalLength35mm ?? null,
+    focalLengthMm: photo.focalLengthMm ?? null,
+    lensModel: photo.lensModel ?? null,
+  };
 }

@@ -48,7 +48,15 @@ describe('createObservation', () => {
       const obs = createObservation({
         ...baseFields,
         referenceObservationId: 'ref-obs-4',
-        photos: [{ id: 'photo-1', referencePhoto: 'ref-obs-4.jpg' }],
+        photos: [
+          {
+            id: 'photo-1',
+            referencePhoto: 'ref-obs-4.jpg',
+            focalLength35mm: null,
+            focalLengthMm: null,
+            lensModel: null,
+          },
+        ],
       });
 
       expect(obs.referenceObservationId).toBe('ref-obs-4');
@@ -66,7 +74,15 @@ describe('createObservation', () => {
       expect(() =>
         createObservation({
           ...baseFields,
-          photos: [{ id: 'photo-1', referencePhoto: 'ref-obs-4.jpg' }],
+          photos: [
+            {
+              id: 'photo-1',
+              referencePhoto: 'ref-obs-4.jpg',
+              focalLength35mm: null,
+              focalLengthMm: null,
+              lensModel: null,
+            },
+          ],
         }),
       ).toThrow(/referencePhoto/);
     });
@@ -156,7 +172,15 @@ describe('createObservation', () => {
     expect(obs.altitudeM).toBe(45.2);
     expect(obs.headingDeg).toBe(271.5);
     expect(obs.note).toBe('gate post, leaning');
-    expect(obs.photos).toEqual([{ id: 'photo-1', referencePhoto: null }]);
+    expect(obs.photos).toEqual([
+      {
+        id: 'photo-1',
+        referencePhoto: null,
+        focalLength35mm: null,
+        focalLengthMm: null,
+        lensModel: null,
+      },
+    ]);
   });
 
   test.each([
@@ -402,11 +426,32 @@ describe('createObservation', () => {
     test('keeps capture order and normalises a bare entry to referencePhoto: null', () => {
       const obs = createObservation({
         ...baseFields,
-        photos: [{ id: 'p2' }, { id: 'p1', referencePhoto: null }],
+        photos: [
+          { id: 'p2' },
+          {
+            id: 'p1',
+            referencePhoto: null,
+            focalLength35mm: null,
+            focalLengthMm: null,
+            lensModel: null,
+          },
+        ],
       });
       expect(obs.photos).toEqual([
-        { id: 'p2', referencePhoto: null },
-        { id: 'p1', referencePhoto: null },
+        {
+          id: 'p2',
+          referencePhoto: null,
+          focalLength35mm: null,
+          focalLengthMm: null,
+          lensModel: null,
+        },
+        {
+          id: 'p1',
+          referencePhoto: null,
+          focalLength35mm: null,
+          focalLengthMm: null,
+          lensModel: null,
+        },
       ]);
     });
 
@@ -422,12 +467,32 @@ describe('createObservation', () => {
 
     test('a referencePhoto on any entry requires referenceObservationId', () => {
       expect(() =>
-        createObservation({ ...baseFields, photos: [{ id: 'p1', referencePhoto: 'abc.jpg' }] }),
+        createObservation({
+          ...baseFields,
+          photos: [
+            {
+              id: 'p1',
+              referencePhoto: 'abc.jpg',
+              focalLength35mm: null,
+              focalLengthMm: null,
+              lensModel: null,
+            },
+          ],
+        }),
       ).toThrow(/referencePhoto requires referenceObservationId/);
       const obs = createObservation({
         ...baseFields,
         referenceObservationId: 'ref-1',
-        photos: [{ id: 'p1', referencePhoto: 'abc.jpg' }, { id: 'p2' }],
+        photos: [
+          {
+            id: 'p1',
+            referencePhoto: 'abc.jpg',
+            focalLength35mm: null,
+            focalLengthMm: null,
+            lensModel: null,
+          },
+          { id: 'p2' },
+        ],
       });
       expect(obs.photos[0].referencePhoto).toBe('abc.jpg');
       expect(obs.photos[1].referencePhoto).toBeNull();
@@ -444,5 +509,65 @@ describe('createObservation', () => {
         }),
       ).toThrow(/photos\[0\]\.referencePhoto must be a string or null/);
     });
+  });
+});
+
+describe('createObservation: the lens per photo (2026-09-04)', () => {
+  const baseFields = {
+    id: 'obs-1',
+    sessionId: 'sess-1',
+    recordedAt: '2026-08-06T10:00:00.000Z',
+    fixAt: '2026-08-06T09:59:20.000Z',
+    lat: 51.5,
+    lon: -0.14,
+    gpsAccuracyM: 8.2,
+  };
+
+  test('carries the 35 mm equivalent, the physical focal length and the lens model per photo', () => {
+    // Read from the original file before the downscale (photo/exif.js) —
+    // the re-encoded bytes carry nothing, so the record has to.
+    const obs = createObservation({
+      ...baseFields,
+      photos: [
+        {
+          id: 'p1',
+          focalLength35mm: 14,
+          focalLengthMm: 2.22,
+          lensModel: 'iPhone 17 Pro Max back triple camera 2.22mm f/2.2',
+        },
+        { id: 'p2' },
+      ],
+    });
+
+    expect(obs.photos).toEqual([
+      {
+        id: 'p1',
+        referencePhoto: null,
+        focalLength35mm: 14,
+        focalLengthMm: 2.22,
+        lensModel: 'iPhone 17 Pro Max back triple camera 2.22mm f/2.2',
+      },
+      {
+        id: 'p2',
+        referencePhoto: null,
+        focalLength35mm: null,
+        focalLengthMm: null,
+        lensModel: null,
+      },
+    ]);
+  });
+
+  test('a focal length must be a finite positive number or null; a lens model a string or null', () => {
+    for (const bad of ['14', NaN, Infinity, -1, 0]) {
+      expect(() =>
+        createObservation({ ...baseFields, photos: [{ id: 'p1', focalLength35mm: bad }] }),
+      ).toThrow(/photos\[0\]\.focalLength35mm/);
+      expect(() =>
+        createObservation({ ...baseFields, photos: [{ id: 'p1', focalLengthMm: bad }] }),
+      ).toThrow(/photos\[0\]\.focalLengthMm/);
+    }
+    expect(() =>
+      createObservation({ ...baseFields, photos: [{ id: 'p1', lensModel: 42 }] }),
+    ).toThrow(/photos\[0\]\.lensModel/);
   });
 });

@@ -77,6 +77,19 @@ function validateGeometry(geometry) {
   );
 }
 
+// A per-photo focal length: finite, positive, or null. `0`, negatives and
+// strings are refused by name — a "14" from a hand-edited export would
+// otherwise ride into the caption as text.
+function photoNumber(value, index, field) {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    throw new Error(
+      `createObservation: photos[${index}].${field} must be a positive number or null (got ${value})`,
+    );
+  }
+  return value;
+}
+
 export function createObservation({
   id,
   sessionId,
@@ -245,7 +258,19 @@ export function createObservation({
         `createObservation: photos[${index}].referencePhoto requires referenceObservationId`,
       );
     }
-    return { id, referencePhoto };
+    // The lens the shot was taken on, read from the original file before
+    // the downscale (photo/exif.js) — the stored bytes carry nothing. Null
+    // is the honest value for a direct capture (WebKit's camera UI strips
+    // it) and for every record from before this existed.
+    const focalLength35mm = photoNumber(entry.focalLength35mm, index, 'focalLength35mm');
+    const focalLengthMm = photoNumber(entry.focalLengthMm, index, 'focalLengthMm');
+    const lensModel = entry.lensModel ?? null;
+    if (lensModel !== null && typeof lensModel !== 'string') {
+      throw new Error(
+        `createObservation: photos[${index}].lensModel must be a string or null (got ${lensModel})`,
+      );
+    }
+    return { id, referencePhoto, focalLength35mm, focalLengthMm, lensModel };
   });
 
   return {

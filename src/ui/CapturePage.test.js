@@ -570,8 +570,20 @@ describe('CapturePage — saving an observation', () => {
       expect(service.saveObservation).toHaveBeenCalledWith(
         expect.objectContaining({
           photos: [
-            { blob: blobA, referencePhoto: null },
-            { blob: blobB, referencePhoto: null },
+            {
+              blob: blobA,
+              referencePhoto: null,
+              focalLength35mm: null,
+              focalLengthMm: null,
+              lensModel: null,
+            },
+            {
+              blob: blobB,
+              referencePhoto: null,
+              focalLength35mm: null,
+              focalLengthMm: null,
+              lensModel: null,
+            },
           ],
         }),
       ),
@@ -609,7 +621,60 @@ describe('CapturePage — saving an observation', () => {
     await waitFor(() =>
       expect(service.saveObservation).toHaveBeenCalledWith(
         expect.objectContaining({
-          photos: [{ blob: blobB, referencePhoto: null }],
+          photos: [
+            {
+              blob: blobB,
+              referencePhoto: null,
+              focalLength35mm: null,
+              focalLengthMm: null,
+              lensModel: null,
+            },
+          ],
+        }),
+      ),
+    );
+
+    URL.createObjectURL.mockRestore();
+    URL.revokeObjectURL.mockRestore();
+  });
+
+  test('the lens the downscale read off the file rides into the save (2026-09-04)', async () => {
+    // main.js's downscale reads the camera EXIF off the original file
+    // alongside the resize; the strip entry spreads that result, and Save
+    // has to hand the three lens fields on — a library pick's lens is the
+    // whole point, and the width/height precedent shows how easily a
+    // per-photo fact is dropped at exactly this seam.
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:fake');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const blob = new Blob(['a'], { type: 'image/jpeg' });
+    const downscale = vi.fn().mockResolvedValue({
+      blob,
+      width: 10,
+      height: 10,
+      focalLength35mm: 14,
+      focalLengthMm: 2.22,
+      lensModel: 'iPhone 17 Pro Max back triple camera 2.22mm f/2.2',
+    });
+    const { service } = await renderReady({}, { downscale });
+
+    fireEvent.change(screen.getByLabelText('From library'), {
+      target: { files: [new File(['a'], 'IMG_0007.jpeg', { type: 'image/jpeg' })] },
+    });
+    await waitFor(() => expect(downscale).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole('button', { name: /save observation/i }));
+
+    await waitFor(() =>
+      expect(service.saveObservation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          photos: [
+            {
+              blob,
+              referencePhoto: null,
+              focalLength35mm: 14,
+              focalLengthMm: 2.22,
+              lensModel: 'iPhone 17 Pro Max back triple camera 2.22mm f/2.2',
+            },
+          ],
         }),
       ),
     );
