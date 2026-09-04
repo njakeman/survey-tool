@@ -438,3 +438,13 @@ There is no undo: export first if the data matters.
 Sessions live on the device and leave it only through export — there is no server, no token, and
 nothing to sync. The exported zip (GeoJSON + photos) is the canonical interchange format, and
 identical data always exports byte-identically, so exports are diffable and dedupable.
+
+**The lens per photo.** Each entry in a feature's `photos[]` carries `focal_length_35mm` (the 35 mm
+equivalent, an integer), `focal_length_mm` (the physical focal length) and `lens` (the lens model
+string), all `null` when unknown. The exported JPEGs themselves carry no EXIF — every photo is
+re-encoded on the device at 1600px — so these fields are the only record of the lens. They are
+read from the original file at capture, and only a photo picked **From library** has them: on iOS,
+a shot taken through the in-app shutter is re-encoded by WebKit's camera UI without its camera
+tags, so the shutter's photos record `null`. Take the photo in the Camera app and pick it from the
+library when the lens matters (a revisit reference, say). The framing screen shows the reference's
+lens under its photo and, after a shot on a different lens, says so in a line.

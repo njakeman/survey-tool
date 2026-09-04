@@ -697,3 +697,27 @@ Run against `https://survey.field.works/`, installed to the home screen.
       "Mark a distant point" → "Use this point" closes the map with the point armed
 - [ ] Night mode: the red multiply still covers the whole maximised map, and the readout card
       follows the night palette
+
+## The lens per photo (2026-09-04)
+
+Run against `https://survey.field.works/`, installed to the home screen.
+
+- [ ] **Probe → Camera EXIF:** Take a photo reads `image.jpg … Exif block present, no camera
+    tags`; a Camera-app shot via Choose from library reads the mm figure, the band and the
+      lens model — on each lens (0.5×, 1×, the longest)
+- [ ] The compose row still opens the rear camera directly from **Photo**; **From library**
+      under it opens the library; both land in the strip; the library pick is greyed with the
+      camera at the cap
+- [ ] A library pick of a 48 MP shot processes without the page stalling or the PWA being
+      killed, and stores at the same ~300 KB (check the export's photo sizes)
+- [ ] Export a session with one capture and one library pick; in `session.geojson` the library
+      entry carries `focal_length_35mm`/`focal_length_mm`/`lens` and the capture's are `null`;
+      re-import and export again — byte-identical
+- [ ] **Revisit against that export:** the framing caption reads the reference's lens
+      (`… · 14 mm ultra-wide`) under a library-shot reference and omits it under a captured
+      one; **From library** under the shutter pairs a Camera-app shot to the reference like the
+      shutter does
+- [ ] Frame a 14 mm reference with a 24 mm library shot: the caption gains `· done` and the line
+      `Your shot: 24 mm wide — the reference was 14 mm ultra-wide` appears; the shutter stays
+      enabled; reshoot on 0.5× and the line goes
+- [ ] Night mode: the library link and the hint line follow the palette; nothing new is white

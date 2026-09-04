@@ -943,3 +943,57 @@ bigger one must not interrupt the survey. Constraint 7 is amended above; this re
 - **No trace readout** over the maximised map; `TraceStrip` stays on the page, the live line keeps
   drawing on the map.
 - **The history map does not maximise.**
+
+## The lens per photo (2026-09-04)
+
+Asked in the field: capture the focal length so a revisit can compare lenses (0.5×, 1×, 3×)
+against the reference. The finding first, because it shaped everything below.
+
+- **The photos carried no EXIF at all.** `photo/encode.js` redraws every photo through a canvas
+  and `canvas.toBlob` emits a fresh JPEG with no metadata; the original `File` was dropped
+  straight after. So the lens is read from the original file, before the downscale, by
+  `photo/exif.js` — a ~150-line APP1 reader (Make, Model, FocalLength, FocalLengthIn35mmFilm,
+  LensModel, both byte orders, every access bounds-checked, never throwing) — and stored as three
+  fields on the observation's `photos[]` entry: `focalLength35mm`, `focalLengthMm`, `lensModel`.
+  They ride the export as `focal_length_35mm` / `focal_length_mm` / `lens` on every entry
+  (`?? null`, the column-set rule; every existing session's bytes changed once) and come back
+  through both import parsers. **Re-embedding EXIF into the exported JPEGs was deliberately not
+  done** — the structured field is what a comparison or a GIS consumer can use, and
+  `canonical-json` stays in charge of the bytes.
+- **A direct capture never has it.** On the phone (iPhone 17 Pro Max, 2026-09-04), WebKit's
+  camera UI returned the shot as `image.jpg`, a 2.8 MB JFIF re-encode with a 140-byte Exif
+  block holding orientation and resolution only; the same shot taken in the Camera app and
+  picked from the library came back as `IMG_6634.jpeg` with `14 mm eq. (ultra-wide) · 2.22 mm ·
+iPhone 17 Pro Max back triple camera 2.22mm f/2.2`. The probe page's Camera EXIF row (two
+  controls, a segment map, and three distinct verdicts — block-with-no-tags, bytes-but-no-block,
+  nothing) is what settled it.
+- **"From library" as an option, never a step.** The compose field and the framing screen each
+  gain `label.photo-field-library` / `label.framing-screen-library` — the link vocabulary, no
+  new accent, 44px floor, the same input without `capture`, the same handler, the same cap. The
+  camera control is unchanged and first in the DOM, so nothing that finds "the" file input
+  moved. The three post-save edit paths (empty-row Add photo, lightbox Retake and Add) stay
+  camera-only — a fourth item on the lightbox's 24rem actions row is its own layout change.
+  Size was asked about and is not a concern: every photo still goes through the 1600px
+  downscale, so a 5.5 MB library pick stores at the same ~300 KB as a capture.
+- **Where it shows: the framing caption, and the export. Nowhere else.** `038° · ±4 m · 14 mm
+ultra-wide · done` — the 35 mm-equivalent with its band (`lensBand`: < 20 ultra-wide, ≤ 35
+  wide, ≤ 60 standard, else telephoto), the physical focal length alone when that is all the
+  reference had, omitted when unknown. **mm plus a word, deliberately not a ×-number**: 1× is
+  24 mm on some phones and 26 mm on others, so a ratio would mislead across devices. After a
+  shot whose band differs from the reference's, one plain line under the caption:
+  `Your shot: 24 mm wide — the reference was 14 mm ultra-wide` (`.framing-screen-lens-hint`).
+  Words, not colour, and never a gate — the shutter stays enabled, the sentence stays
+  "Close enough is your call".
+- One-accent rule: unchanged on both surfaces.
+
+### What this pass did not do
+
+- **No lens on the saved row, the lightbox or history** — the caption and the export are the two
+  places the comparison happens.
+- **No re-embedded EXIF** in exported JPEGs (above).
+- **AR ground projection of feature layers over the camera** was assessed and parked: feasible as
+  a coarse "it's over there" overlay, not as a precise boundary locator — GPS error (±5–10 m)
+  dominates under ~30 m, the compass wanders ±10–15°, and there is no offline terrain model, so
+  a hedgerow 80 m away lands within a hand's width and a boundary tree at 20 m does not. If it is
+  ever tried, it is a throwaway probe-page view (live camera, heading + pitch/roll, projected
+  vertices, FOV from the measured lens), judged in a field before any feature is built.
