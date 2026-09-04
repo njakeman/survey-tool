@@ -702,8 +702,8 @@ Run against `https://survey.field.works/`, installed to the home screen.
 
 Run against `https://survey.field.works/`, installed to the home screen.
 
-- [ ] **Probe → Camera EXIF:** Take a photo reads `image.jpg … Exif block present, no camera
-    tags`; a Camera-app shot via Choose from library reads the mm figure, the band and the
+- [ ] **Probe → Camera EXIF:** Take a photo reads "image.jpg … Exif block present, no camera
+      tags"; a Camera-app shot via Choose from library reads the mm figure, the band and the
       lens model — on each lens (0.5×, 1×, the longest)
 - [ ] The compose row still opens the rear camera directly from **Photo**; **From library**
       under it opens the library; both land in the strip; the library pick is greyed with the
