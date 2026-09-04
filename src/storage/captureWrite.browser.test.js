@@ -51,8 +51,20 @@ describe('saveObservationWithPhoto against real IndexedDB', () => {
       gpsAccuracyM: 8,
       referenceObservationId: 'ref-1',
       photos: [
-        { id: 'p1', referencePhoto: 'ref-1.jpg' },
-        { id: 'p2', referencePhoto: null },
+        {
+          id: 'p1',
+          referencePhoto: 'ref-1.jpg',
+          focalLength35mm: null,
+          focalLengthMm: null,
+          lensModel: null,
+        },
+        {
+          id: 'p2',
+          referencePhoto: null,
+          focalLength35mm: null,
+          focalLengthMm: null,
+          lensModel: null,
+        },
       ],
     });
 
@@ -74,8 +86,20 @@ describe('saveObservationWithPhoto against real IndexedDB', () => {
 
     const stored = await getObservation(db, 'obs-2');
     expect(stored.photos).toEqual([
-      { id: 'p1', referencePhoto: 'ref-1.jpg' },
-      { id: 'p2', referencePhoto: null },
+      {
+        id: 'p1',
+        referencePhoto: 'ref-1.jpg',
+        focalLength35mm: null,
+        focalLengthMm: null,
+        lensModel: null,
+      },
+      {
+        id: 'p2',
+        referencePhoto: null,
+        focalLength35mm: null,
+        focalLengthMm: null,
+        lensModel: null,
+      },
     ]);
     expect(await (await getPhoto(db, 'p1')).blob.text()).toBe('first browser bytes');
     expect(await (await getPhoto(db, 'p2')).blob.text()).toBe('second browser bytes');
