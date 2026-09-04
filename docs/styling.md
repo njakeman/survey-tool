@@ -854,3 +854,35 @@ photo". The screen now pages.
   (remove the thumb and reshoot).
 - **Reference traces are still not drawn** on the map, and history is still not offered as a
   reference source — the deferrals from the revisit pass stand.
+
+## Field fixes 3 (2026-09-04): the beam in sunlight
+
+Field report: the locator's bearing beam was often too faint to see — in bright sunlight
+generally, not against any one basemap.
+
+- **The beam has a silhouette now.** The wedge was a radial wash of accent from half opacity at
+  the pivot to nothing at the rim, with no edge at all; sunlight kills a low-alpha fill and
+  spares an edge. It now gets the ring's own treatment — a 6px half-opacity casing in
+  `--locator-casing`, then a 3px stroke in `--locator-stroke` — drawn from one geometry in
+  `<defs>` via three `<use>`s inside the rotating group, so the adapter still updates a single
+  `d` and the outline turns with the fill. The fill's rim stop is `.28`, not `0` (an outline
+  with nothing behind it reads hollow), the pivot `.6`, and the accuracy fade bottoms out at
+  half rather than a third. The fade itself stands: a confident narrow beam on a bad compass is
+  still a lie. `docs/locator.svg` is updated to match; the app icon is not — it is the mark at
+  rest and re-rastering it is its own job.
+- The silhouette rides its own classes (`locator-beam-casing`/`-stroke`), not
+  `locator-casing`/`locator-stroke`: the stale rule quiets those, and staleness is the position
+  ageing — the beam has never reflected it, since the compass is a separate sensor.
+- **Night's canvas filter now targets the canvas element, not its container.** MapLibre parents
+  DOM markers inside the same container as the canvas, so the filter on the container
+  greyscaled and dimmed the locator with the tiles — the night tokens it was given never
+  showed, and two comments claiming it escaped the filter were wrong. The red multiply overlay
+  still covers the marker, which is what keeps it red-only. Guarded in the e2e tier (a filter
+  on any ancestor of `.locator` fails it).
+- **Colouring the beam dynamically for contrast was considered and rejected.** The canvas is
+  created without `preserveDrawingBuffer`, so sampling the pixels under the marker means a
+  GPU→CPU stall on every fix, or flipping that flag app-wide; and the night filter and multiply
+  are compositor effects applied after anything `readPixels` returns, so a sampled decision
+  would be made against colours the surveyor never sees at night. A silhouette is
+  basemap-independent by construction — the same reason the ring, the ticks and the trace lines
+  ride casings. Don't re-propose it.

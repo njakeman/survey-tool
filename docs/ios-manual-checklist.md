@@ -430,6 +430,12 @@ styled state, so only eyes on the real screen can sign it off.
       near a car door); with compass denied there is **no** beam; after 30 s under a roof the
       mark goes hollow-and-dashed as the readout goes stale
 - [ ] The beam tracks turning smoothly, and with Reduce Motion on it steps rather than freezes
+- [ ] **Beam in direct sunlight** (field fixes 3): with the phone in full sun, the wedge's
+      outline is legible on the pale vector ground and on aerial imagery, at the trusted 60°
+      and after disturbing the compass to the wide, faint 120° — the edge is what to judge, the
+      fill is allowed to wash out
+- [ ] **Locator at night:** in Night mode the mark's ring, ticks and beam outline show as the
+      red night tokens, not as a dimmed grey — noticeably brighter than the tiles beneath
 - [ ] **Icon:** remove the old home-screen icon, re-add from the site — the station-mark icon
       shows on the home screen and the splash; check it reads at a glance in a full app grid
 - [ ] Export moved to the page foot: confirm exporting the open session still works end-to-end
