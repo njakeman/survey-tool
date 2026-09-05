@@ -968,10 +968,14 @@ iPhone 17 Pro Max back triple camera 2.22mm f/2.2`. The probe page's Camera EXIF
   controls, a segment map, and three distinct verdicts — block-with-no-tags, bytes-but-no-block,
   nothing) is what settled it.
 - **"From library" as an option, never a step.** The compose field and the framing screen each
-  gain `label.photo-field-library` / `label.framing-screen-library` — the link vocabulary, no
-  new accent, 44px floor, the same input without `capture`, the same handler, the same cap. The
-  camera control is unchanged and first in the DOM, so nothing that finds "the" file input
-  moved. The three post-save edit paths (empty-row Add photo, lightbox Retake and Add) stay
+  gain `label.photo-field-library` / `label.framing-screen-library` — the same input without
+  `capture`, the same handler, the same cap. **Buttons, not links** (promoted 2026-09-05: the
+  link under Photo was missed in the field): on the capture page it wears the Photo button's
+  own surface-and-rule treatment at 3rem, stacked full-width directly under Photo rather than
+  as a third item in the Photo · Voice note row, which would wrap at 320px; on the framing
+  screen it is `.button-outline` at the shutter's width. No glyph (the camera glyph means the
+  camera), no new accent — the shutter stays the only accent control. The camera control is
+  unchanged and first in the DOM, so nothing that finds "the" file input moved. The three post-save edit paths (empty-row Add photo, lightbox Retake and Add) stay
   camera-only — a fourth item on the lightbox's 24rem actions row is its own layout change.
   Size was asked about and is not a concern: every photo still goes through the 1600px
   downscale, so a 5.5 MB library pick stores at the same ~300 KB as a capture.

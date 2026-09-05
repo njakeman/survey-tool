@@ -2855,16 +2855,26 @@ button {
   align-items: flex-start;
 }
 
-/* The library pick under the Photo button: the link vocabulary, no new
-   accent, a glove-sized hit area. A label wrapping a visually-hidden input
-   (the photo-field-button rule) — do not flatten it. Greyed with the
+/* The library pick under the Photo button: a button in the Photo button's
+   own clothes — surface ground, control rule, the same 3rem — stacked
+   directly beneath it, full width of the column. Not a third item in the
+   Photo · Voice note row: at 320px a third button wraps the two-up. It
+   started as a link and was missed in the field (2026-09-05). A label
+   wrapping a visually-hidden input — do not flatten it. Greyed with the
    camera at the cap, the same 0.55 the lightbox's Add uses. */
 .photo-field-library {
   display: inline-flex;
   align-items: center;
-  min-height: var(--touch-target);
+  justify-content: center;
+  width: 100%;
+  min-height: 3rem;
+  padding: 0.6rem var(--space-4);
+  font-size: var(--type-body);
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--control-rule);
+  border-radius: var(--radius);
   cursor: pointer;
-  font-size: var(--type-control);
 }
 
 .photo-field-library[aria-disabled='true'] {
@@ -3599,14 +3609,16 @@ button {
   opacity: 0.85;
 }
 
-/* Under the shutter, above the hint: the library pick as a link, centred
-   like the shutter, the same glove-sized floor. The shutter stays the only
+/* Under the shutter, above the hint: the library pick as an outlined
+   button the shutter's width, the 3rem floor — a button, not a link, since
+   the link was missed in the field (2026-09-05). The shutter stays the only
    accent control on the screen. */
 .framing-screen-library {
-  align-self: center;
   display: inline-flex;
   align-items: center;
-  min-height: var(--touch-target);
+  justify-content: center;
+  min-height: 3rem;
+  font-size: var(--type-body);
   cursor: pointer;
   color: inherit;
 }

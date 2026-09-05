@@ -82,6 +82,10 @@ describe('PhotoField', () => {
       expect(library).toHaveAttribute('type', 'file');
       expect(library).toHaveAttribute('accept', 'image/*');
       expect(library).not.toHaveAttribute('capture');
+      // A button, not a link (2026-09-05): the link under Photo was missed
+      // in the field. Same surface treatment as Photo, stacked under it.
+      expect(library.closest('label')).toHaveClass('photo-field-library');
+      expect(library.closest('label')).not.toHaveClass('link');
       // The camera input is still "the" first file input on the page.
       expect(document.querySelector('input[type="file"]')).toHaveAttribute(
         'capture',

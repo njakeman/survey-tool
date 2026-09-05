@@ -100,6 +100,9 @@ describe('FramingScreen', () => {
     const library = screen.getByLabelText('From library');
     expect(library).toHaveAttribute('accept', 'image/*');
     expect(library).not.toHaveAttribute('capture');
+    // A button, not a link (2026-09-05): outlined, under the accent shutter.
+    expect(library.closest('label')).toHaveClass('button-outline');
+    expect(library.closest('label')).not.toHaveClass('link');
     expect(document.querySelector('.framing-screen input[type="file"]')).toHaveAttribute(
       'capture',
       'environment',

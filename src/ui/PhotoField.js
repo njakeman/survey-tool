@@ -51,7 +51,7 @@ export function PhotoField({
         // capture and strips the lens tags (photo/exif.js), while a photo
         // taken in the Camera app and picked here keeps them. Second in the
         // DOM, so "the" file input is still the camera.
-        html`<label class="photo-field-library link" aria-disabled=${disabled ? 'true' : undefined}>
+        html`<label class="photo-field-library" aria-disabled=${disabled ? 'true' : undefined}>
           From library
           <input
             type="file"

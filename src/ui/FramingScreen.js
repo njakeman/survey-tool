@@ -317,7 +317,7 @@ export function FramingScreen({
           // exactly like a direct one — same handler — and, unlike the direct
           // one, carries its lens (photo/exif.js). An option under the
           // shutter, which stays the surface's only accent control.
-          html`<label class="framing-screen-library link">
+          html`<label class="framing-screen-library button-outline">
             From library
             <input
               type="file"
